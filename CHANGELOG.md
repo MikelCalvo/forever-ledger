@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- Vendor flips: click Profit % for return-on-cost sorting, or Profit for the existing total-profit order. Whole percentages are shown, watched items keep priority, and ordinary refreshes keep rows in place.
+
 ## [0.25.0] - 2026-11-14
 
 ### Highlights

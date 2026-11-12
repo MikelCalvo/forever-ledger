@@ -588,11 +588,65 @@ local function heldWord(price)
   return by == "gold" and "can't afford" or "over limit"   -- short: the Profit column
 end
 
+-- ROI is profit divided by purchase cost. Use the affordable part of the
+-- scanned price ladder, so a cheap first unit is not averaged with unaffordable ones.
+local function flipSortMode()
+  return S().flipSort == "roi" and "roi" or "profit"
+end
+local function flipMetrics(e, cash)
+  local qty, cost = 0, 0
+  local rec = (ns.db.prices[ns.MarketKey()] or {})[e.id]
+  if cash <= 0 or (rec and rec.none) then return 0, 0, 0, nil end
+  local available = math.max(e.n or 1, 0)
+  if rec and rec.l then
+    local previous = 0
+    for price, cumulative in rec.l:gmatch("(%d+):(%d+)") do
+      price, cumulative = tonumber(price), tonumber(cumulative)
+      local count = math.max(cumulative - previous, 0)
+      previous = cumulative
+      if price > (e.limit or 0) then break end
+      if price > 0 then
+        local take = math.min(count, available - qty, math.floor(math.max(cash - cost, 0) / price))
+        if take > 0 then qty, cost = qty + take, cost + take * price end
+        if take < count or qty >= available then break end
+      end
+    end
+  else
+    local price = e.cost or e.limit
+    if price and price > 0 and price <= (e.limit or 0) then
+      qty = math.min(available, math.floor(cash / price))
+      cost = qty * price
+    end
+  end
+  local profit = qty * (e.worth or 0) - cost
+  return qty, cost, profit, cost > 0 and profit / cost or nil
+end
+local function sortByPercent()
+  local list = Q.lanes and Q.lanes.flips
+  if not list then return end
+  local cash, mode = spendable(), flipSortMode()
+  for _, e in ipairs(list) do
+    e.affordN, e.affordCost, e.affordProfit, e.roi = flipMetrics(e, cash)
+    e.sortValue = e.affordProfit
+  end
+  -- Watched items at your price first: you asked for them (owner, November 10).
+  table.sort(list, function(a, b)
+    local wa, wb = a.reason == "watch", b.reason == "watch"
+    if wa ~= wb then return wa end
+    local aReady, bReady = a.affordN > 0 and a.affordProfit > 0, b.affordN > 0 and b.affordProfit > 0
+    if aReady ~= bReady then return aReady end
+    if mode == "roi" and (a.roi or -1) ~= (b.roi or -1) then return (a.roi or -1) > (b.roi or -1) end
+    if a.sortValue ~= b.sortValue then return a.sortValue > b.sortValue end
+    if (a.profit or 0) ~= (b.profit or 0) then return (a.profit or 0) > (b.profit or 0) end
+    return a.id < b.id
+  end)
+end
 -- Flips best first by the profit you can make with what you can spend right now, so
 -- buying always goes down the list from the best you can afford (Magic, October 3:
 -- after four buys, one said 8c and the next 10c but stayed below it). Re-sorted each
 -- time the queue picks its next item.
 sortFlips = function()
+  if flipSortMode() == "roi" then sortByPercent(); return end
   local list = Q.lanes and Q.lanes.flips
   if not list or #list < 2 then return end
   local cash = spendable()
@@ -608,7 +662,10 @@ sortFlips = function()
     return (a.profit or 0) > (b.profit or 0)
   end)
 end
-Q.sortFlips = sortFlips   -- (for the tests)
+Q.sortFlips, Q.flipMetrics = sortFlips, flipMetrics   -- (for the tests)
+local function percentText(value)
+  return value and ("%.0f%%"):format(value * 100) or "—"
+end
 
 local function cantAfford(e)
   local cash = spendable()
@@ -1672,14 +1729,24 @@ local function laneRow(L, i)
   r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
   r.name = T:Text(r, 11)
   r.name:SetPoint("LEFT", r.icon, "RIGHT", 4, 0)
-  r.name:SetWidth(216)
+  r.name:SetWidth(L.def.key == "flips" and 156 or 216)
   r.name:SetJustifyH("LEFT")
   r.name:SetWordWrap(false)
   r.limit, r.n, r.profit = T:Text(r, 11), T:Text(r, 11), T:Text(r, 11)
-  -- Profit gets the widest column: "10g 45s 64c" ran into Cheap (owner, October 2).
-  r.limit:SetPoint("RIGHT", r, "LEFT", 294, 0)
-  r.n:SetPoint("RIGHT", r, "LEFT", 340, 0)
-  r.profit:SetPoint("RIGHT", r, "LEFT", 432, 0)
+  if L.def.key == "flips" then
+    r.limit:SetPoint("RIGHT", r, "LEFT", 264, 0)
+    r.n:SetPoint("RIGHT", r, "LEFT", 300, 0)
+    r.profit:SetPoint("RIGHT", r, "LEFT", 386, 0)
+    r.limit:SetWidth(80); r.n:SetWidth(30); r.profit:SetWidth(80)
+    for _, fs in ipairs({r.limit, r.n, r.profit}) do fs:SetJustifyH("RIGHT"); fs:SetWordWrap(false) end
+    r.roi = T:Text(r, 10)
+    r.roi:SetPoint("RIGHT", r, "LEFT", 438, 0)
+    r.roi:SetWidth(48); r.roi:SetJustifyH("RIGHT"); r.roi:SetWordWrap(false)
+  else
+    r.limit:SetPoint("RIGHT", r, "LEFT", 294, 0)
+    r.n:SetPoint("RIGHT", r, "LEFT", 340, 0)
+    r.profit:SetPoint("RIGHT", r, "LEFT", 432, 0)
+  end
   r:SetScript("OnClick", function(self, button)
     if button == "RightButton" then
       Q.skip(self.entry)
@@ -1834,11 +1901,28 @@ local function buildLane(v, d)
   header:SetPoint("TOPRIGHT", strip, "BOTTOMRIGHT", -4, -2)
   header:SetHeight(14)
   -- "Up to" and "Cheap" ran together (Magic's screenshot, October 3): more room between.
-  for _, c in ipairs({ { "Item", 4, "LEFT" }, { "Up to", 294, "RIGHT" }, { "Cheap", 340, "RIGHT" },
-                       { d.key == "lists" and "Now" or "Profit", 428, "RIGHT" } }) do
-    local fs = T:Text(header, 10, T.dim)
-    if c[3] == "LEFT" then fs:SetPoint("LEFT", c[2], 0) else fs:SetPoint("RIGHT", header, "LEFT", c[2], 0) end
-    fs:SetText(c[1])
+  local columns = d.key == "flips"
+    and { { "Item", 4, "LEFT" }, { "Up to", 260, "RIGHT" }, { "Cheap", 296, "RIGHT" },
+          { "Profit", 382, "RIGHT", "profit" }, { "Profit %", 434, "RIGHT", "roi" } }
+    or { { "Item", 4, "LEFT" }, { "Up to", 294, "RIGHT" }, { "Cheap", 340, "RIGHT" }, { "Now", 428, "RIGHT" } }
+  L.sortHeaders = {}
+  for _, column in ipairs(columns) do
+    if column[4] then
+      local mode = column[4]
+      local button = T:Button(header, column[1], mode == "profit" and 80 or 48, function()
+        if flipSortMode() == mode then return end
+        S().flipSort = mode
+        sortFlips()
+        refreshQueue()
+      end, 14)
+      button:SetPoint("RIGHT", header, "LEFT", column[2], 0)
+      L.sortHeaders[#L.sortHeaders + 1] = { button = button, mode = mode, label = column[1] }
+    else
+      local text = T:Text(header, 10, T.dim)
+      if column[3] == "LEFT" then text:SetPoint("LEFT", column[2], 0)
+      else text:SetPoint("RIGHT", header, "LEFT", column[2], 0) end
+      text:SetText(column[1])
+    end
   end
   L.sf, L.content = T:Scroll(L)
   local scrollList = L.sf:GetScript("OnMouseWheel")
@@ -2089,6 +2173,9 @@ end
 
 local function fillLane(L)
   local d, armed = L.def, Q.armed == L.def.key
+  for _, head in ipairs(L.sortHeaders or {}) do
+    head.button:SetSelected(flipSortMode() == head.mode)
+  end
   -- Shown in order, but what you can't afford yet goes to the bottom (Magic, October 3).
   local list = {}
   for _, e in ipairs(Q.lanes[d.key] or {}) do if not cantAfford(e) then list[#list + 1] = e end end
@@ -2180,6 +2267,10 @@ local function fillLane(L)
       else
         r.profit:SetText(e.profit and e.profit > 0 and ("|cff7fd39c" .. money(e.profit) .. "|r") or "")
       end
+    end
+    if r.roi then
+      local _, _, _, percent = flipMetrics(e, spendable())
+      r.roi:SetText(percentText(percent))
     end
     if poor then r.profit:SetText("|cffee8597" .. heldWord(poor) .. "|r")
     elseif e.stale then r.profit:SetText(("|cff888888seen %dm ago|r"):format(math.floor(e.age / 60))) end
