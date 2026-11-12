@@ -333,7 +333,7 @@ local function updateSummary()
   f.clear:SetShown(n > 0)
   if n > 0 then
     local net = inn - out
-    f.summary:SetText(("%s%d selected:|r in %s, out %s, net %s"):format(T:AccentCode(), n,
+    f.summary:SetText(ns.LocalizeText("%s%d selected:|r in %s, out %s, net %s"):format(T:AccentCode(), n,
       "|cff7fd39c+" .. ns.Money(math.floor(inn + 0.5)) .. "|r", "|cffee8597-" .. ns.Money(math.floor(out + 0.5)) .. "|r",
       "|cff" .. (net >= 0 and "7fd39c+" or "ee8597-") .. ns.Money(math.floor(math.abs(net) + 0.5)) .. "|r"))
     return
@@ -495,9 +495,9 @@ local function rowTooltip(r)
   else
     GameTooltip:SetPoint("TOPRIGHT", r, "TOPLEFT", -16, 0)
   end
-  if rec.id then GameTooltip:SetItemByID(rec.id); GameTooltip:AddLine(" ")
-  else GameTooltip:AddLine(rec.item ~= "" and rec.item or (rec.kind or "?"), 1, 1, 1) end
-  local function line(a, b) if b then GameTooltip:AddDoubleLine(a, b, 0.7, 0.7, 0.7, 1, 1, 1) end end
+  if rec.id then GameTooltip:SetItemByID(rec.id); ns:TooltipAddLine(" ")
+  else ns:TooltipAddLine(rec.item ~= "" and rec.item or (rec.kind or "?"), 1, 1, 1) end
+  local function line(a, b) if b then ns:TooltipAddDoubleLine(a, b, 0.7, 0.7, 0.7, 1, 1, 1) end end
   line("When", date((rec.month and "%B %Y, month total") or (rec.day and "%b %d, day total") or "%b %d %H:%M", rec.t or 0))
   line("Type", rec.kind)
   if rec.qty and rec.each then line("Quantity", ("%d x %s"):format(rec.qty, ns.Money(math.floor(rec.each + 0.5)))) end
@@ -505,7 +505,7 @@ local function rowTooltip(r)
   if rec.profit then line("Profit", show(rec, "profit")) end
   line("Buyer", rec.who)
   if rec.char then line("Character", charName(rec.char)) end
-  GameTooltip:AddLine("Click to select; Shift-click or drag for several, Ctrl-click to add one. Right-click clears.", 0.5, 0.5, 0.5, true)
+  ns:TooltipAddLine("Click to select; Shift-click or drag for several, Ctrl-click to add one. Right-click clears.", 0.5, 0.5, 0.5, true)
   GameTooltip:Show()
 end
 
