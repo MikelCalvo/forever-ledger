@@ -5,7 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- Tooltips: items the Darkmoon Faire takes for Prize Tickets get a coral red line, "Darkmoon Faire: 5 for 1 ticket (Yebb Neblegear)": the animal parts and the Blacksmithing, Engineering and Leatherworking turn-ins (Classic's list). Settings, Tooltips, Darkmoon Faire turn-ins.
+
 ### Changed
+- Sell suggestion: soulbound gear this character can wear (dungeon drops, quest rewards) now says what to do if you won't wear it: "If you won't wear it: sell to a vendor", or disenchant when that's clearly worth more.
 - Tooltips: quests and crafts take one short line each, "Quests (3)" and "Used in crafts (12): Tailoring 8, Leatherworking 4" (every recipe we know, yours or not). Hold Shift for the quests and the crafts, one a line by profession with the skill each needs, yours in green. If ProfTooltip is installed, you're asked once whether to keep both.
 - Ledger: repairs, mail, trades, loot, quests, training and flights now show each with its time, not as one line a day (for the last 30 days; loot within 5 minutes is one entry; what came before the update shows as one line per kind).
 

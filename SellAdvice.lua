@@ -37,9 +37,11 @@ function ns.SellVerdict(f)
   local vendor = (f.vendor and f.vendor > 0) and f.vendor or nil
   local v
   if f.bound then
-    -- Gear you can wear is your call (it may be what you'll wear next).
-    if f.gear and f.usable and (f.quality or 0) >= 2 then return nil end
-    if vendor then v = { kind = "vendor", value = vendor, reason = "can't be sold on the auction house" } end
+    -- Gear you can wear may be what you'll wear next, so its suggestion says "If you won't
+    -- wear it" (Frank, November 14: dungeon and quest drops had no suggestion at all).
+    local wearable = f.gear and f.usable and (f.quality or 0) >= 2
+    if vendor then v = { kind = "vendor", value = vendor, reason = "can't be sold on the auction house", ifUnused = wearable or nil } end
+    if wearable and not v and f.de then v = { kind = "de", ifUnused = true } end
   elseif not vendor then
     if f.ah then v = { kind = "ah", value = f.ah, reason = "vendors don't buy it" } end
   elseif not f.ah then
@@ -184,6 +186,8 @@ local COLOR = {
 local LABEL = { vendor = "Vendor", ah = "Auction house" }
 -- Selling as the other way, under a Disenchant suggestion.
 local ALT = { vendor = "or sell to a vendor", ah = "or sell on the auction house", middle = "or sell (close call)" }
+-- After "If you won't wear it: ".
+local UNUSED = { vendor = "sell to a vendor", ah = "sell on the auction house", middle = "sell (close call)" }
 
 -- The tooltip lines (Tooltip.lua): only for an item you have in your bags.
 function ns:AddSellLines(tt, id, bound, usable, copyPrice)
@@ -196,18 +200,22 @@ function ns:AddSellLines(tt, id, bound, usable, copyPrice)
     return
   end
   local reason = v.reason and (" |cff999999(" .. v.reason .. ")|r") or ""
+  -- Gear this character can wear: the suggestion is for if it won't wear it.
+  local lead = v.ifUnused and "If you won't wear it: " or ""
+  if v.ifUnused then reason = "" end
   local function deLine(text)
     local d = COLOR.de
     tt:AddDoubleLine(text .. (v.deWho and (" |cff999999(" .. v.deWho .. ")|r") or ""),
       "about " .. ns.Money(v.de), d[1], d[2], d[3], 1, 1, 1)
   end
   if v.deFirst then
-    deLine("Disenchant")
+    deLine(lead .. (v.ifUnused and "disenchant" or "Disenchant"))
     tt:AddDoubleLine("  " .. (ALT[v.kind] or "or sell") .. reason, ns.Money(v.value), c[1], c[2], c[3], 1, 1, 1)
     return
   end
   if v.kind ~= "de" then
-    tt:AddDoubleLine("Sell: " .. (LABEL[v.kind] or ns.SELL_MIDDLE) .. reason, ns.Money(v.value), c[1], c[2], c[3], 1, 1, 1)
+    local what = v.ifUnused and (UNUSED[v.kind] or "sell it") or ("Sell: " .. (LABEL[v.kind] or ns.SELL_MIDDLE))
+    tt:AddDoubleLine(lead .. what .. reason, ns.Money(v.value), c[1], c[2], c[3], 1, 1, 1)
   end
-  if v.de then deLine(v.kind == "de" and "Disenchant" or "  or disenchant") end
+  if v.de then deLine(v.kind == "de" and (lead .. (v.ifUnused and "disenchant" or "Disenchant")) or "  or disenchant") end
 end

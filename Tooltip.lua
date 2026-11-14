@@ -236,6 +236,12 @@ local function addLines(tt, id, forceFull, copyPrice)
   -- Quests and crafts (summaryLines, listLines above): the lists with Shift held.
   local expanded = forceFull or IsShiftKeyDown()
   local function questsAndCrafts()
+    -- Darkmoon Faire turn-ins: one line in coral red, always (Frank, November 14:
+    -- "something noticeable"). Not again when Shift adds the rest to a compact tooltip.
+    if not forceFull and on("tipDarkmoon") and ns.DarkmoonLine then
+      local dmf = ns:DarkmoonLine(id)
+      if dmf then tt:AddLine(dmf, 1, 0.45, 0.4) end
+    end
     if expanded then
       listLines(tt, id, s)
       if tt == GameTooltip then shownLists = true end

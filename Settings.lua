@@ -190,6 +190,8 @@ local PAGES = {
           help = "Quests (3): how many quests ask for the item (original Classic quests; Forever may have changed some), and \"keep it\" when this character will want it later. Hold Shift for the quests." },
         { key = "tipQuestMine", label = "  Only quests this character still needs", kind = "check",
           help = "Leaves out quests this character has done, ones gray for its level, and other classes' quests. Off: all of them, marked (done), (too low) or (other class), handy when selling to others." },
+        { key = "tipDarkmoon", label = "Darkmoon Faire turn-ins", kind = "check",
+          help = "A coral red line on items the Darkmoon Faire takes for Prize Tickets: how many a turn-in takes, the tickets it gives and who takes them (Classic's list; Forever may have changed it)." },
         { key = "tipDisenchant", label = "Disenchants to", kind = "check",
           help = "What a green disenchants into, on average." },
         { key = "tipUsedBy", label = "Crafts that use it", kind = "check",

@@ -42,7 +42,15 @@ T.test("Sell suggestion: no vendor price, no auction price", function()
 end)
 
 T.test("Sell suggestion: soulbound items, and disenchanting as a suggestion", function()
-  T.eq(V({ bound = true, gear = true, usable = true, quality = 2, vendor = 50 }), nil, "gear you can wear: your call")
+  -- Frank, November 14 (Illusionary Rod): gear you can wear gets a suggestion too, for if
+  -- you won't wear it.
+  local wear = V({ bound = true, gear = true, usable = true, quality = 3, vendor = 15316, de = 3704, deWho = "Iveilos" })
+  T.eq(wear.kind, "vendor"); T.eq(wear.ifUnused, true); T.eq(wear.deFirst, nil, "vendor pays more")
+  local wearDE = V({ bound = true, gear = true, usable = true, quality = 2, vendor = 50, de = 120, deWho = "Iveilos" })
+  T.eq(wearDE.ifUnused, true); T.eq(wearDE.deFirst, true)
+  local noVendor = V({ bound = true, gear = true, usable = true, quality = 2, de = 80 })
+  T.eq(noVendor.kind, "de"); T.eq(noVendor.ifUnused, true)
+  T.eq(V({ bound = true, gear = true, usable = true, quality = 2 }), nil, "nothing to say")
   local v = V({ bound = true, gear = true, usable = false, quality = 2, vendor = 50 })
   T.eq(v.kind, "vendor"); T.eq(v.reason, "can't be sold on the auction house")
   T.eq(V({ bound = true, gear = true, usable = true, quality = 1, vendor = 50 }).kind, "vendor", "white gear you can wear: vendor")
@@ -235,4 +243,38 @@ T.test("Sell suggestion: a bound item is only disenchanted by the character who 
   ns.db.chars = realChars
   ns:BuildUsageIndex()
   ns:InvalidateValues(true)
+end)
+
+-- Frank, November 14: dungeon and quest drops you could wear had no suggestion.
+T.test("Sell suggestion: soulbound gear you could wear says what to do if you won't wear it", function()
+  local realFacts = ns.SellFacts
+  local function lines(facts)
+    ns.SellFacts = function() return facts end
+    local tip, added = {}, {}
+    function tip:AddDoubleLine(l, r) added[#added + 1] = l .. " = " .. r end
+    function tip:AddLine(l) added[#added + 1] = l end
+    S.bags[ITEM] = 1
+    ns:AddSellLines(tip, ITEM, true, true)
+    S.bags[ITEM] = nil
+    return added
+  end
+  local a = lines({ bound = true, gear = true, usable = true, quality = 3, vendor = 15316, de = 3704, deWho = "Tester" })
+  T.eq(a[1], "If you won't wear it: sell to a vendor = " .. ns.Money(15316))
+  T.eq(#a, 1, "disenchanting brings less: no second line")
+  a = lines({ bound = true, gear = true, usable = true, quality = 2, vendor = 50, de = 120, deWho = "Tester" })
+  T.eq(a[1], "If you won't wear it: disenchant |cff999999(Tester)|r = about " .. ns.Money(120))
+  T.eq(a[2], "  or sell to a vendor = " .. ns.Money(50))
+  ns.SellFacts = realFacts
+end)
+
+T.test("Darkmoon Faire turn-ins have their line", function()
+  T.eq(ns:DarkmoonLine(5134), "Darkmoon Faire: 5 for 1 ticket (Yebb Neblegear)")
+  T.eq(ns:DarkmoonLine(9313), "Darkmoon Faire: 36 for 8 tickets (Rinling)")
+  T.eq(ns:DarkmoonLine(2589), nil, "Linen Cloth isn't one")
+  local n = 0
+  for _, d in pairs(ns.DARKMOON) do
+    n = n + 1
+    T.ok(d[1] > 0 and d[2] > 0 and d[3], "count, tickets and who")
+  end
+  T.eq(n, 21, "Classic's 21 turn-ins")
 end)
