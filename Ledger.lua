@@ -249,8 +249,12 @@ local function records(tab, from, charOK, match)
                 end
                 if amt > 0 then
                   local signed = OTHER_IN[s] and amt or -amt
-                  out[#out + 1] = { t = t, day = true, other = true, item = tab == "other" and OTHER[s] or "",
-                    kind = OTHER[s] .. (covered and " (earlier)" or ""), total = signed, amount = signed, char = key }
+                  -- "(earlier)" goes with the kind in Other, and in All's wider Item column
+                  -- (Frank's screenshot: "Auction house fees (earlier)" was cut off).
+                  local earlier = covered and " (earlier)" or ""
+                  out[#out + 1] = { t = t, day = true, other = true,
+                    item = tab == "other" and (OTHER[s] .. earlier) or (covered and "earlier today" or ""),
+                    kind = OTHER[s] .. (tab == "other" and earlier or ""), total = signed, amount = signed, char = key }
                 end
               end
             end
