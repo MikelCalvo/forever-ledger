@@ -86,30 +86,11 @@ T.test("A level seen again updates its cost and keeps the other ranks", function
   T.eq(ranks[2].cost, 5000)
 end)
 
-T.test("Talent positions fall in the right tree, even stray ones", function()
-  -- From the saved layouts (October 6): Hunter's Bestial Wrath, Trueshot Aura,
-  -- Counterattack, and Lightning Reflexes at a stray x of 102800 (a Survival talent).
-  T.eq(ns.TalentThird(1620), 1); T.eq(ns.TalentThird(2820), 1)
-  T.eq(ns.TalentThird(5020), 2); T.eq(ns.TalentThird(5620), 2); T.eq(ns.TalentThird(6820), 2)
-  T.eq(ns.TalentThird(9080), 3); T.eq(ns.TalentThird(10880), 3)
-  T.eq(ns.TalentThird(102800), 3, "stray position")
-end)
-T.test("Levelling help off: no riding fund, no levelling features", function()
-  local real = UnitLevel
-  UnitLevel = function() return 20 end
-  T.ok(ns:LevellingOn(), "on below 60")
+-- Leveling help was archived November 14 (Frank): an old "off" for it no longer hides the
+-- riding fund, which has its own switch.
+T.test("The riding fund doesn't follow the old Leveling help switch", function()
   ns.db.settings.moduleLevelling = false
-  T.eq(ns:LevellingOn(), false, "module off")
-  T.eq(ns:RidingFund(0), nil, "no riding fund with the module off")
-  ns.db.settings.moduleLevelling = true
-  UnitLevel = function() return 60 end
-  T.eq(ns:LevellingOn(), false, "off at 60")
-  UnitLevel = real
-end)
-T.test("The Levelling tab's list is well formed", function()
-  for i, e in ipairs(ns.LEVELLING_START or {}) do
-    T.ok(e.title and e.how and e.why and e.lvl and e.zone, "entry " .. i .. " complete")
-    T.ok(e.service or (e.ids and #e.ids > 0), "entry " .. i .. " has items to price or is a service")
-  end
-  T.ok(#(ns.LEVELLING_START or {}) >= 10, "the list loaded")
+  ns.db.settings.ridingFund = true
+  T.ok(ns:RidingFund(0))
+  ns.db.settings.moduleLevelling = nil
 end)

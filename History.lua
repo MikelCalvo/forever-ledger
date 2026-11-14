@@ -10,6 +10,29 @@ local HOURLY_DAYS = 14      -- keep hourly gold this long, then one value per da
 local DAILY_MONEY_DAYS = 365 -- gold and money in/out per day this long, then per month (kept)
 local LOG_SIZE = 10000      -- auction house sales and purchases, and vendor buys and sells, kept
 local LOG_DAYS = 30         -- one by one this long, then as monthly totals per item
+ns.LEDGER_LOG_DAYS = LOG_DAYS   -- (Ledger.lua: how far back other money has its own times)
+-- Other money (repairs, mail, trades, loot, quests, training, flights, auction fees and
+-- deposits back) one by one, with its time, for the Ledger (Frank, November 14: they were
+-- day totals and sorted oddly among timed entries). Same kind on one character within 5
+-- minutes is one entry (loot from a pull of mobs). ns.db.otherLog = { { t, c, s, a } },
+-- a always positive; ns.db.otherLogSince[charKey] = when its first entry was made.
+local OTHER_LOGGED = { ahFee = true, ahDepositBack = true, repair = true, mailIn = true, mailOut = true,
+  tradeIn = true, tradeOut = true, loot = true, quest = true, training = true, flight = true,
+  otherIn = true, otherOut = true }
+local OTHER_MERGE_SECONDS = 300
+local function logOther(source, amount, who, now)   -- (also ns.LogOtherMoney, for the tests)
+  if not OTHER_LOGGED[source] or amount <= 0 then return end
+  local list = ns.db.otherLog
+  local last = list[#list]
+  if last and last.c == who and last.s == source and now - (last.t or 0) <= OTHER_MERGE_SECONDS then
+    last.a, last.t = last.a + amount, now
+    return
+  end
+  list[#list + 1] = { t = now, c = who, s = source, a = amount }
+  ns.db.otherLogSince[who] = ns.db.otherLogSince[who] or now
+  if #list > LOG_SIZE then table.remove(list, 1) end
+end
+ns.LogOtherMoney = logOther
 local LEDGER_MONTHS_KEPT = 365 * 86400   -- monthly totals kept this long
 local PENDING_SECONDS = 5   -- how long a hint (repair, posting fee, mail) waits for the gold change
 local PURCHASE_SECONDS = 15 -- an auction house purchase can answer slowly (BuyQueue.lua waits as long; gold audit, November 9)
@@ -141,6 +164,14 @@ local function foldLedger()
   fold(ns.db.sales, function() return "sale" end)
   fold(ns.db.purchases, function() return "buy" end)
   fold(ns.db.vendorLog, function(e) return e.s == "sell" and "vsell" or "vbuy" end)
+  -- Other money one by one (otherLog): older entries just go, as the money table's daily
+  -- totals already have them.
+  local other, kept = ns.db.otherLog or {}, 0
+  for i = 1, #other do
+    local e = other[i]
+    other[i] = nil
+    if (e.t or 0) >= cutoff then kept = kept + 1; other[kept] = e end
+  end
   -- Monthly totals older than a year go.
   local keep = time() - LEDGER_MONTHS_KEPT
   local kept = {}
@@ -401,7 +432,8 @@ local function onMoney()
   if dep <= 0 or dep >= math.abs(delta) then dep = 0 end
   totals[source] = (totals[source] or 0) + math.abs(delta) - dep
   if dep > 0 then totals.ahDepositBack = (totals.ahDepositBack or 0) + dep end
-  if ns.DungeonMoney then ns:DungeonMoney(source, delta) end   -- a dungeon run counts it too (Dungeons.lua)
+  logOther(source, math.abs(delta) - dep, ns.CharKey(), time())
+  if dep > 0 then logOther("ahDepositBack", dep, ns.CharKey(), time()) end
 
   local now, who = time(), ns.CharKey()
   for _, h in ipairs(hints) do

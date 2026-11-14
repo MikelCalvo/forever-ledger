@@ -209,13 +209,20 @@ local function records(tab, from, charOK, match)
     end
   end
   if tab == "other" or tab == "all" then
-    -- Other money: daily totals by type (repairs, mail, loot, quests...). Auction and
-    -- vendor money isn't here: the lists above have it item by item.
+    -- Other money (repairs, mail, loot, quests...). Auction and vendor money isn't here:
+    -- the lists above have it item by item. One by one with its time on the days the
+    -- character's otherLog covers fully (from the day after it began, within the last 30
+    -- days; Frank, November 14), as day totals before that.
     local fromDay, offset = ns.LocalDay(from), utcOffset()
+    local recentDay = ns.LocalDay(time() - (ns.LEDGER_LOG_DAYS or 30) * DAY) + 1
+    local coverFrom = {}
+    for key, since in pairs(ns.db.otherLogSince or {}) do
+      coverFrom[key] = math.max(ns.LocalDay(since) + 1, recentDay)
+    end
     for key, days in pairs(ns.db.money) do
       if charOK(key) then
         for day, src in pairs(days) do
-          if day >= fromDay then
+          if day >= fromDay and not (coverFrom[key] and day >= coverFrom[key]) then
             for s, amt in pairs(src) do
               if OTHER[s] then
                 local signed = OTHER_IN[s] and amt or -amt
@@ -225,6 +232,14 @@ local function records(tab, from, charOK, match)
             end
           end
         end
+      end
+    end
+    for _, e in ipairs(ns.db.otherLog or {}) do
+      local cover = coverFrom[e.c]
+      if OTHER[e.s] and (e.t or 0) >= from and charOK(e.c) and cover and ns.LocalDay(e.t) >= cover then
+        local signed = OTHER_IN[e.s] and e.a or -e.a
+        out[#out + 1] = { t = e.t, item = tab == "other" and OTHER[e.s] or "", kind = OTHER[e.s],
+          total = signed, amount = signed, char = e.c }
       end
     end
   end
@@ -531,7 +546,7 @@ local EMPTY = {
   sales = "No sales for these filters yet. Auction sales are logged when you take the money from the mailbox; vendor sales as you sell.",
   purchases = "No purchases for these filters yet. Auction and vendor purchases are logged as you buy.",
   resale = "No items both bought and sold for these filters yet. Once you've bought and sold the same item, its profit shows here.",
-  other = "No other money for these filters yet: repairs, mail, trades, loot, quests, training and flights show here by day.",
+  other = "No other money for these filters yet: repairs, mail, trades, loot, quests, training and flights show here, each with its time (older than 30 days, by day).",
 }
 
 function ns:RefreshLedger()

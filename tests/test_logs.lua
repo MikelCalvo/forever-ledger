@@ -137,3 +137,26 @@ T.test("Two purchases at one price: the gold goes to the newer", function()
   T.eq(#ns.db.purchases, 1)
   T.eq(ns.db.purchases[1].id, 4561)
 end)
+
+-- Frank, November 14: flights, loot, other income and the rest were only day totals, so
+-- they sorted oddly among the Ledger's timed entries. Now each has its own time too.
+T.test("Other money is logged with its time; the same kind within 5 minutes is one entry", function()
+  ns.db.otherLog, ns.db.otherLogSince = {}, {}
+  local log = ns.LogOtherMoney
+  log("flight", 500, ME, NOW)
+  T.same(ns.db.otherLog[1], { t = NOW, c = ME, s = "flight", a = 500 })
+  T.eq(ns.db.otherLogSince[ME], NOW)
+  log("flight", 200, ME, NOW + 120)
+  T.eq(#ns.db.otherLog, 1, "two minutes later: the same entry")
+  T.eq(ns.db.otherLog[1].a, 700); T.eq(ns.db.otherLog[1].t, NOW + 120)
+  log("loot", 50, ME, NOW + 130)
+  T.eq(#ns.db.otherLog, 2, "another kind: its own entry")
+  log("loot", 10, ME, NOW + 130 + 301)
+  T.eq(#ns.db.otherLog, 3, "over 5 minutes later: a new entry")
+  log("ahSale", 999, ME, NOW + 500)
+  log("vendorSell", 999, ME, NOW + 500)
+  T.eq(#ns.db.otherLog, 3, "sales and vendor trades have their own logs")
+  log("repair", 0, ME, NOW + 600)
+  T.eq(#ns.db.otherLog, 3, "nothing for nothing")
+  T.eq(ns.db.otherLogSince[ME], NOW, "since its first entry")
+end)

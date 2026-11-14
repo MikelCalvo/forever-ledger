@@ -250,6 +250,24 @@ function ns:QuestLines(id, compact)
   return #lines > 0 and lines or nil
 end
 
+-- The tooltip's short line (Frank, November 14: "Quests (#)" in the normal view, the quests
+-- themselves when you hold Shift): how many quests ask for it (the same ones QuestLines
+-- lists) and how many of them this character still wants it for. nil when none.
+function ns:QuestSummary(id)
+  local needs = ns:QuestNeeds(id)
+  if not needs then return end
+  local onlyMine = ns.db.settings.tipQuestMine ~= false
+  local n, keep = 0, 0
+  for _, q in ipairs(needs) do
+    if q.mine or not onlyMine then
+      n = n + 1
+      if q.keep then keep = keep + 1 end
+    end
+  end
+  if n == 0 then return end
+  return n, keep
+end
+
 -- For the Deals tab: leveling players need it for a quest (any faction).
 function ns:IsQuestItem(id)
   if not byItem then build() end

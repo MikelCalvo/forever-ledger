@@ -54,10 +54,7 @@
 - **Ledger:** every transaction in one list; select rows to see what they add up to; resale profit per item.
 - **Characters:** every character's bags and bank, per realm and faction, with what it's all worth and the best way to turn each item into gold.
 - **Bag value:** a bag's tooltip shows what one slot costs and the cheapest bag per slot right now.
-- **Dungeon runs:** runs, time, coin and what dropped for you, per dungeon.
 - **Riding fund:** how close you are to riding at 40 and epic riding at 60, mount included.
-- **Leveling tab:** below level 20, ways to make gold while leveling (gathering, cloth, bags, crafts for players), best first and priced from your scans.
-- **Training advice:** beside your class trainer, which spells and ranks are must haves, nice to have, or skippable while leveling, with what each costs.
 
 ### Getting around
 - **Welcome and Help:** a short guide the first time, Help by topic with common questions, and search boxes for Settings and Help.
@@ -113,7 +110,6 @@ Most things have a button; these are for when you'd rather type. The main ones:
 | `/fl scan` | Full scan if one is allowed, otherwise scan your materials (auction house open) |
 | `/fl watch` | Watch flips: keep scanning while the auction house is open |
 | `/fl queue`, `/fl lists` | The Buy queue, or your shopping lists (lists open anywhere) |
-| `/fl runs` | Your dungeon runs |
 
 <details>
 <summary>Show all commands</summary>

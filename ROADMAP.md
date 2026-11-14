@@ -32,18 +32,17 @@ What's already in the addon is in the [changelog](CHANGELOG.md). Download: [Rele
 - **Auction house deposits**: count the deposit in shuffles that end on the auction house, so cheap items that cost more to post than they earn show as "vendor it instead".
 - **Transmog**: bind-on-equip items that sell well, what they're worth and where they drop, including "worth farming" per rare.
 - **Quest turn-in items**: in the addon now, from original Classic quests (tooltips list the quest and say "keep it" for your own leveling). Next: learning Forever's own quests from players' quest logs, and when these items sell best.
-- **Launch-day checklist**: in the addon since 0.16.0 as the Leveling tab (ways to make gold below level 20, priced from your scans). Next: refresh it with launch prices, and your own to-do items.
+- **Launch-day checklist**: was the Leveling tab (0.16.0 to 0.24.0), taken out in November; it may come back in a separate leveling or farming companion.
 - **Hold or sell**: price graphs are in the addon since 0.19.0 (the price window: 2 weeks, 3 months or a year, each gear version on its own). Next: saying when something is the cheapest or dearest it has been.
 - **Auctionator**: send a shuffle's materials to an Auctionator shopping list, with the most worth paying as the maximum price.
 
 ## Leveling
 
-- **Dungeon runs**: in the addon now (dungeon runs and drops counted as you go; the session tracker was taken out in November, back if players ask). Next: **chase items**: a watch list of items you're farming (appearances, valuable drops, Forever's new items) with where they drop and "0 of 14 runs".
+- **Dungeon runs and chase items**: dungeon runs and the session tracker were taken out in November; they may come back in a farming section (gold farms, runs, drops and items you are farming), possibly as a companion addon.
 - **Leveling to-do list**: reminders that pop up at the right moment, for example "Level 14: time to get your Cozy Sleeping Bag".
 - **Cozy Sleeping Bag**: whether the trip is worth it for your route and pace, and the best time to get it.
 - **Training costs**: what the next levels of class and profession training will cost, so you can save for them.
 - **Riding fund**: in the addon since 0.15.0 (how close you are to riding at 40 and epic riding at 60, mount included, and about how many days at your pace). Next: a warning when you spend into it.
-- **Training advice**: in the addon since 0.15.0 for every class (Must have, Nice to have and Skip while leveling beside the class trainer, following your talents and the spells you cast). Next: checking each class in Forever, and the same for profession trainers.
 - **Bag value**: in the addon since 0.14.0 (price per slot in bag tooltips, and the cheapest bag per slot).
 - **Legacy advisor**: which Legacy perks pay off for how you play (priced from your own vendor, flight and Favor spending), and the cheapest route to your next point.
 

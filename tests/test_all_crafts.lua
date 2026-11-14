@@ -262,3 +262,35 @@ T.test("No two of the addon's files set the same ns name", function()
   T.eq(owner.CLASSIC_CRAFT_LIST, "ClassicCrafts.lua")
   T.eq(owner.CLASSIC_CRAFTS, "ClassicItems.lua")
 end)
+
+-- Frank, November 14: the tooltip says "Used in crafts (12)" and "Quests (3)", the lists on Shift.
+T.test("Tooltip counts: crafts that use an item, by profession, each recipe once", function()
+  local realBook, realF = ns.db.recipeBook, ns.FOREVER_CRAFTS
+  ns.db.recipeBook = { Tailoring = { [501] = { n = "Shirt", r = { { CLOTH, 2 }, { THREAD, 1 } } }, [502] = { n = "Gloves", r = { { CLOTH, 1 } } } } }
+  ns.FOREVER_CRAFTS = {
+    { id = 501, prof = "Tailoring", n = "Shirt", r = { { CLOTH, 2 } } },                     -- the same recipe: once
+    { id = 900, prof = "Leatherworking", n = "Belt", r = { { CLOTH, 3 }, { CLOTH, 1 } } },  -- cloth twice: one craft
+  }
+  ns.recipeBookStamp = (ns.recipeBookStamp or 0) + 1
+  T.eq(#ns:CraftsUsing(CLOTH), 3)
+  T.eq(ns:CraftsUsingSummary(CLOTH), "Used in crafts (3): Tailoring 2, Leatherworking 1")
+  local order = ns:CraftsUsingByProfession(CLOTH)
+  T.eq(order[1].names[1], "Gloves"); T.eq(order[1].names[2], "Shirt")
+  T.eq(ns:CraftsUsingSummary(THREAD), "Used in crafts (1): Tailoring 1")
+  T.eq(ns:CraftsUsingSummary(DYE), nil, "nothing uses it")
+  ns.db.recipeBook, ns.FOREVER_CRAFTS = realBook, realF
+  ns.recipeBookStamp = ns.recipeBookStamp + 1
+end)
+
+T.test("Tooltip counts: quests that ask for an item, and how many to keep", function()
+  local realNeeds = ns.QuestNeeds
+  ns.QuestNeeds = function() return { { mine = true, keep = true }, { mine = true }, { mine = false } } end
+  local n, keep = ns:QuestSummary(CLOTH)
+  T.eq(n, 2, "only this character's by default"); T.eq(keep, 1)
+  ns.db.settings.tipQuestMine = false
+  T.eq((ns:QuestSummary(CLOTH)), 3, "all of them")
+  ns.db.settings.tipQuestMine = nil
+  ns.QuestNeeds = function() return nil end
+  T.eq(ns:QuestSummary(CLOTH), nil)
+  ns.QuestNeeds = realNeeds
+end)

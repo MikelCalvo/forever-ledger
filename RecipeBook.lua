@@ -186,7 +186,10 @@ function ns:CaptureRecipeBook(profName)
       end
     end
   end
-  if added > 0 then ns:Debug("Recipe book:", added, "new", profName, "recipes recorded") end
+  if added > 0 then
+    ns.recipeBookStamp = (ns.recipeBookStamp or 0) + 1
+    ns:Debug("Recipe book:", added, "new", profName, "recipes recorded")
+  end
   -- Saved under another profession too: the evidence decides where it stays.
   if shared then ns:CleanRecipeBook() end
 end
@@ -259,11 +262,79 @@ function ns:CleanRecipeBook()
       end
     end
   end
-  if removed > 0 then ns:Debug("Recipe book:", removed, "recipes saved under two professions put right") end
+  if removed > 0 then
+    ns.recipeBookStamp = (ns.recipeBookStamp or 0) + 1
+    ns:Debug("Recipe book:", removed, "recipes saved under two professions put right")
+  end
   if unsure > 0 then ns:Debug("Recipe book:", unsure, "recipes saved under two professions kept in both (can't tell whose)") end
   return removed, unsure
 end
 ns:OnReady(function() ns:CleanRecipeBook() end)
+
+---------------------------------------------------------------------------
+-- Which crafts use an item (the tooltip's "Used in crafts (12)", Frank, November 14: show
+-- that it's used, and how, without the list taking over the tooltip): every recipe we know,
+-- from the profession windows first, then the game's own data (ForeverCrafts.lua) for the
+-- rest, each recipe once. Built on first use and again after a window adds recipes.
+---------------------------------------------------------------------------
+local usedIn, usedInStamp
+-- { { prof, n = recipe name }, ... } of the crafts that use the item, or nil.
+function ns:CraftsUsing(id)
+  local stamp = ns.recipeBookStamp or 0
+  if not usedIn or usedInStamp ~= stamp then
+    usedIn, usedInStamp = {}, stamp
+    local seen = {}
+    local function add(prof, rid, name, mats)
+      local key = prof .. ":" .. tostring(rid)
+      if seen[key] then return end
+      seen[key] = true
+      local counted = {}
+      for _, m in ipairs(mats or {}) do
+        local mid = m[1]
+        if mid and not counted[mid] then
+          counted[mid] = true
+          local t = usedIn[mid]
+          if not t then t = {}; usedIn[mid] = t end
+          t[#t + 1] = { prof = prof, n = name }
+        end
+      end
+    end
+    for prof, book in pairs(ns.db.recipeBook or {}) do
+      for rid, r in pairs(book) do add(prof, rid, r.n, r.r) end
+    end
+    for _, c in ipairs(ns.FOREVER_CRAFTS or {}) do add(c.prof, c.id, c.n, c.r) end
+  end
+  return usedIn[id]
+end
+
+-- The crafts using an item by profession, most first: { { prof, count, names = {...} } },
+-- and how many in all; nil when none.
+function ns:CraftsUsingByProfession(id)
+  local list = ns:CraftsUsing(id)
+  if not list then return end
+  local by, order = {}, {}
+  for _, c in ipairs(list) do
+    local p = by[c.prof]
+    if not p then p = { prof = c.prof, count = 0, names = {} }; by[c.prof] = p; order[#order + 1] = p end
+    p.count = p.count + 1
+    if c.n then p.names[#p.names + 1] = c.n end
+  end
+  table.sort(order, function(a, b) return a.count > b.count or (a.count == b.count and a.prof < b.prof) end)
+  for _, p in ipairs(order) do table.sort(p.names) end
+  return order, #list
+end
+
+-- "Used in crafts (12): Tailoring 8, Leatherworking 4", at most three professions named.
+function ns:CraftsUsingSummary(id)
+  local order, total = ns:CraftsUsingByProfession(id)
+  if not order then return end
+  local parts = {}
+  for i, p in ipairs(order) do
+    if i > 3 then parts[#parts + 1] = ("%d more"):format(#order - 3); break end
+    parts[#parts + 1] = p.prof .. " " .. p.count
+  end
+  return ("Used in crafts (%d): %s"):format(total, table.concat(parts, ", "))
+end
 
 ---------------------------------------------------------------------------
 -- Vendors: recipes they sell, and where they stand
