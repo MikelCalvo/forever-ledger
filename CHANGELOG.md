@@ -6,8 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
-- Tooltips: quests and crafts take one short line each, "Quests (3)" and "Used in crafts (12): Tailoring 8, Leatherworking 4" (every recipe we know, yours or not). Hold Shift for the quests and the crafts by name.
-- Ledger: repairs, mail, trades, loot, quests, training and flights now show each with its time, not as one line a day (from today, for the last 30 days; loot within 5 minutes is one entry).
+- Tooltips: quests and crafts take one short line each, "Quests (3)" and "Used in crafts (12): Tailoring 8, Leatherworking 4" (every recipe we know, yours or not). Hold Shift for the quests and the crafts, one a line by profession with the skill each needs, yours in green. If ProfTooltip is installed, you're asked once whether to keep both.
+- Ledger: repairs, mail, trades, loot, quests, training and flights now show each with its time, not as one line a day (for the last 30 days; loot within 5 minutes is one entry; what came before the update shows as one line per kind).
 
 ### Removed
 - The Leveling tab, the training advice beside class trainers, and dungeon runs (`/fl runs`, "Dropped for you" in tooltips). Other addons do leveling help better; dungeon runs may come back with a farming section. The riding fund stays.

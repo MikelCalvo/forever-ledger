@@ -467,6 +467,8 @@ local AUCTION_ADDONS = {
   { name = "TradeSkillMaster", short = "TSM", global = "TSM_API" },
   { name = "ForeverForge_Auction", short = "ForeverForge Auction", alt = { "ForeverForgeAuction", "ForeverForge-Auction" } },
   { name = "ForeverForge", alt = { "ForeverForge_Core" } },
+  -- Lists the crafts an item is used for (Frank has it, November 14).
+  { name = "ProfTooltip-Forever", short = "ProfTooltip", alt = { "ProfTooltip" } },
 }
 ns.OVERLAPS = {
   { setting = "tipPrice", label = "Auction and vendor prices in tooltips",
@@ -475,6 +477,7 @@ ns.OVERLAPS = {
   { setting = "undercutAlerts", label = "Undercut alerts", addons = { Auctionator = true, TradeSkillMaster = true } },
   { setting = "priceHelper", label = "Price helper on the Sell tab", addons = { Auctionator = true, TradeSkillMaster = true } },
   { setting = "soldSummary", label = "What sold while you were away", addons = { TradeSkillMaster = true } },
+  { setting = "tipUsedBy", label = "Crafts that use an item, in tooltips", addons = { ["ProfTooltip-Forever"] = true } },
 }
 
 local function loaded(a)

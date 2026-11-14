@@ -210,24 +210,43 @@ local function records(tab, from, charOK, match)
   end
   if tab == "other" or tab == "all" then
     -- Other money (repairs, mail, loot, quests...). Auction and vendor money isn't here:
-    -- the lists above have it item by item. One by one with its time on the days the
-    -- character's otherLog covers fully (from the day after it began, within the last 30
-    -- days; Frank, November 14), as day totals before that.
+    -- the lists above have it item by item. One by one with its time from the moment the
+    -- character's otherLog began (within the last 30 days; Frank, November 14), as day
+    -- totals before. On the day it began, what came before it is one line per kind
+    -- ("before logging began"): the day's total less what the log has (AN14: a flight
+    -- taken that day was missing until the next day).
     local fromDay, offset = ns.LocalDay(from), utcOffset()
     local recentDay = ns.LocalDay(time() - (ns.LEDGER_LOG_DAYS or 30) * DAY) + 1
-    local coverFrom = {}
-    for key, since in pairs(ns.db.otherLogSince or {}) do
-      coverFrom[key] = math.max(ns.LocalDay(since) + 1, recentDay)
+    local coverFrom, startDay, since = {}, {}, ns.db.otherLogSince or {}
+    for key, t in pairs(since) do
+      startDay[key] = ns.LocalDay(t)
+      coverFrom[key] = math.max(startDay[key], recentDay)
+    end
+    local loggedOnStart = {}   -- [charKey][source] = copper logged on its start day
+    for _, e in ipairs(ns.db.otherLog or {}) do
+      if startDay[e.c] and ns.LocalDay(e.t) == startDay[e.c] then
+        local t = loggedOnStart[e.c] or {}
+        loggedOnStart[e.c] = t
+        t[e.s] = (t[e.s] or 0) + (e.a or 0)
+      end
     end
     for key, days in pairs(ns.db.money) do
       if charOK(key) then
         for day, src in pairs(days) do
-          if day >= fromDay and not (coverFrom[key] and day >= coverFrom[key]) then
+          local covered = coverFrom[key] and day >= coverFrom[key]
+          if day >= fromDay and (not covered or day == startDay[key]) then
             for s, amt in pairs(src) do
               if OTHER[s] then
-                local signed = OTHER_IN[s] and amt or -amt
-                out[#out + 1] = { t = day * DAY - offset + DAY / 2, day = true, item = tab == "other" and OTHER[s] or "",
-                  kind = OTHER[s], total = signed, amount = signed, char = key }
+                local t = day * DAY - offset + DAY / 2
+                if covered then   -- the start day: only what came before the log
+                  amt = amt - ((loggedOnStart[key] or {})[s] or 0)
+                  t = since[key] - 1
+                end
+                if amt > 0 then
+                  local signed = OTHER_IN[s] and amt or -amt
+                  out[#out + 1] = { t = t, day = true, item = tab == "other" and OTHER[s] or "",
+                    kind = OTHER[s] .. (covered and " (before logging began)" or ""), total = signed, amount = signed, char = key }
+                end
               end
             end
           end

@@ -177,24 +177,23 @@ local function listLines(tt, id, s)
       else tt:AddLine(q.text, LR, LG, LB, true) end
     end
   end
-  if s.tipUsedBy == false then return end
-  -- Your characters' recipes first, then every craft that uses it, by profession.
-  local users, mine = ns.usage and ns.usage[id], 0
-  for k, count in pairs(users or {}) do
-    if mine >= 4 then break end
-    local name, prof = k:match("^(.-)|(.*)$")
-    tt:AddLine(("Used by %s: %s, %d recipe%s"):format(name or "?", prof or "?", count, count == 1 and "" or "s"), LR, LG, LB)
-    mine = mine + 1
-  end
-  local order, total = ns.CraftsUsingByProfession and ns:CraftsUsingByProfession(id)
+  if s.tipUsedBy == false or not ns.CraftsUsingByProfession then return end
+  -- Every craft that uses it, one a line by profession, lowest skill first, like
+  -- ProfTooltip (Frank, AN12, November 14); green when one of your characters knows it.
+  -- (Two calls: "a and f()" keeps only f's first value, which made the count 0.)
+  local order, total = ns:CraftsUsingByProfession(id)
   if not order then return end
-  tt:AddLine(("Used in crafts (%d):"):format(total), ORANGE[1], ORANGE[2], ORANGE[3])
+  tt:AddLine(("Used to craft (%d):"):format(total), 1, 0.82, 0)
   for i, p in ipairs(order) do
-    if i > 4 then tt:AddLine(("  and %d more professions"):format(#order - 4), LR, LG, LB); break end
-    local names = {}
-    for j = 1, math.min(5, #p.names) do names[j] = p.names[j] end
-    local more = #p.names - #names
-    tt:AddLine(("  %s: %s%s"):format(p.prof, table.concat(names, ", "), more > 0 and (" and %d more"):format(more) or ""), LR, LG, LB, true)
+    if i > 5 then tt:AddLine(("  and %d more professions"):format(#order - 5), 0.6, 0.6, 0.6); break end
+    tt:AddLine("  " .. p.prof, ORANGE[1], ORANGE[2], ORANGE[3])
+    for j, c in ipairs(p.crafts) do
+      if j > 10 then tt:AddLine(("   - and %d more"):format(#p.crafts - 10), 0.6, 0.6, 0.6); break end
+      local mine = ns.KnowsRecipe and ns:KnowsRecipe(p.prof, c.rid)
+      local skill = c.skill and (" |cff999999(%d)|r"):format(c.skill) or ""
+      if mine then tt:AddLine("   - " .. (c.n or "?") .. skill, 0.5, 0.83, 0.61)
+      else tt:AddLine("   - " .. (c.n or "?") .. skill, 1, 1, 1) end
+    end
   end
 end
 local shownLists   -- GameTooltip already has the lists (Shift)

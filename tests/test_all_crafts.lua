@@ -268,14 +268,21 @@ T.test("Tooltip counts: crafts that use an item, by profession, each recipe once
   local realBook, realF = ns.db.recipeBook, ns.FOREVER_CRAFTS
   ns.db.recipeBook = { Tailoring = { [501] = { n = "Shirt", r = { { CLOTH, 2 }, { THREAD, 1 } } }, [502] = { n = "Gloves", r = { { CLOTH, 1 } } } } }
   ns.FOREVER_CRAFTS = {
-    { id = 501, prof = "Tailoring", n = "Shirt", r = { { CLOTH, 2 } } },                     -- the same recipe: once
+    { id = 501, prof = "Tailoring", n = "Shirt", learn = 75, r = { { CLOTH, 2 } } },         -- the same recipe: once
     { id = 900, prof = "Leatherworking", n = "Belt", r = { { CLOTH, 3 }, { CLOTH, 1 } } },  -- cloth twice: one craft
   }
   ns.recipeBookStamp = (ns.recipeBookStamp or 0) + 1
   T.eq(#ns:CraftsUsing(CLOTH), 3)
   T.eq(ns:CraftsUsingSummary(CLOTH), "Used in crafts (3): Tailoring 2, Leatherworking 1")
-  local order = ns:CraftsUsingByProfession(CLOTH)
-  T.eq(order[1].names[1], "Gloves"); T.eq(order[1].names[2], "Shirt")
+  local order, total = ns:CraftsUsingByProfession(CLOTH)
+  T.eq(total, 3, "both values come back (AN12: the count showed 0)")
+  T.eq(order[1].crafts[1].n, "Gloves"); T.eq(order[1].crafts[2].n, "Shirt")
+  T.eq(order[1].crafts[2].skill, 75, "the skill to learn it, from the game's data")
+  T.eq(order[2].prof, "Leatherworking")
+  local realChars = ns.db.chars
+  ns.db.chars = { [ME] = { name = "Tester", profs = { Tailoring = { recipes = { [502] = { n = "Gloves" } } } } } }
+  T.eq(ns:KnowsRecipe("Tailoring", 502), true); T.eq(ns:KnowsRecipe("Tailoring", 501), false)
+  ns.db.chars = realChars
   T.eq(ns:CraftsUsingSummary(THREAD), "Used in crafts (1): Tailoring 1")
   T.eq(ns:CraftsUsingSummary(DYE), nil, "nothing uses it")
   ns.db.recipeBook, ns.FOREVER_CRAFTS = realBook, realF

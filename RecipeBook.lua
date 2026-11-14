@@ -278,16 +278,25 @@ ns:OnReady(function() ns:CleanRecipeBook() end)
 -- rest, each recipe once. Built on first use and again after a window adds recipes.
 ---------------------------------------------------------------------------
 local usedIn, usedInStamp
--- { { prof, n = recipe name }, ... } of the crafts that use the item, or nil.
+-- The skill a recipe needs, as the game's data or Classic's says (the tooltip's "(175)").
+local function skillOf(c, name)
+  if c and c.learn then return c.learn end
+  if c and c.skill and c.skill > 1 then return c.skill end
+  local e = name and ns.CLASSIC_RECIPES and ns.CLASSIC_RECIPES[name:lower()]
+  return e and e.skill or (c and c.skill) or nil
+end
+-- { { prof, rid, n = recipe name, skill }, ... } of the crafts that use the item, or nil.
 function ns:CraftsUsing(id)
   local stamp = ns.recipeBookStamp or 0
   if not usedIn or usedInStamp ~= stamp then
     usedIn, usedInStamp = {}, stamp
-    local seen = {}
+    local seen, forever = {}, {}
+    for _, c in ipairs(ns.FOREVER_CRAFTS or {}) do forever[c.prof .. ":" .. c.id] = c end
     local function add(prof, rid, name, mats)
       local key = prof .. ":" .. tostring(rid)
       if seen[key] then return end
       seen[key] = true
+      local entry = { prof = prof, rid = rid, n = name, skill = skillOf(forever[key], name) }
       local counted = {}
       for _, m in ipairs(mats or {}) do
         local mid = m[1]
@@ -295,7 +304,7 @@ function ns:CraftsUsing(id)
           counted[mid] = true
           local t = usedIn[mid]
           if not t then t = {}; usedIn[mid] = t end
-          t[#t + 1] = { prof = prof, n = name }
+          t[#t + 1] = entry
         end
       end
     end
@@ -307,21 +316,36 @@ function ns:CraftsUsing(id)
   return usedIn[id]
 end
 
--- The crafts using an item by profession, most first: { { prof, count, names = {...} } },
--- and how many in all; nil when none.
+-- The crafts using an item by profession, most first:
+-- { { prof, count, crafts = { entry, ... } lowest skill first } }, and how many in all;
+-- nil when none.
 function ns:CraftsUsingByProfession(id)
   local list = ns:CraftsUsing(id)
   if not list then return end
   local by, order = {}, {}
   for _, c in ipairs(list) do
     local p = by[c.prof]
-    if not p then p = { prof = c.prof, count = 0, names = {} }; by[c.prof] = p; order[#order + 1] = p end
+    if not p then p = { prof = c.prof, count = 0, crafts = {} }; by[c.prof] = p; order[#order + 1] = p end
     p.count = p.count + 1
-    if c.n then p.names[#p.names + 1] = c.n end
+    p.crafts[#p.crafts + 1] = c
   end
   table.sort(order, function(a, b) return a.count > b.count or (a.count == b.count and a.prof < b.prof) end)
-  for _, p in ipairs(order) do table.sort(p.names) end
+  for _, p in ipairs(order) do
+    table.sort(p.crafts, function(a, b)
+      if (a.skill or 0) ~= (b.skill or 0) then return (a.skill or 0) < (b.skill or 0) end
+      return (a.n or "") < (b.n or "")
+    end)
+  end
   return order, #list
+end
+
+-- Whether one of your characters knows a recipe (the tooltip shows those in green).
+function ns:KnowsRecipe(prof, rid)
+  for _, c in pairs(ns.db.chars or {}) do
+    local p = c.profs and c.profs[prof]
+    if p and p.recipes and p.recipes[rid] then return true end
+  end
+  return false
 end
 
 -- "Used in crafts (12): Tailoring 8, Leatherworking 4", at most three professions named.
