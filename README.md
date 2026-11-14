@@ -28,9 +28,10 @@
 - **Deals:** listings well below their usual price, with the usual price, how many days of scans it's based on, the next listing up and the resale profit, rated Good, Fair or Thin. A Booty Bay view compares the neutral auction house with yours, each after its own cut.
 - **Vendor flips:** things on the auction house for less than a vendor pays. Watch flips keeps scanning while the auction house is open, reading every item's cheapest price about every 20 seconds between full scans, and chimes when one turns up. Pause holds it (and the Buy queue's own lookups) while you search yourself.
 - **Watched items:** items you always want checked, each with the most you'd pay (or only under what a vendor pays). Watch flips looks for them every time it reads the auction house, and they go first in the Buy queue.
-- **Shuffles:** buy materials, craft, disenchant or convert, and sell, ranked by gold an hour, with every step spelled out.
+- **Shuffles:** buy materials, craft, disenchant or convert, and sell, ranked by gold an hour, with every step spelled out. All professions shows every profession's crafts that sell to a vendor at a profit, from Forever's own recipes, even ones none of your characters has.
+- **Sell suggestion:** items in your bags say what to do with them: keep (a quest or one of your recipes needs it), sell to a vendor, sell on the auction house, or disenchant.
 - **On the auction house:** listings worth buying get a green bar and a badge saying why (FLIP, DE, CRAFT, USE).
-- **Disenchant finder:** green armor and weapons by item level, with what each is worth to disenchant, on average and on a bad or good roll; add them to a shopping list in one click.
+- **Disenchant finder:** armor and weapons by item level (greens, and blues and purples from higher levels), with what each is worth to disenchant, on average and on a bad or good roll; add them to a shopping list in one click.
 - **Price window:** Alt-click any item, or look one up by name, for its usual price, trend, the cheapest now and a price graph over 2 weeks, 3 months or a year; for things you craft, the cost, the profit and the materials to a shopping list.
 - **Gear versions:** "of the Eagle" and "of the Whale" are priced separately, each with its own price graph.
 
@@ -159,7 +160,7 @@ Join the **[Forever Ledger Discord](https://discord.gg/WKsCtvupeC)** for updates
 | `media/` | Pictures the addon uses |
 | `CHANGELOG.md` | What changed in each version |
 | `docs/` | The guide, and notes on testing, developing and releasing |
-| `tools/flip-calculator.html` | The web version of the flip calculator |
+| `tools/` | The web version of the flip calculator, and the scripts that build the Classic and Forever recipe data (sources in `tools/FOREVER_DATA_SOURCES.md`) |
 | `.github/` | Automatic checks, release builds and the bug report form |
 
 ## License

@@ -172,14 +172,14 @@ end
 -- { ..., fix = true } a fix (a wrench). The small ones share one card.
 ---------------------------------------------------------------------------
 ns.WHATS_NEW = {
-  version = "0.23.0",
+  version = "0.24.0",
   lines = {
-    { "No more freezes after a scan: a full scan's prices are saved a little at a time instead of freezing the game for over a second, and the check for new deals no longer stutters.", major = true },
-    { "One tick buys a stack: the tick that starts buying a stack of materials also confirms it, within your limit. Settings can bring back the second click.", major = true },
-    { "Faster flips: the chime comes as soon as a flip is found, the list is read again after half a second, the next flip is looked up straight after a purchase, and buying carries on during full scans.", change = true },
-    { "Scroll to buy: up or down, anywhere over Vendor flips.", change = true },
-    { "\"Refused\" purchases that went through: the Buy queue moves straight on instead of pausing, and no longer gives up on a row it's buying.", fix = true },
-    { "Clearer status line: on a line of its own, and it says when the flip watch waits for your search.", change = true },
+    { "Sell suggestion: items in your bags say what to do with them: keep, sell to a vendor, sell on the auction house, or disenchant when it's clearly worth more.", major = true },
+    { "Every profession's recipes: tick All professions on Sells to a vendor for every profession's crafts that sell to a vendor at a profit, from Forever's own recipes, even for professions none of your characters has.", major = true },
+    { "Disenchanting, Forever's way: any Enchanting skill counts, blues and purples are valued too, and items that can't be disenchanted are left out.", change = true },
+    { "Simpler: sessions and the Limited supply tab are gone, and the Dashboard's gold graph is bigger.", change = true },
+    { "Two accounts: no more \"script ran too long\" when your other account's full scan arrives.", fix = true },
+    { "Recipes under the wrong profession: opening Skinning no longer saves other professions' recipes under it, and copies already saved are put right.", fix = true },
   },
 }
 

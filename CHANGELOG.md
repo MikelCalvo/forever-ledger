@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-14
+
+### Highlights
+- Δ **Sell suggestion**: items in your bags say what to do with them: keep, sell to a vendor, sell on the auction house, or disenchant when it's clearly worth more.
+- Δ **Every profession's recipes**: tick All professions on Sells to a vendor for every profession's crafts that sell to a vendor at a profit, from Forever's own recipes, even for professions none of your characters has.
+- ~ **Disenchanting, Forever's way**: any Enchanting skill counts, blues and purples are valued too, and items that can't be disenchanted are left out.
+- ~ **Simpler**: sessions and the Limited supply tab are gone, and the Dashboard's gold graph is bigger.
+- ✓ **Two accounts**: no more "script ran too long" when your other account's full scan arrives.
+- ✓ **Recipes under the wrong profession**: opening Skinning no longer saves other professions' recipes under it, and copies already saved are put right.
+
 ### Added
 - Sell suggestion in the tooltip of items in your bags: Keep (a quest needs it, a recipe of one of your characters uses it, you watch it, or it's on your list), or Sell: Vendor, Sell: Auction house or Sell: Close call when the two are near, with the reason; disenchanting too when it brings more, as the first line when it brings a quarter more or better. Only a suggestion: nothing is sold. Settings, Tooltips, Sell suggestion.
 - `/fl api` lists which of the game's WoW Forever frame art and window templates your client has, for the coming WoW Forever look (the last report is kept in the saved data).

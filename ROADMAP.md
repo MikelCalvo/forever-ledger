@@ -22,7 +22,7 @@ What's already in the addon is in the [changelog](CHANGELOG.md). Download: [Rele
 - **Item groups, built in**: ready-made groups (cloth, herbs, ores, enchanting materials, recipes, transmog gear and more) with sensible buy and sell rules, filled from the game's own item data and kept up to date with patches. No setup and no import strings; change any rule if you want to.
 - **Watch list and rare finds**: watched items are in the addon since 0.20.0 (items you're after with the most you'd pay, looked for every time Watch flips reads the auction house, and bought first from the Buy queue). Next: alerts for items that are almost never listed and for valuable items listed well under their usual price.
 - **Your auctions**: in the addon since 0.12.0 (undercut alerts, Cancel next undercut, sold and gold on the way), and what sold while you were away since 0.14.0.
-- **Vendor or auction house?**: on the Sell tab, what each item in your bags would net on the auction house after the cut and deposit against what a vendor pays, with a one-click list to vendor the rest.
+- **Vendor or auction house?**: in the addon since 0.24.0 as the sell suggestion in your bags' tooltips (keep, vendor, auction house, or disenchant). Next: the same on the Sell tab for everything in your bags at once, with a one-click list to vendor the rest.
 - **Deals per stat version**: judge "of the Monkey" against other Monkey versions, not the item as a whole.
 - **Which recipes are worth buying**: a recipe's cost (gold or Merchant's Favor) against its profit per craft and how often you'd make it.
 - **Market movers**: items whose price jumped or crashed since the last patch.
