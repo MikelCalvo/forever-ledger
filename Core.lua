@@ -21,7 +21,8 @@ local DEFAULTS = {
   purchases = {},   -- auction house purchases: { t, c, id, q, a }
   vendorLog = {},   -- vendor buys and sells: { t, c, id, q, a, s = "buy" | "sell" }
   otherLog = {},    -- other money one by one, 30 days: { t, c, s = source, a = copper } (History.lua; day totals stay in money)
-  otherLogSince = {}, -- [charKey] = when its other money began to be logged one by one (Ledger.lua: days after it use otherLog)
+  otherLogSince = {}, -- [charKey] = when its other money began to be logged one by one (Ledger.lua uses otherLog from then)
+  otherLogCut = {},   -- [charKey] = newest entry of it the size limit removed (Ledger.lua: that day and before as day totals)
   recipeBook = {},  -- [profession][recipeID] = { n, out, oq, r } every recipe, learned or not (RecipeBook.lua)
   recipeSources = {}, -- [recipe name lowercased][kind..npc] = { kind, conf = "seen", npc, npcID, mapID, x, y, zone, cost, currency, skill, limited, t }
   vendors = {},     -- [npcID] = { name, mapID, x, y, zone, t, trainer }

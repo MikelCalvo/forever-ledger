@@ -160,3 +160,39 @@ T.test("Other money is logged with its time; the same kind within 5 minutes is o
   T.eq(#ns.db.otherLog, 3, "nothing for nothing")
   T.eq(ns.db.otherLogSince[ME], NOW, "since its first entry")
 end)
+
+-- Codex review of 211a277: what the Ledger shows for other money, not just the log.
+local function ledgerOther()
+  local total, rows = 0, ns.LedgerRecords("other", 0, function() return true end, "")
+  for _, r in ipairs(rows) do total = total + r.total end
+  return total, rows
+end
+
+T.test("Ledger: money a minute either side of midnight is counted once", function()
+  local late = os.time({ year = 2026, month = 3, day = 15, hour = 23, min = 59 })
+  local D = ns.LocalDay(late)
+  ns.db.otherLog, ns.db.otherLogSince, ns.db.otherLogCut = {}, {}, {}
+  ns.db.money = { [ME] = { [D] = { otherIn = 100 }, [D + 1] = { otherIn = 10 } } }
+  S.now = late + 300
+  ns.LogOtherMoney("otherIn", 100, ME, late)
+  ns.LogOtherMoney("otherIn", 10, ME, late + 120)
+  T.eq(#ns.db.otherLog, 2, "not merged across midnight")
+  local total, rows = ledgerOther()
+  T.eq(total, 110)
+  T.eq(#rows, 2, "two timed entries, no 'earlier' line")
+end)
+
+T.test("Ledger: a day the size limit cut into shows its day totals, nothing lost", function()
+  local noon = os.time({ year = 2026, month = 3, day = 15, hour = 12 })
+  local D = ns.LocalDay(noon)
+  local nextDay = os.time({ year = 2026, month = 3, day = 16, hour = 0, min = 10 })
+  ns.db.otherLog, ns.db.otherLogSince, ns.db.otherLogCut = {}, {}, {}
+  ns.db.money = { [ME] = { [D] = { otherIn = 5 }, [D + 1] = { loot = 5001, quest = 5000 } } }
+  ns.LogOtherMoney("otherIn", 5, ME, noon)
+  for i = 1, 10001 do ns.LogOtherMoney(i % 2 == 1 and "loot" or "quest", 1, ME, nextDay + i) end
+  T.eq(#ns.db.otherLog, 10000, "the size limit")
+  T.ok(ns.db.otherLogCut[ME] and ns.LocalDay(ns.db.otherLogCut[ME]) == D + 1, "the cut reached the next day")
+  S.now = nextDay + 20000
+  local total = ledgerOther()
+  T.eq(total, 10006, "all of it, from the day totals")
+end)

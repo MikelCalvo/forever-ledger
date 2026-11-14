@@ -14,8 +14,10 @@ ns.LEDGER_LOG_DAYS = LOG_DAYS   -- (Ledger.lua: how far back other money has its
 -- Other money (repairs, mail, trades, loot, quests, training, flights, auction fees and
 -- deposits back) one by one, with its time, for the Ledger (Frank, November 14: they were
 -- day totals and sorted oddly among timed entries). Same kind on one character within 5
--- minutes is one entry (loot from a pull of mobs). ns.db.otherLog = { { t, c, s, a } },
--- a always positive; ns.db.otherLogSince[charKey] = when its first entry was made.
+-- minutes, on the same day, is one entry (loot from a pull of mobs). ns.db.otherLog =
+-- { { t, c, s, a } }, a always positive; ns.db.otherLogSince[charKey] = when its first entry
+-- was made; ns.db.otherLogCut[charKey] = the newest entry of that character the size limit
+-- removed (Ledger.lua treats its day and earlier as day totals: Codex review of 211a277).
 local OTHER_LOGGED = { ahFee = true, ahDepositBack = true, repair = true, mailIn = true, mailOut = true,
   tradeIn = true, tradeOut = true, loot = true, quest = true, training = true, flight = true,
   otherIn = true, otherOut = true }
@@ -24,13 +26,20 @@ local function logOther(source, amount, who, now)   -- (also ns.LogOtherMoney, f
   if not OTHER_LOGGED[source] or amount <= 0 then return end
   local list = ns.db.otherLog
   local last = list[#list]
-  if last and last.c == who and last.s == source and now - (last.t or 0) <= OTHER_MERGE_SECONDS then
+  -- Not across midnight: merged into tomorrow, a day's money would be counted on both days
+  -- (Codex review of 211a277).
+  if last and last.c == who and last.s == source and now - (last.t or 0) <= OTHER_MERGE_SECONDS
+    and ns.LocalDay(last.t) == ns.LocalDay(now) then
     last.a, last.t = last.a + amount, now
     return
   end
   list[#list + 1] = { t = now, c = who, s = source, a = amount }
   ns.db.otherLogSince[who] = ns.db.otherLogSince[who] or now
-  if #list > LOG_SIZE then table.remove(list, 1) end
+  if #list > LOG_SIZE then
+    local old = table.remove(list, 1)
+    ns.db.otherLogCut = ns.db.otherLogCut or {}
+    if old and old.c and (old.t or 0) > (ns.db.otherLogCut[old.c] or 0) then ns.db.otherLogCut[old.c] = old.t end
+  end
 end
 ns.LogOtherMoney = logOther
 local LEDGER_MONTHS_KEPT = 365 * 86400   -- monthly totals kept this long

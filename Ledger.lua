@@ -213,18 +213,23 @@ local function records(tab, from, charOK, match)
     -- the lists above have it item by item. One by one with its time from the moment the
     -- character's otherLog began (within the last 30 days; Frank, November 14), as day
     -- totals before. On the day it began, what came before it is one line per kind
-    -- ("before logging began"): the day's total less what the log has (AN14: a flight
-    -- taken that day was missing until the next day).
+    -- ("(earlier)"): the day's total less what the log has (AN14: a flight taken that day
+    -- was missing until the next day). A day whose entries the size limit removed, and
+    -- every day before it, is day totals only (Codex review of 211a277: otherwise money
+    -- went missing).
     local fromDay, offset = ns.LocalDay(from), utcOffset()
     local recentDay = ns.LocalDay(time() - (ns.LEDGER_LOG_DAYS or 30) * DAY) + 1
-    local coverFrom, startDay, since = {}, {}, ns.db.otherLogSince or {}
+    local coverFrom, partial, since, cut = {}, {}, ns.db.otherLogSince or {}, ns.db.otherLogCut or {}
     for key, t in pairs(since) do
-      startDay[key] = ns.LocalDay(t)
-      coverFrom[key] = math.max(startDay[key], recentDay)
+      local start = ns.LocalDay(t)
+      local first = math.max(start, recentDay)
+      if cut[key] then first = math.max(first, ns.LocalDay(cut[key]) + 1) end
+      coverFrom[key] = first
+      if first == start then partial[key] = start end   -- its first day: money from before the log too
     end
-    local loggedOnStart = {}   -- [charKey][source] = copper logged on its start day
+    local loggedOnStart = {}   -- [charKey][source] = copper logged on its first, partial day
     for _, e in ipairs(ns.db.otherLog or {}) do
-      if startDay[e.c] and ns.LocalDay(e.t) == startDay[e.c] then
+      if partial[e.c] and ns.LocalDay(e.t) == partial[e.c] then
         local t = loggedOnStart[e.c] or {}
         loggedOnStart[e.c] = t
         t[e.s] = (t[e.s] or 0) + (e.a or 0)
@@ -234,18 +239,18 @@ local function records(tab, from, charOK, match)
       if charOK(key) then
         for day, src in pairs(days) do
           local covered = coverFrom[key] and day >= coverFrom[key]
-          if day >= fromDay and (not covered or day == startDay[key]) then
+          if day >= fromDay and (not covered or day == partial[key]) then
             for s, amt in pairs(src) do
               if OTHER[s] then
                 local t = day * DAY - offset + DAY / 2
-                if covered then   -- the start day: only what came before the log
+                if covered then   -- the first day: only what came before the log
                   amt = amt - ((loggedOnStart[key] or {})[s] or 0)
                   t = since[key] - 1
                 end
                 if amt > 0 then
                   local signed = OTHER_IN[s] and amt or -amt
-                  out[#out + 1] = { t = t, day = true, item = tab == "other" and OTHER[s] or "",
-                    kind = OTHER[s] .. (covered and " (before logging began)" or ""), total = signed, amount = signed, char = key }
+                  out[#out + 1] = { t = t, day = true, other = true, item = tab == "other" and OTHER[s] or "",
+                    kind = OTHER[s] .. (covered and " (earlier)" or ""), total = signed, amount = signed, char = key }
                 end
               end
             end
@@ -257,7 +262,7 @@ local function records(tab, from, charOK, match)
       local cover = coverFrom[e.c]
       if OTHER[e.s] and (e.t or 0) >= from and charOK(e.c) and cover and ns.LocalDay(e.t) >= cover then
         local signed = OTHER_IN[e.s] and e.a or -e.a
-        out[#out + 1] = { t = e.t, item = tab == "other" and OTHER[e.s] or "", kind = OTHER[e.s],
+        out[#out + 1] = { t = e.t, other = true, item = tab == "other" and OTHER[e.s] or "", kind = OTHER[e.s],
           total = signed, amount = signed, char = e.c }
       end
     end
@@ -273,6 +278,8 @@ local function records(tab, from, charOK, match)
   end
   return out
 end
+ns.LedgerRecords = records   -- (the tests check what the Ledger shows)
+
 
 ---------------------------------------------------------------------------
 -- The tab
@@ -455,11 +462,13 @@ end
 -- The text shown for one value.
 local function show(rec, key)
   local v = rec[key]
+  -- Other money has no item, count or price each: blank, not "-" or "?" (AN14).
+  if rec.other and (key == "qty" or key == "each" or (key == "item" and (v or "") == "")) then return "" end
   if key == "t" then return dim(date((rec.month and "%B %Y") or (rec.day and "%b %d") or "%b %d %H:%M", v)) end
   if key == "char" then return charName(v) end
   if key == "qty" or key == "bought" or key == "sold" then return v and tostring(v) or dim(rec.day and "" or "?") end
   if key == "each" or key == "avgBuy" or key == "avgSell" then return v and ns.Money(math.floor(v + 0.5)) or dim(rec.day and "" or "?") end
-  if key == "total" then return rec.day and ("|cff" .. (v >= 0 and "7fd39c" or "ee8597") .. money(v) .. "|r") or ns.Money(v) end
+  if key == "total" then return (rec.day or rec.other) and ("|cff" .. (v >= 0 and "7fd39c" or "ee8597") .. money(v) .. "|r") or ns.Money(v) end
   if key == "amount" or key == "profit" then
     return "|cff" .. (v >= 0 and "7fd39c+" or "ee8597-") .. ns.Money(math.floor(math.abs(v) + 0.5)) .. "|r"
   end

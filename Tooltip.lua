@@ -420,13 +420,24 @@ local function addLines(tt, id, forceFull, copyPrice)
   if on("tipDisenchant") and ns:AddDisenchantLines(tt, id) then ns.disenchantLinesFor = id end
 
   questsAndCrafts()
+  -- The hint says what Shift, Ctrl and the click show (AN12, November 14: Frank held Ctrl,
+  -- as only Ctrl was named, and didn't see the craft list Shift gives).
+  local hints = {}
+  if not expanded then
+    local quests = on("tipQuest") and ns.QuestSummary and ns:QuestSummary(id)
+    local crafts = on("tipUsedBy") and ns.CraftsUsing and ns:CraftsUsing(id)
+    local what = (crafts and quests and "crafts and quests") or (crafts and "crafts") or (quests and "quests") or nil
+    if what then hints[#hints + 1] = "Shift for the " .. what end
+  end
   if withHistory then
     historyLines(tt, id)
   elseif not had and on("tipHistory") and price and #(ns:PriceHistory(id)) > 1 then
-    tt:AddLine("Hold Ctrl for price history" .. (on("priceWindow") and (", " .. ns:PriceClickName() .. " for a graph") or ""), 0.5, 0.5, 0.5)
-  elseif not had and on("priceWindow") and price then
-    tt:AddLine(ns:PriceClickName() .. " for a price graph", 0.5, 0.5, 0.5)
+    hints[#hints + 1] = "Ctrl for price history"
   end
+  local click = not had and on("priceWindow") and price and (ns:PriceClickName() .. (#hints > 0 and " for a graph" or " for a price graph"))
+  local text = #hints > 0 and ("Hold " .. table.concat(hints, ", ")) or ""
+  if click then text = text .. (text ~= "" and ", " or "") .. click end
+  if text ~= "" then tt:AddLine(text, 0.5, 0.5, 0.5, true) end
 end
 
 if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
