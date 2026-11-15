@@ -4,6 +4,8 @@ Everything the addon does, at a high level. The same text is in the game under *
 
 > Pictures are being added. Where a picture is missing, the text still describes the feature.
 
+**Upcoming price values:** the planned Buy and Post views have new values from our own scans: cheapest now and listed, a 14-day usual price weighted toward recent days with extreme observations removed, a 3-day recent price and a 60-day long-term price. Historical values use completed days; missing days are unknown, not zero. Estimated sells a day uses listings that vanished before they could expire, with enough observation before showing an estimate. Booty Bay has its own history. This is groundwork: current tooltips and shopping limits keep their existing prices.
+
 ## Getting started
 
 1. Type `/fl` (or click the minimap button) to open the main window.
