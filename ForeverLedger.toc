@@ -51,5 +51,6 @@ Groups.lua
 Auctions.lua
 AHTabs.lua
 ScanOnce.lua
+Post.lua
 PriceWindow.lua
 Probe.lua

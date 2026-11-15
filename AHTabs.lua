@@ -19,6 +19,7 @@ local _, ns = ...
 
 local TABS = {
   { key = "buy", label = "Buy", title = "Forever Ledger: Buy" },
+  { key = "post", label = "Post", title = "Forever Ledger: Post" },
   { key = "auctions", label = "My auctions", title = "Forever Ledger: My auctions" },
 }
 
@@ -135,7 +136,15 @@ local function make()
   host:SetFrameLevel(ah:GetFrameLevel() + 10)
   host:Hide()
   host:SetScript("OnShow", function(self)
-    if ns.ShowSidePanelInside then ns:ShowSidePanelInside(self, self.key == "auctions" and "auctions" or nil) end
+    -- Post has its own view (Post.lua); Buy and My auctions show the Buy queue panel.
+    local post = ns.PostFrame and ns:PostFrame(self)
+    if self.key == "post" then
+      if ns.HideSidePanelInside then ns:HideSidePanelInside() end
+      if post then post:Show() end
+    else
+      if post then post:Hide() end
+      if ns.ShowSidePanelInside then ns:ShowSidePanelInside(self, self.key == "auctions" and "auctions" or nil) end
+    end
     if ns.UpdateAHScanButtons then ns:UpdateAHScanButtons() end
   end)
   host:SetScript("OnHide", function()
