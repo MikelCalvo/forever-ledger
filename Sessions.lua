@@ -53,7 +53,10 @@ function ns:SessionTotals(s)
   if s.active == nil and s.resume == nil then
     secs = time() - s.t   -- a session from before this was counted (or a stored one)
   else
-    secs = (s.active or 0) + (s.resume and (time() - s.resume) or 0)
+    -- The clock runs only while its own character plays (Codex review of 893cbbd: another
+    -- character's hour went into it).
+    local mine = s.char == ns.CharKey()
+    secs = (s.active or 0) + ((mine and s.resume) and (time() - s.resume) or 0)
   end
   secs = math.max(1, secs)
   local gained = earned - spent
@@ -323,11 +326,13 @@ function ns:GeneralSessionRunning()
   return s ~= nil and s.char == ns.CharKey()
 end
 
--- A session left running at logout carries on at login, on the same character.
+-- A session left running at logout carries on at login, on the same character. Another
+-- character leaves it paused until its own comes back (Codex review of 893cbbd: logging in
+-- on another character resumed it, and its logout put that character's hour into it).
 ns:On("PLAYER_ENTERING_WORLD", function()
   local s = live()
   -- Carrying on after a logout or reload: count time again from now.
-  if s and not s.resume then
+  if s and s.char == ns.CharKey() and not s.resume then
     if s.active == nil then s.active = time() - s.t end   -- one started before this was counted
     s.resume = time()
   end
@@ -337,6 +342,11 @@ end)
 ns:On("PLAYER_LOGOUT", function()
   local s = live()
   if not s then return end
+  if s.char ~= ns.CharKey() then
+    -- Not this character's: nothing to bank, and a resume an older version set here goes.
+    s.resume = nil
+    return
+  end
   if s.resume then
     s.active = (s.active or 0) + (time() - s.resume)
   elseif s.active == nil then

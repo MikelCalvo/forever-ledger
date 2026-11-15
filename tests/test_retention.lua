@@ -386,6 +386,43 @@ T.test("Sessions: the last 100 are kept", function()
   T.eq(ns.db.sessions[100].earned, 500, "the new one is last")
 end)
 
+-- Codex review of 893cbbd: a session left on one character counted the time another
+-- character played (an hour on B made A's two minutes 3,720 seconds).
+T.test("Sessions: only the session's own character's play counts", function()
+  start()
+  local realKey, errors = ns.CharKey, #S.errors
+  local OTHER = "Other Tester-" .. (ns.RealmName() or "?")
+  local function secs() return ns:SessionTotals(ns.db.liveSession).secs end
+  ns.db.liveSession = { t = NOW, resume = NOW, active = 0, char = ME, money = {}, loot = {} }
+  S.now = NOW + 60
+  T.fire("PLAYER_LOGOUT")                          -- A logs out after a minute
+  T.eq(ns.db.liveSession.active, 60); T.eq(ns.db.liveSession.resume, nil)
+  ns.CharKey = function() return OTHER end
+  S.now = NOW + 100
+  T.fire("PLAYER_ENTERING_WORLD")                  -- B logs in: A's session stays paused
+  T.eq(ns.db.liveSession.resume, nil)
+  S.now = NOW + 3700
+  T.eq(secs(), 60, "B's hour isn't A's")
+  T.fire("PLAYER_LOGOUT")                          -- B logs out: nothing banked
+  T.eq(ns.db.liveSession.active, 60)
+  ns.db.liveSession.resume = NOW + 100             -- (as an older version left it)
+  T.fire("PLAYER_LOGOUT")
+  T.eq(ns.db.liveSession.resume, nil, "an old resume set by B goes")
+  ns.CharKey = realKey
+  S.now = NOW + 3800
+  T.fire("PLAYER_ENTERING_WORLD")                  -- A comes back
+  S.now = NOW + 3860
+  T.eq(secs(), 120, "A's two minutes")
+  -- The same character reloading: offline time isn't counted, play is.
+  T.fire("PLAYER_LOGOUT")
+  S.now = NOW + 3870
+  T.fire("PLAYER_ENTERING_WORLD")
+  S.now = NOW + 3900
+  T.eq(secs(), 150)
+  ns.db.liveSession = nil
+  for i = #S.errors, errors + 1, -1 do S.errors[i] = nil end   -- (the tracker window needs the theme, not loaded here)
+end)
+
 T.test("Disenchants: the last 1,000 are kept", function()
   start()
   ns.db.disenchants = {}
