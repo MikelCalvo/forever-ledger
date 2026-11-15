@@ -190,3 +190,43 @@ T.test("Groups: deleting your group moves its sub-groups up and drops its rules"
   T.ok(not ns:AddToGroup("prof:Tailoring:mats", HERB), "profession groups aren't changed by hand")
   T.ok(not ns:SetGroupRule("nope", "post", "off"))
 end)
+
+-- Codex review, November 15 (two P2s).
+T.test("Groups: out of a parent group means out of its sub-groups too", function()
+  ns:SetGroupRule("mat", "post", "off")
+  local _, from = ns:RuleFor(THREAD, "post")
+  T.eq(from, "Off (Materials)")
+  T.ok(not ns:RemoveFromGroup("con", THREAD), "not in Consumables: nothing to take out")
+  T.ok(ns:RemoveFromGroup("mat", THREAD))
+  T.ok(not ns:GroupHas("mat", THREAD), "out of Materials")
+  T.ok(not ns:GroupHas("mat.cloth", THREAD), "and so out of Cloth")
+  T.same(ns:GroupFilter({ "mat" }, { THREAD, HERB }), { HERB })
+  _, from = ns:RuleFor(THREAD, "post")
+  T.eq(from, "Default", "Materials' rule no longer applies")
+  T.ok(ns:AddToGroup("mat", THREAD))
+  T.ok(ns:GroupHas("mat.cloth", THREAD), "back where it was")
+  T.eq(ns.db.groups.removed.mat, nil)
+  ns:SetGroupRule("mat", "post", "parent")
+end)
+
+T.test("Groups: a captured recipe replaces ForeverCrafts' row in profession groups", function()
+  local OLDMAT, NEWMAT, OTHER, OUT1, OUT2, OUT3 = 97620, 97621, 97622, 97623, 97624, 97625
+  local saved = ns.FOREVER_CRAFTS
+  ns.FOREVER_CRAFTS = {
+    { id = 555, prof = "Tailoring", out = OUT1, r = { { OLDMAT, 1 } } },
+    { id = 556, prof = "Tailoring", out = OUT3, r = { { OTHER, 1 } } },
+  }
+  ns.db.recipeBook = { Tailoring = { [555] = { n = "Test Robe", out = OUT2, r = { { NEWMAT, 1 } } } } }
+  ns.recipeBookStamp = (ns.recipeBookStamp or 0) + 1   -- as RecipeBook.lua does after a capture
+  T.ok(not ns:GroupHas("prof:Tailoring:mats", OLDMAT), "the replaced row's material is gone")
+  T.ok(ns:GroupHas("prof:Tailoring:mats", NEWMAT))
+  T.ok(ns:GroupHas("prof:Tailoring:mats", OTHER), "a different recipe stays")
+  T.ok(not ns:GroupHas("prof:Tailoring:crafts", OUT1))
+  T.ok(ns:GroupHas("prof:Tailoring:crafts", OUT2))
+  T.ok(ns:GroupHas("prof:Tailoring:crafts", OUT3))
+  ns:SetGroupRule("prof:Tailoring:mats", "post", "off")
+  T.eq(select(2, ns:RuleFor(OLDMAT, "post")), "Default")
+  ns:SetGroupRule("prof:Tailoring:mats", "post", "parent")
+  ns.FOREVER_CRAFTS = saved
+  ns.recipeBookStamp = ns.recipeBookStamp + 1
+end)

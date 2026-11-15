@@ -186,8 +186,16 @@ local function builtinGroups(id)
   local out, seen = {}, {}
   local function add(gid) if gid and not seen[gid] then seen[gid] = true; out[#out + 1] = gid end end
   for gid, items in pairs(g.added) do if items[id] then add(gid) end end
+  -- Taken out of its group or any group above it (Codex review, November 15: out of
+  -- Materials must mean out of Cloth too): it sits just above the highest one it was
+  -- taken out of, or in no built-in group if that's a top-level one.
   local gid = naturalGroup(id)
-  while gid and g.removed[gid] and g.removed[gid][id] do gid = byId[gid].parent end
+  local cut, cur = nil, gid
+  while cur do
+    if g.removed[cur] and g.removed[cur][id] then cut = cur end
+    cur = byId[cur].parent
+  end
+  if cut then gid = byId[cut].parent end
   add(gid)
   if not (g.removed.crates and g.removed.crates[id]) and inCrates(id) then add("crates") end
   if not (g.removed.turnins and g.removed.turnins[id]) and isTurnIn(id) then add("turnins") end
@@ -221,10 +229,19 @@ local function professions()
       end
     end
   end
+  -- A recipe captured from the game replaces ForeverCrafts.lua's row for the same
+  -- profession and recipe (as RecipeBook.lua's CraftsUsing does; Codex review,
+  -- November 15: the old row's materials stayed in the group).
+  local seen = {}
   for prof, book in pairs(ns.db.recipeBook or {}) do
-    for _, r in pairs(book) do add(prof, r.out, r.r) end
+    for rid, r in pairs(book) do
+      seen[prof .. ":" .. tostring(rid)] = true
+      add(prof, r.out, r.r)
+    end
   end
-  for _, c in ipairs(ns.FOREVER_CRAFTS or {}) do add(c.prof, c.out, c.r) end
+  for _, c in ipairs(ns.FOREVER_CRAFTS or {}) do
+    if not seen[c.prof .. ":" .. tostring(c.id)] then add(c.prof, c.out, c.r) end
+  end
   profIndex, profStamp = idx, stamp
   return idx
 end
@@ -420,6 +437,8 @@ function ns:RemoveFromGroup(gid, id)
     g.added[gid][id] = nil
     if not next(g.added[gid]) then g.added[gid] = nil end
   else
+    -- Nothing to take out: say so rather than record a removal that changes nothing.
+    if not ns:GroupHas(gid, id) then return false end
     g.removed[gid] = g.removed[gid] or {}
     g.removed[gid][id] = true
   end
