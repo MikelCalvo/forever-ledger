@@ -193,6 +193,7 @@ end)
 
 -- Codex review, November 15 (two P2s).
 T.test("Groups: out of a parent group means out of its sub-groups too", function()
+  ns:SetGroupRule("mat.cloth", "post", "parent")   -- (an earlier test changed Cloth's)
   ns:SetGroupRule("mat", "post", "off")
   local _, from = ns:RuleFor(THREAD, "post")
   T.eq(from, "Off (Materials)")
