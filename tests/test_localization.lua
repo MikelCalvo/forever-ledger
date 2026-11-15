@@ -395,3 +395,51 @@ T.test("Localization: Darkmoon ticket plurals do not retain the English suffix",
   T.eq(ns.LocalizeDisplayText("Darkmoon Faire: 5 for 1 ticket (Yebb)"), "暗月马戏团：每 5 件换 1 张奖券（Yebb）")
   T.eq(ns.LocalizeDisplayText("Darkmoon Faire: 5 for 4 tickets (Yebb)"), "暗月马戏团：每 5 件换 4 张奖券（Yebb）")
 end)
+
+T.test("Localization: display cache is invalidated with registered data", function()
+  local ns = loadLocale("zhCN")
+  T.eq(ns.LocalizeDisplayText("Buy"), "购买")
+  ns.GetLocaleData().strings.Buy = "重新购买"
+  ns.InvalidateLocale()
+  T.eq(ns.LocalizeDisplayText("Buy"), "重新购买")
+  ns.GetLocaleData().strings.Buy = "第三次购买"
+  ns.RegisterLocale("zhCN", ns.GetLocaleData())
+  T.eq(ns.LocalizeDisplayText("Buy"), "第三次购买")
+end)
+
+T.test("Localization: display cache keeps protected markup and checks secrets first", function()
+  local ns = loadLocale("zhCN")
+  local source = "Buy |Hplayer:Master|h[Master]|h |TInterface/Buy:16|t"
+  local translated = ns.LocalizeDisplayText(source)
+  T.eq(ns.LocalizeDisplayText(source), translated)
+  T.ok(translated:find("|Hplayer:Master|h[Master]|h", 1, true))
+  T.ok(translated:find("|TInterface/Buy:16|t", 1, true))
+  local previous = issecretvalue
+  issecretvalue = function(value) return value == source end
+  T.eq(ns.LocalizeDisplayText(source), source, "cached input that becomes secret passes through")
+  issecretvalue = previous
+end)
+
+T.test("Localization: cache pressure preserves translation and numeric formatting", function()
+  local ns = loadLocale("zhCN")
+  for i = 1, 5000 do ns.LocalizeDisplayText("无变化的中文" .. i) end
+  T.eq(ns.LocalizeDisplayText("|cff888888check prices|r"), "|cff888888请刷新价格|r")
+  T.eq(ns.LocalizeDisplayText("4g 25s 3c"), "4金 25银 3铜")
+  T.eq(ns.LocalizeText("Buy"), "购买")
+end)
+
+T.test("Localization: repeated display values avoid translation after a large queue redraw", function()
+  local ns = loadLocale("zhCN")
+  local calls, original = 0, ns.LocalizeText
+  ns.LocalizeText = function(text) calls = calls + 1; return original(text) end
+  local first = "队列物品1"
+  ns.LocalizeDisplayText(first)
+  for i = 2, 1500 do ns.LocalizeDisplayText("队列物品" .. i) end
+  local before = calls
+  ns.LocalizeDisplayText(first)
+  T.eq(calls, before, "a redraw exceeding the old whole-cache reset retains recent results")
+  ns.LocalizeDisplayText("|cff7fd39c1g 25s|r")
+  before = calls
+  ns.LocalizeDisplayText("|cff7fd39c1g 25s|r")
+  T.eq(calls, before, "the complete display result is reused")
+end)

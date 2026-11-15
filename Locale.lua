@@ -2,18 +2,34 @@ local _, ns = ...
 local localeName = GetLocale()
 local language
 local strings = {}
-local patterns, cache, cacheCount
+local patterns
+local function newCache()
+  return { values = {}, keys = {}, next = 1 }
+end
+local cache, displayCache = newCache(), newCache()
+local CACHE_SIZE = 2048
+local function cached(store, source) return store.values[source] end
+local function save(store, source, result)
+  if store.values[source] == nil then
+    local previous = store.keys[store.next]
+    if previous then store.values[previous] = nil end
+    store.keys[store.next] = source
+    store.next = store.next % CACHE_SIZE + 1
+  end
+  store.values[source] = result
+  return result
+end
 function ns.RegisterLocale(name, value)
   if name == localeName then
     language = value
     strings = value.strings or {}
     ns.localeFont = value.font
-    patterns, cache, cacheCount = nil, nil, nil
+    patterns, cache, displayCache = nil, newCache(), newCache()
   end
 end
 function ns.HasLocale() return language ~= nil end
 function ns.GetLocaleData() return language end
-function ns.InvalidateLocale() patterns, cache, cacheCount = nil, nil, nil end
+function ns.InvalidateLocale() patterns, cache, displayCache = nil, newCache(), newCache() end
 local function escapePattern(text)
   return (text:gsub("([%%%^%$%(%)%.%[%]%*%+%-%?])", "%%%1"))
 end
@@ -23,10 +39,13 @@ local function buildPatterns()
   for english, translated in pairs(strings) do
     if english:find(spec) and #english:gsub(spec, ""):gsub("[^%a]", "") >= 5 or (language.short and language.short[english]) then
       local parts, at, count, typed, kinds = {}, 1, 0, 0, {}
+      local anchor = ""
       while true do
         local first, last = english:find(spec, at)
         if not first then break end
-        parts[#parts + 1] = escapePattern((english:sub(at, first - 1):gsub("%%%%", "%%")))
+        local literal = english:sub(at, first - 1):gsub("%%%%", "%%")
+        if #literal > #anchor then anchor = literal end
+        parts[#parts + 1] = escapePattern(literal)
         local before = english:sub(at, first - 1)
         local conversion = english:sub(last, last)
         local prefix = english:sub(1, first - 1)
@@ -60,8 +79,10 @@ local function buildPatterns()
         end
         count, at = count + 1, last + 1
       end
-      parts[#parts + 1] = escapePattern((english:sub(at):gsub("%%%%", "%%")))
-      patterns[#patterns + 1] = { pattern = "^" .. table.concat(parts) .. "$", text = translated, count = count, typed = typed, kinds = kinds, container = english == "%s (%s)" or english == "%s, %s", markup = english:find("|H",1,true) or english:find("|T",1,true) or english:find("|A",1,true) or english:find("|K",1,true), rank = #english:gsub(spec, ""), first = english:sub(1, 1) ~= "%" and english:sub(1, 1) or nil }
+      local tail = english:sub(at):gsub("%%%%", "%%")
+      if #tail > #anchor then anchor = tail end
+      parts[#parts + 1] = escapePattern(tail)
+      patterns[#patterns + 1] = { anchor = anchor, pattern = "^" .. table.concat(parts) .. "$", text = translated, count = count, typed = typed, kinds = kinds, container = english == "%s (%s)" or english == "%s, %s", markup = english:find("|H",1,true) or english:find("|T",1,true) or english:find("|A",1,true) or english:find("|K",1,true), rank = #english:gsub(spec, ""), first = english:sub(1, 1) ~= "%" and english:sub(1, 1) or nil }
     end
   end
   table.sort(patterns, function(a, b)
@@ -86,7 +107,7 @@ local localize
 local function translatePattern(text, depth, markupOnly)
   if not patterns then buildPatterns() end
   for _, row in ipairs(patterns[text:sub(1, 1)] or patterns[false]) do
-    if not markupOnly or row.markup then
+    if (not markupOnly or row.markup) and (row.anchor == "" or text:find(row.anchor, 1, true)) and text:find(row.pattern) then
       local captures={text:match(row.pattern)}
       local valid = #captures==row.count
       if valid and row.container then
@@ -103,19 +124,14 @@ local function translatePattern(text, depth, markupOnly)
     end
   end
 end
-local function remember(source, result)
-  cache = cache or {}
-  cacheCount = (cacheCount or 0) + 1
-  if cacheCount > 1024 then cache, cacheCount = {}, 1 end
-  cache[source] = result
-  return result
-end
+local function remember(source, result) return save(cache, source, result) end
 localize = function(text, depth)
   if not language or (issecretvalue and issecretvalue(text)) or type(text) ~= "string" then return text end
   local direct = strings[text] or (language.upper and language.upper[text])
   if direct then return direct end
   if depth >= 16 or text == "" then return text end
-  if cache and cache[text] then return cache[text] end
+  local saved = cached(cache, text)
+  if saved then return saved end
   -- Preserve link targets, textures, atlases, protected names and URLs byte for byte.
   if text:find("|H",1,true) or text:find("|T",1,true) or text:find("|A",1,true) or text:find("|K",1,true) or text:find("https?://") then
     local explicit=translatePattern(text,depth,true)
@@ -196,6 +212,10 @@ function ns.LocalizeText(text) return localize(text,0) end
 
 -- Units belong to rendered text. Editable prices and exported data keep their input syntax.
 function ns.LocalizeDisplayText(text)
+  if (issecretvalue and issecretvalue(text)) or type(text) ~= "string" then return text end
+  local source = text
+  local saved = cached(displayCache, source)
+  if saved then return saved end
   text = ns.LocalizeText(text)
   if not language or type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then return text end
   local function visible(s)
@@ -211,7 +231,7 @@ function ns.LocalizeDisplayText(text)
     if not first then out[#out+1]=visible(text:sub(at));break end
     out[#out+1]=visible(text:sub(at,first-1));out[#out+1]=text:sub(first,last);at=last+1
   end
-  return table.concat(out)
+  return save(displayCache, source, table.concat(out))
 end
 function ns.LocalizeFontString(fs)
   if not language or not fs or fs._flLocalized then return fs end
