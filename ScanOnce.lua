@@ -98,7 +98,7 @@ end
 
 local refresh   -- shows `results` filtered (below)
 
--- Every item with a price from the last scan, a few hundred a frame so the game doesn't
+-- Every item with a price from the last scan, 150 a frame so the game doesn't
 -- stop for a moment on thousands of items.
 local function build()
   local market = ns.db.prices[ns.MarketKey()] or {}
@@ -110,7 +110,7 @@ local function build()
   building = true
   scannedAt = time()
   local function step()
-    local stop = math.min(i + 300, #ids)
+    local stop = math.min(i + 150, #ids)
     for k = i + 1, stop do
       local id = ids[k]
       local rec = market[id]
