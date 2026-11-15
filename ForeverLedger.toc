@@ -47,6 +47,7 @@ SellGuard.lua
 ShoppingLists.lua
 BuyQueue.lua
 Watched.lua
+Groups.lua
 Auctions.lua
 PriceWindow.lua
 Probe.lua
