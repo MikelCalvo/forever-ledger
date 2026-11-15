@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-11-14
+
+### Highlights
+- Δ **Shorter tooltips**: quests and crafts take one line each, "Quests (3)" and "Used in crafts (12)". Hold Shift for the lists, one craft a line with the skill it needs, yours in green.
+- + **Darkmoon Faire turn-ins**: a coral red line on every item the Faire takes for Prize Tickets, with how many and for how many tickets.
+- ~ **Gear you could wear**: dungeon drops and quest rewards now say what to do if you won't wear them: sell to a vendor, or disenchant when that's clearly worth more.
+- ~ **Ledger times**: flights, loot, repairs, quests and the rest show with their own times, not as one line a day.
+- ~ **Simpler**: the Leveling tab, the training advice and dungeon runs are gone. The riding fund stays.
+
 ### Added
 - Tooltips: items the Darkmoon Faire takes for Prize Tickets get a coral red line, "Darkmoon Faire: 5 for 1 ticket (Yebb Neblegear)": the animal parts and the Blacksmithing, Engineering and Leatherworking turn-ins (Classic's list). Settings, Tooltips, Darkmoon Faire turn-ins.
 

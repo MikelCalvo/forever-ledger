@@ -172,14 +172,13 @@ end
 -- { ..., fix = true } a fix (a wrench). The small ones share one card.
 ---------------------------------------------------------------------------
 ns.WHATS_NEW = {
-  version = "0.24.0",
+  version = "0.25.0",
   lines = {
-    { "Sell suggestion: items in your bags say what to do with them: keep, sell to a vendor, sell on the auction house, or disenchant when it's clearly worth more.", major = true },
-    { "Every profession's recipes: tick All professions on Sells to a vendor for every profession's crafts that sell to a vendor at a profit, from Forever's own recipes, even for professions none of your characters has.", major = true },
-    { "Disenchanting, Forever's way: any Enchanting skill counts, blues and purples are valued too, and items that can't be disenchanted are left out.", change = true },
-    { "Simpler: sessions and the Limited supply tab are gone, and the Dashboard's gold graph is bigger.", change = true },
-    { "Two accounts: no more \"script ran too long\" when your other account's full scan arrives.", fix = true },
-    { "Recipes under the wrong profession: opening Skinning no longer saves other professions' recipes under it, and copies already saved are put right.", fix = true },
+    { "Shorter tooltips: quests and crafts take one line each, \"Quests (3)\" and \"Used in crafts (12)\". Hold Shift for the lists, one craft a line with the skill it needs, yours in green.", major = true },
+    { "Darkmoon Faire turn-ins: a coral red line on every item the Faire takes for Prize Tickets, with how many and for how many tickets." },
+    { "Gear you could wear: dungeon drops and quest rewards now say what to do if you won't wear them: sell to a vendor, or disenchant when that's clearly worth more.", change = true },
+    { "Ledger times: flights, loot, repairs, quests and the rest show with their own times, not as one line a day.", change = true },
+    { "Simpler: the Leveling tab, the training advice and dungeon runs are gone. The riding fund stays.", change = true },
   },
 }
 
