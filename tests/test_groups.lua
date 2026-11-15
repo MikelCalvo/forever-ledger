@@ -8,7 +8,7 @@ local S = T.S
 -- read November 15: Linen Cloth 7/5, Coarse Thread 7/5, Peacebloom 7/9, Tigerseye 7/11,
 -- Pattern: Red Woolen Bag 9/2, Fishing Pole 2/20, Ornate Bronze Lockbox 15/0).
 local CLOTH, THREAD, HERB, OTHERMAT, POTION, RECIPE, PET, UNKNOWN, BAG, GRAY, CRATEMAT =
-  94001, 94002, 94003, 94004, 94005, 94006, 94007, 94008, 94009, 94010, 94011
+  97601, 97602, 97603, 97604, 97605, 97606, 97607, 97608, 97609, 97610, 97611
 local GEM, POLE, LOCKBOX = 818, 6256, 4632
 local types = {
   [CLOTH] = { 7, 5 }, [THREAD] = { 7, 5 }, [HERB] = { 7, 9 }, [OTHERMAT] = { 7, 11 }, [GEM] = { 7, 11 },
@@ -117,7 +117,7 @@ T.test("Groups: taking an item out of a built-in group, putting it back, restori
 end)
 
 T.test("Groups: items in crate bundles are in Crates and writs", function()
-  ns.db.crates[95000] = { name = "Test Crate", bundles = { { { 20, "Test Crate Leather" } } } }
+  ns.db.crates[97690] = { name = "Test Crate", bundles = { { { 20, "Test Crate Leather" } } } }
   T.ok(has(ns:ItemGroups(CRATEMAT), "crates"))
   T.ok(not has(ns:ItemGroups(CLOTH), "crates"))
 end)
