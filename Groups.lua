@@ -102,6 +102,23 @@ local BUILTIN = {
 }
 -- Fishing poles are weapons in the game's data (2/20): the hand list puts them in Fishing.
 
+-- Gear by level too (REDESIGN_PLAN.md: bind-on-equip gear by kind and level band; owner,
+-- AN19, November 15): under each kind of gear, one group per band of required level.
+-- An item the game hasn't described yet (no required level) stays in its kind's group.
+local BANDS = { { 1, 15 }, { 16, 25 }, { 26, 35 }, { 36, 45 }, { 46, 55 }, { 56, 60 } }
+do
+  local withBands = {}
+  for _, g in ipairs(BUILTIN) do
+    withBands[#withBands + 1] = g
+    if g.parent == "gear" then
+      for _, b in ipairs(BANDS) do
+        withBands[#withBands + 1] = { id = g.id .. ".l" .. b[1], parent = g.id, name = ("Level %d-%d"):format(b[1], b[2]) }
+      end
+    end
+  end
+  BUILTIN = withBands
+end
+
 local byId, children, listed, order = {}, {}, {}, {}
 for i, g in ipairs(BUILTIN) do
   g.kind, g.order = "builtin", i
@@ -163,6 +180,18 @@ local function isTurnIn(id)
   return needs ~= nil and #needs > 0
 end
 
+-- A gear kind's level band for the item, by its required level (the kind if unknown).
+local function bandOf(gid, id)
+  if not ns.GetItemInfo then return gid end
+  -- (Its own line: the fifth value is the required level.)
+  local name, _, _, _, req = ns.GetItemInfo(id)
+  if not (name and type(req) == "number") then return gid end
+  for i = #BANDS, 1, -1 do
+    if req >= BANDS[i][1] then return gid .. ".l" .. BANDS[i][1] end
+  end
+  return gid .. ".l1"
+end
+
 -- The deepest built-in group an item falls in by itself (before the player's changes).
 local function naturalGroup(id)
   if listed[id] then return listed[id] end
@@ -170,7 +199,10 @@ local function naturalGroup(id)
   if c then
     for _, gid in ipairs(order) do
       for _, m in ipairs(byId[gid].match or {}) do
-        if m[1] == c and (m[2] == nil or m[2] == s) then return gid end
+        if m[1] == c and (m[2] == nil or m[2] == s) then
+          if byId[gid].parent == "gear" then return bandOf(gid, id) end
+          return gid
+        end
       end
     end
   end

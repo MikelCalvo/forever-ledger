@@ -249,3 +249,18 @@ T.test("Groups: an item added to a sub-group leaves it when taken out of the gro
   ns:RemoveFromGroup("con.potion", HERB)
   T.ok(not ns:GroupHas("con", HERB))
 end)
+
+T.test("Groups: gear sorts into level bands by required level", function()
+  local ROBE, SWORD, UNSEEN = 97620, 97621, 97622
+  types[ROBE], types[SWORD], types[UNSEEN] = { 4, 1 }, { 2, 7 }, { 4, 2 }
+  S.items[ROBE] = { name = "Test Robe", quality = 2, minLevel = 22 }
+  S.items[SWORD] = { name = "Test Sword", quality = 2, minLevel = 60 }
+  T.eq(ns.NaturalGroup(ROBE), "gear.cloth.l16")
+  T.eq(ns.NaturalGroup(SWORD), "gear.weapon.l56")
+  T.eq(ns.NaturalGroup(UNSEEN), "gear.leather", "not described by the game yet: its kind")
+  T.ok(ns:GroupHas("gear.cloth", ROBE), "Cloth armor holds its bands' items")
+  T.ok(ns:GroupHas("gear", ROBE))
+  T.ok(not ns:GroupHas("gear.cloth.l26", ROBE))
+  T.eq(ns:GroupInfo("gear.cloth.l16").name, "Level 16-25")
+  T.eq(ns:GroupInfo("gear.cloth.l16").parent, "gear.cloth")
+end)
