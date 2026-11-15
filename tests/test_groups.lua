@@ -231,3 +231,21 @@ T.test("Groups: a captured recipe replaces ForeverCrafts' row in profession grou
   ns.FOREVER_CRAFTS = saved
   ns.recipeBookStamp = ns.recipeBookStamp + 1
 end)
+
+T.test("Groups: an item added to a sub-group leaves it when taken out of the group above", function()
+  ns:AddToGroup("con.potion", HERB)
+  T.ok(ns:GroupHas("con", HERB))
+  ns:SetGroupRule("con", "post", "off")
+  T.eq(select(2, ns:RuleFor(HERB, "post")), "Off (Consumables)")
+  T.ok(ns:RemoveFromGroup("con", HERB))
+  T.ok(not ns:GroupHas("con", HERB))
+  T.ok(not ns:GroupHas("con.potion", HERB))
+  T.same(ns:GroupFilter({ "con" }, { HERB }), {})
+  T.eq(select(2, ns:RuleFor(HERB, "post")), "Default")
+  T.ok(ns:GroupHas("mat.herb", HERB), "still in its own group")
+  T.ok(ns:AddToGroup("con", HERB))
+  T.ok(ns:GroupHas("con.potion", HERB), "back in the group it was added to")
+  ns:SetGroupRule("con", "post", "parent")
+  ns:RemoveFromGroup("con.potion", HERB)
+  T.ok(not ns:GroupHas("con", HERB))
+end)

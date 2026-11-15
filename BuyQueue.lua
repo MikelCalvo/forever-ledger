@@ -3491,6 +3491,16 @@ local function showTab(tab)
   for _, b in ipairs(side.tabs) do
     b:SetShown(not side.inside or (tab ~= "auctions" and b.key ~= "auctions"))
   end
+  -- Inside the window, the row starts right of its portrait (owner's screenshot AH9,
+  -- November 15: it covered "Buy queue").
+  local x = side.inside and 62 or 4
+  for _, b in ipairs(side.tabs) do
+    if b:IsShown() then
+      b:ClearAllPoints()
+      b:SetPoint("LEFT", x, 0)
+      x = x + b:GetWidth()
+    end
+  end
   queueView:SetShown(tab == "queue")
   listsView:SetShown(tab == "lists")
   local finder = ns:DisenchantFinderFrame(side)
@@ -3868,6 +3878,11 @@ updateBadges = function()
   end
   for _, b in ipairs(queueView and queueView.viewChoice and queueView.viewChoice.buttons or {}) do
     if b.value == "flips" then set(b, view() ~= "flips") end
+  end
+  -- Our Buy tab in the auction house window (AHTabs.lua) says how many new flips wait
+  -- while you're on another tab (owner's test AH11, November 15).
+  if ns.MarkAHTab and ns.AHTabsOn and ns:AHTabsOn() then
+    ns:MarkAHTab(ns:AHTabShown() ~= "buy" and n or nil)
   end
 end
 function ns:FlipsAnnounced(list)

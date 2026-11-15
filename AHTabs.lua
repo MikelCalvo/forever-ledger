@@ -26,6 +26,8 @@ local host            -- our content area inside the auction house window
 local buttons = {}    -- key = the tab button
 local lib             -- LibAHTab when another addon brought it
 local made, failed
+local chosen          -- the tab picked last, kept while the window hides (Codex review, November 15)
+local closingWith     -- what was chosen as the window closed
 
 function ns:AHTabsOn()
   return ns.db and ns.db.settings.ahTabs ~= false and not failed and AuctionHouseFrame ~= nil
@@ -35,6 +37,9 @@ end
 function ns:AHTabShown()
   return host and host:IsShown() and host.key or nil
 end
+
+-- The tab you picked, even while the window is hidden; nil after picking a Blizzard tab.
+function ns:AHTabChosen() return chosen end
 
 local function deselectOurs()
   for _, b in pairs(buttons) do
@@ -53,7 +58,7 @@ local function selectTab(key)
   for _, t in ipairs(TABS) do
     if t.key == key and ah.SetTitle then ah:SetTitle(t.title) end
   end
-  host.key = key
+  host.key, chosen = key, key
   if host:IsShown() then host:GetScript("OnShow")(host) else host:Show() end
 end
 
@@ -81,6 +86,7 @@ local function makeOwn()
   hooksecurefunc(ah, "SetDisplayMode", function(_, mode)
     if mode ~= nil and #mode > 0 then
       deselectOurs()
+      chosen = nil
       host:Hide()
     end
   end)
@@ -93,10 +99,13 @@ local function makeShared()
     holder:SetAllPoints(host)
     holder:Hide()
     holder:SetScript("OnShow", function()
-      host.key = t.key
+      host.key, chosen = t.key, t.key
       if host:IsShown() then host:GetScript("OnShow")(host) else host:Show() end
     end)
     holder:SetScript("OnHide", function()
+      -- Another tab picked while the window stays open: no longer chosen. The window
+      -- itself hiding (closing the auction house) keeps the choice for next visit.
+      if chosen == t.key and AuctionHouseFrame:IsVisible() then chosen = nil end
       if host.key == t.key then host:Hide() end
     end)
     local id = "ForeverLedger_" .. t.key
@@ -124,6 +133,8 @@ local function make()
     ns:MarkAHTab(nil)
   end)
   host:SetScript("OnHide", function()
+    -- The window closing hides us too: remember what was chosen before anything resets it.
+    if not AuctionHouseFrame:IsVisible() then closingWith = chosen end
     if ns.HideSidePanelInside then ns:HideSidePanelInside() end
     if ns.UpdateAHScanButtons then ns:UpdateAHScanButtons() end
   end)
@@ -178,7 +189,8 @@ end)
 -- SetUpSidePanel). The window is already hidden, but our tab still counts as chosen.
 ns:On("AUCTION_HOUSE_CLOSED", function()
   if not host then return end
-  if ns:AHTabsOn() then ns.db.settings.buyQueue.ahTab = ns:AHTabShown() end
+  if ns:AHTabsOn() then ns.db.settings.buyQueue.ahTab = closingWith or chosen end
+  closingWith = nil
   host:Hide()
 end)
 

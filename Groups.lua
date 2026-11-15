@@ -185,18 +185,21 @@ local function builtinGroups(id)
   local g = store()
   local out, seen = {}, {}
   local function add(gid) if gid and not seen[gid] then seen[gid] = true; out[#out + 1] = gid end end
-  for gid, items in pairs(g.added) do if items[id] then add(gid) end end
   -- Taken out of its group or any group above it (Codex review, November 15: out of
   -- Materials must mean out of Cloth too): it sits just above the highest one it was
-  -- taken out of, or in no built-in group if that's a top-level one.
-  local gid = naturalGroup(id)
-  local cut, cur = nil, gid
-  while cur do
-    if g.removed[cur] and g.removed[cur][id] then cut = cur end
-    cur = byId[cur].parent
+  -- taken out of, or in no built-in group if that's a top-level one. The same for the
+  -- groups it was added to and for its natural one.
+  local function placed(gid)
+    local cut, cur = nil, gid
+    while cur do
+      if g.removed[cur] and g.removed[cur][id] then cut = cur end
+      cur = byId[cur] and byId[cur].parent
+    end
+    if cut then return byId[cut].parent end
+    return gid
   end
-  if cut then gid = byId[cut].parent end
-  add(gid)
+  for gid, items in pairs(g.added) do if items[id] then add(placed(gid)) end end
+  add(placed(naturalGroup(id)))
   if not (g.removed.crates and g.removed.crates[id]) and inCrates(id) then add("crates") end
   if not (g.removed.turnins and g.removed.turnins[id]) and isTurnIn(id) then add("turnins") end
   table.sort(out, function(a, b)
