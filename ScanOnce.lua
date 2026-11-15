@@ -287,7 +287,9 @@ local function drawTree()
 end
 
 -- Result columns from the right edge (the numbers never get cut off; the name does).
-local COL = { listed = -4, pct = -60, usual = -110, cheap = -186, why = -300, whyW = 46 }
+-- Room for the widest prices (189g 98s 50c) and the % of usual header (Frank's AH14
+-- screenshot, November 15: Cheapest ran into Usual, Usual into % of usual).
+local COL = { listed = -4, pct = -58, usual = -116, cheap = -208, why = -330, whyW = 46 }
 
 local function resultRow(i)
   local r = frame.list.rows[i]

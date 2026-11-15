@@ -39,7 +39,7 @@ function ns.PostPrice(rule, usual, cheapest, vendorFloor)
   if cheapest and cheapest > 0 then
     price = cheapest - (rule.undercut or 0)
     out.why = (rule.undercut or 0) > 0 and ("%s under the cheapest (%s)"):format(ns.MoneyPlain(rule.undercut), ns.MoneyPlain(cheapest))
-      or ("the cheapest (%s)"):format(ns.MoneyPlain(cheapest))
+      or ("the same as the cheapest (%s)"):format(ns.MoneyPlain(cheapest))
   elseif usual and usual > 0 and rule.start ~= "cheapest" then
     price = usual
     out.why = "the usual price (none listed now)"
@@ -109,7 +109,14 @@ local cur = 1        -- the highlighted one
 local skipped = {}   -- [key] = true: middle-clicked, for this visit
 local posted = {}    -- [key] = true: posted this visit
 local edits = {}     -- [key] = { price, qty, hours } typed in this visit
-local live = {}      -- [key] = the listings now: { t, rows, total, cheapest } or { t, failed = true }
+local live = {}      -- [key] = the listings now: { market, t, rows, total, cheapest } or { market, t, failed = true }
+local visit = 0      -- counts auction house visits: a lookup from an earlier one is dropped
+-- The listings looked up at this auction house (Codex, November 15: a lookup at Booty Bay
+-- must never price a post at the faction auction house). Cleared each visit too.
+local function liveFor(k)
+  local l = live[k]
+  if l and l.market == ns.MarketKey() then return l end
+end
 local frame
 local scrollPost = false
 local pending        -- a post waiting for the game's confirmation: { fn, args, key, price, qty, hours, bag, slot }
@@ -189,7 +196,7 @@ local function price(e)
   e.usual = usualOf(e.id)
   e.cheapest, e.rec = cheapestOf(e.id, e.gear and e.link)
   -- The listings now, once looked up (below): the cheapest that isn't yours.
-  local l = live[keyOf(e)]
+  local l = liveFor(keyOf(e))
   e.live = l and not l.failed and l or nil
   if e.live then e.cheapest = e.live.cheapest end
   local p = ns.PostPrice(rule, e.usual, e.cheapest, ns:PostVendorFloor(e.id))
@@ -299,6 +306,8 @@ end
 local function readLive(final)
   local a = asking
   if not a then return end
+  -- A reply from an earlier visit or another auction house is not this one's listings.
+  if a.visit ~= visit or a.market ~= ns.MarketKey() then asking = nil; return end
   local rows, total, n, complete = {}, 0, 0, false
   if a.commodity then
     n = AH.GetNumCommoditySearchResults(a.id) or 0
@@ -329,14 +338,14 @@ local function readLive(final)
   end
   if n == 0 and not complete and not final then return end   -- still coming
   if n == 0 and not complete then
-    live[a.key] = { t = time(), failed = true }
+    live[a.key] = { market = ns.MarketKey(), t = time(), failed = true }
   else
     table.sort(rows, function(x, y) return x.price < y.price end)
     local cheapest
     for _, r in ipairs(rows) do
       if not r.allMine and not r.refused then cheapest = r.price; break end
     end
-    live[a.key] = { t = time(), rows = rows, total = total, cheapest = cheapest }
+    live[a.key] = { market = ns.MarketKey(), t = time(), rows = rows, total = total, cheapest = cheapest }
   end
   if final or complete then asking = nil end
   for _, e in ipairs(entries) do
@@ -349,17 +358,19 @@ end
 local function lookUp(e, force)
   if not (e and AH and AH.SendSearchQuery and AH.MakeItemKey) then return end
   local k = keyOf(e)
-  local l = live[k]
+  local l = liveFor(k)
   if not force and l and time() - l.t < LIVE_FRESH then return end
   if asking and asking.key == k and GetTime() - asking.at < 5 then return end
   if AH.IsThrottledMessageSystemReady and not AH.IsThrottledMessageSystemReady() then
     -- Busy (Live watch searches too): try again shortly, while it's still the one shown.
     if waitingFor == k then return end   -- a retry is already on its way
     e.lookTries = (e.lookTries or 0) + 1
-    if e.lookTries > 20 then live[k] = { t = time(), failed = true }; e.lookTries = 0; if refresh then refresh() end; return end
+    if e.lookTries > 20 then live[k] = { market = ns.MarketKey(), t = time(), failed = true }; e.lookTries = 0; if refresh then refresh() end; return end
+    local v = visit
     waitingFor = k
     C_Timer.After(0.5, function()
       waitingFor = nil
+      if v ~= visit then return end
       local now = entries[cur]
       if now and keyOf(now) == k then lookUp(now, force) end
     end)
@@ -376,7 +387,8 @@ local function lookUp(e, force)
   local commodity = loc and AH.GetItemCommodityStatus and AH.GetItemCommodityStatus(loc) == 2 or false
   askTok = askTok + 1
   local tok = askTok
-  asking = { key = k, id = e.id, itemKey = itemKey, commodity = commodity, at = GetTime(), tok = tok }
+  asking = { key = k, id = e.id, itemKey = itemKey, commodity = commodity, at = GetTime(), tok = tok,
+    visit = visit, market = ns.MarketKey() }
   -- A moment's room from Live watch's own searches, as the Buy queue gets (Prices.lua).
   ns.queueBusyUntil = math.max(ns.queueBusyUntil or 0, GetTime() + 1.5)
   ns.postSending = true
@@ -384,7 +396,7 @@ local function lookUp(e, force)
   ns.postSending = false
   if not ok then
     asking = nil
-    live[k] = { t = time(), failed = true }
+    live[k] = { market = ns.MarketKey(), t = time(), failed = true }
   else
     -- Items with nothing listed may never get a reply.
     C_Timer.After(4, function() if asking and asking.tok == tok then readLive(true) end end)
@@ -457,7 +469,7 @@ local function postCurrent()
   if skipped[k] or posted[k] then cur = nextUsable(cur, 1); refresh(); return end
   -- Never on an old price: the listings are looked up first (a lookup that got no answer
   -- lets the last scan's price through, said on screen).
-  local l = live[k]
+  local l = liveFor(k)
   if not l or time() - l.t > 5 * LIVE_FRESH then
     lookUp(e, true)
     say("Checking the listings first: click again in a moment.")
@@ -622,7 +634,7 @@ end
 -- line where yours would go.
 local LT_ROW = 18
 local function listingRows(e)
-  local l = live[keyOf(e)]
+  local l = liveFor(keyOf(e))
   if l and not l.failed then return l.rows, true end
   local rows, ladder = {}, e.rec and e.rec.l
   if ladder then
@@ -639,7 +651,7 @@ end
 local function drawListings(e)
   local lt = frame.item.lt
   local k = keyOf(e)
-  local l = live[k]
+  local l = liveFor(k)
   local looking = asking and asking.key == k
   local rows, now = listingRows(e)
   if now then
@@ -712,7 +724,7 @@ local function drawItem()
   f.total:SetText(e.price and ns.Money(e.price * (e.qty or 0)) or "-")
   f.get:SetText(get and ns.Money(get) or "-")
   local k = keyOf(e)
-  local l = live[k]
+  local l = liveFor(k)
   local why = e.why or ""
   if e.price and e.suggested and e.price ~= e.suggested then why = "your price (suggested " .. ns.MoneyPlain(e.suggested) .. ")"
   elseif not e.live and e.cheapest then why = why .. ", at the last scan" end
@@ -964,11 +976,11 @@ local function build(host)
     hl:SetAllPoints()
     hl:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.12)
     r.price, r.qty, r.seller = cells(r, 11)
-    -- Click a listing to price yours under it, as on Blizzard's Sell page.
+    -- Click a listing to price yours at it (or under it, if the rule undercuts).
     r:SetScript("OnClick", function(self)
       local e, d = entries[cur], self.data
       if not (e and d and not d.yours) then return end
-      local under = (e.rule and e.rule.undercut) or 1
+      local under = (e.rule and e.rule.undercut) or 0
       local p = (d.allMine or sellerText(d) == "You") and d.price or math.max(1, d.price - under)
       local k = keyOf(e)
       edits[k] = edits[k] or {}
@@ -980,7 +992,10 @@ local function build(host)
     r:SetScript("OnEnter", function(self)
       if not (self.data and not self.data.yours) then return end
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:AddLine("Click to price yours just under this one.", 1, 1, 1, true)
+      local e = entries[cur]
+      local under = (e and e.rule and e.rule.undercut) or 0
+      GameTooltip:AddLine(under > 0 and ("Click to price yours %s under this one."):format(ns.MoneyPlain(under))
+        or "Click to price yours the same as this one.", 1, 1, 1, true)
       GameTooltip:Show()
     end)
     r:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1023,12 +1038,20 @@ ns:On("BAG_UPDATE_DELAYED", function()
   if frame and frame:IsVisible() then ns:RefreshPost() end
 end)
 
--- Each visit starts afresh: nothing skipped or posted, Scroll to post off.
+-- Each visit starts afresh: nothing skipped or posted, Scroll to post off, no listings
+-- from before (another auction house may have other prices) and no lookup still waiting.
+local function newVisit()
+  visit = visit + 1
+  for k in pairs(live) do live[k] = nil end
+  asking, waitingFor = nil, nil
+end
 ns:On("AUCTION_HOUSE_SHOW", function()
+  newVisit()
   skipped, posted, edits, pending, cur = {}, {}, {}, nil, 1
   scrollPost = false
 end)
 ns:On("AUCTION_HOUSE_CLOSED", function()
+  newVisit()
   pending = nil
   scrollPost = false
 end)

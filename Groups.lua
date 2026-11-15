@@ -41,7 +41,9 @@ ns.RULE_KINDS = { "post", "buy", "vendor", "craft" }
 -- Forever Ledger's defaults (REDESIGN_PLAN.md: Frank agreed the posting rule November 15).
 -- Prices are percents of the usual price; undercut and profits are copper.
 ns.RULE_DEFAULTS = {
-  post = { start = "usual", undercut = 1, floorPct = 70, belowFloor = "skip", keep = 0, hours = 24 },
+  -- Post matches the cheapest (Frank, November 15: listings at one price sell in the order
+  -- they went up, so 1c under only starts a race down); a rule can still undercut.
+  post = { start = "usual", undercut = 0, floorPct = 70, belowFloor = "skip", keep = 0, hours = 24 },
   buy = { underPct = 80, breakEvenProfit = nil, maxQty = 200 },
   vendor = { protectRecipes = true, under = "vendor" },
   craft = { stock = 0, minProfit = 50 },

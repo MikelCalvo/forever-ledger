@@ -1,5 +1,5 @@
 -- Post.lua: the price the Post tab fills in from an item's post rule (redesign build
--- step 4, November 15; Frank agreed the default rule: the usual price, undercut by 1c,
+-- step 4, November 15; Frank agreed the default rule: the usual price, the cheapest matched (undercut 1c until his November 15 test),
 -- never below 70% of the usual price or a vendor's price after the cut).
 local T = ...
 local ns = T.ns
@@ -56,4 +56,9 @@ T.test("Post: the vendor floor is the least price that still beats a vendor afte
   T.ok(ns:AfterCut(floor - 1) < 100, "one less would lose to the vendor")
   S.items[97702] = { name = "Test Thing", sell = 0 }
   T.eq(ns:PostVendorFloor(97702), nil, "no vendor price: no vendor floor")
+end)
+
+T.test("Post price: the default rule matches the cheapest (Frank, November 15)", function()
+  local p = ns.PostPrice(ns.RULE_DEFAULTS.post, 125, 119, nil)
+  T.eq(p.price, 119); T.ok(p.why:find("same as the cheapest"), p.why)
 end)
