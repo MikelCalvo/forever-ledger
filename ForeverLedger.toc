@@ -53,5 +53,6 @@ AHTabs.lua
 ScanOnce.lua
 Post.lua
 GroupsTab.lua
+CraftPlan.lua
 PriceWindow.lua
 Probe.lua
