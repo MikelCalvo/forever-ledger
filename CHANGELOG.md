@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Buy queue rows: a star to watch the item or stop watching it, and a short reason (FLIP, WATCH, or the shopping list's name). The numbers keep their places on the right, so a long name is shortened instead of pushing Profit off.
 - **Scan once**, a new view on the Buy tab for looking things over: one reading of the whole auction house, then everything in the groups you tick (a group tree on the left, ticked groups add together) with its cheapest price, usual price, % of usual and how many are listed, best deals first, and a name search. The list stays as scanned until you scan again.
 - **Post** tab in the auction house window: your bags grouped, a price ready for each from its post rule (1c under the cheapest, never below 70% of the usual price or what a vendor pays after the cut), how many and how long, the deposit and what you get; Post, Skip and Previous, middle-click to skip, and Scroll to post (each wheel tick posts the next one).
+- My auctions: **Scroll to cancel** (each wheel tick cancels the next undercut auction), **Also cancel ones I could ask more for** (the cheapest but at least 10% under the usual price, marked "could ask more"), and middle-click to skip an auction this visit.
 
 ### Changed
 - The flip watch is now called **Live watch** (it looks for watched items and deals too, not just vendor flips).
