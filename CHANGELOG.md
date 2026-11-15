@@ -5,9 +5,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-### Added
-- Price-value groundwork for the planned Buy and Post views: fresh cheapest and listed counts, a recent-weighted 14-day usual price with extreme observations removed, 3-day recent and 60-day long-term prices, and estimated units sold a day. Separate markets use their own history. Existing prices and shopping limits are unchanged until the new views use these values.
-
 ## [0.26.0] - 2026-11-15
 
 ### Highlights
