@@ -96,6 +96,11 @@ end
 -- scans, so a 13-minute-old one brought the same flip back every two minutes (owner,
 -- November 9).
 local checkedFlips = {}
+-- The flips our Buy tab counts (AHTabs.lua), so its number follows what's really there
+-- while you're on another tab: the Vendor flips list as last shown plus flips found
+-- since, each checked again against the latest prices (owner, November 15: it only went
+-- up while the list itself had dropped to nothing).
+local badgeIds = {}
 
 -- Each kind of thing to buy is its own section ("lane") in the queue: vendor flips and
 -- shopping lists (owner, October 2: so someone working on a shopping list can't buy a
@@ -2209,6 +2214,12 @@ refreshQueue = function()
       profit and (", profit %s"):format(profit >= 0 and ("|cff7fd39c" .. money(profit) .. "|r") or ("|cffee8597-" .. money(-profit) .. "|r")) or "")
     or ("%d to buy"):format(total))
   Q.toBuy = total
+  if view() == "flips" then
+    badgeIds = {}
+    for _, x in ipairs(Q.lanes and Q.lanes.flips or {}) do
+      if not x.waiting and not cantAfford(x) then badgeIds[x.id] = true end
+    end
+  end
   updateBadges()   -- (the Buy tab in the auction house window shows it too)
   -- What's left of this visit's limit, or the gold you keep when there's no limit.
   local left, keep = visitLeft(), ns.db.settings.keepGold or 0
@@ -3768,6 +3779,7 @@ ns:On("AUCTION_HOUSE_SHOW", function()
   -- brought bought-out items straight back on reopening. Owner, October 3.)
   Q.bought, Q.spent, Q.worth, Q.note, Q.built = 0, 0, 0, nil, 0
   Q.toBuy = nil
+  badgeIds = {}
   Q.vendorValue, Q.vendorCost = nil, nil
 end)
 ns:On("AUCTION_HOUSE_CLOSED", function()
@@ -3882,11 +3894,18 @@ updateBadges = function()
   for _, b in ipairs(queueView and queueView.viewChoice and queueView.viewChoice.buttons or {}) do
     if b.value == "flips" then set(b, view() ~= "flips") end
   end
-  -- Our Buy tab in the auction house window (AHTabs.lua) says how many wait to be bought:
-  -- the queue's "to buy" when it was last shown, plus new flips since. It stays while
-  -- you're on the tab (owner's tests AH11, November 15).
+  -- Our Buy tab in the auction house window (AHTabs.lua): how many vendor flips (and
+  -- watched items) are there to buy, counted again from the latest prices; it stays
+  -- while you're on the tab (owner's tests AH11, November 15).
   if ns.MarkAHTab and ns.AHTabsOn and ns:AHTabsOn() then
-    ns:MarkAHTab((Q.toBuy or 0) + n)
+    local count, now, clock = 0, time(), GetTime()
+    for id in pairs(badgeIds) do
+      local f = not skipped[id] and not (done[id] and clock - done[id] < DONE_FOR) and ns:FlipOrWatched(id)
+      if f and checkedFlips[id] and (f.t or 0) <= checkedFlips[id] then f = nil end
+      if f and f.t and now - f.t > DROP_SECONDS then f = nil end
+      if f then count = count + 1 else badgeIds[id] = nil end
+    end
+    ns:MarkAHTab(count)
   end
 end
 function ns:FlipsAnnounced(list)
@@ -3908,6 +3927,7 @@ function ns:FlipsAnnounced(list)
     onView, st, tostring(cur and cur.id),
     Q.listTouched and ("%d s ago"):format(math.floor(GetTime() - Q.listTouched)) or "never"))
   if not (shown() and view() == "flips") then Q.unseenFlips = (Q.unseenFlips or 0) + #list end
+  for _, f in ipairs(list) do if f.id then badgeIds[f.id] = true end end
   Q.built = 0
   if shown() and view() == "flips" and not switched then rebuildNow() end
   updateBadges()
@@ -3916,4 +3936,9 @@ end
 -- After any scan, new finds join the queue.
 ns:OnReady(function()
   hooksecurefunc(ns, "CheckDeals", rebuildNow)
+  -- Flips bought or gone while you're on another tab come off the Buy tab's count: the
+  -- list readings change saved prices without a signal, so it's counted again every 10 s.
+  C_Timer.NewTicker(10, function()
+    if next(badgeIds) and ns:IsAHOpen() and ns.AHTabsOn and ns:AHTabsOn() then updateBadges() end
+  end)
 end)
