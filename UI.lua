@@ -1135,12 +1135,12 @@ end
 -- the job, so the ones under the auction house window are hidden (owner, October 3).
 function ns:UpdateAHScanButtons()
   local docked = ns.SidePanelDocked and ns:SidePanelDocked()
-  for _, b in ipairs({ ns.ahButton or false, ns.ahFullButton or false, ns.ahWatchButton or false }) do
-    if b then b:SetShown(not docked) end
-  end
-  -- With our tabs in the auction house window (AHTabs.lua) the Buy tab replaces the Buy
-  -- queue button, and the other buttons go one row lower, clear of the longer tab row.
+  -- With our tabs in the auction house window (AHTabs.lua) the Buy tab has these buttons
+  -- and replaces the Buy queue button: none under the window (owner, November 15).
   local tabs = ns.AHTabsOn and ns:AHTabsOn()
+  for _, b in ipairs({ ns.ahButton or false, ns.ahFullButton or false, ns.ahWatchButton or false }) do
+    if b then b:SetShown(not docked and not tabs) end
+  end
   local ah = AuctionHouseFrame
   if ns.ahButton and ah then
     ns.ahButton:ClearAllPoints()

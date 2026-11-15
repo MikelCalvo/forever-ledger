@@ -2208,6 +2208,8 @@ refreshQueue = function()
   v.totals:SetText(Q.bought > 0 and ("Bought %d for %s%s"):format(Q.bought, money(Q.spent),
       profit and (", profit %s"):format(profit >= 0 and ("|cff7fd39c" .. money(profit) .. "|r") or ("|cffee8597-" .. money(-profit) .. "|r")) or "")
     or ("%d to buy"):format(total))
+  Q.toBuy = total
+  updateBadges()   -- (the Buy tab in the auction house window shows it too)
   -- What's left of this visit's limit, or the gold you keep when there's no limit.
   local left, keep = visitLeft(), ns.db.settings.keepGold or 0
   if left then
@@ -3765,6 +3767,7 @@ ns:On("AUCTION_HOUSE_SHOW", function()
   -- (What was just finished stays set aside for its two minutes: clearing it here
   -- brought bought-out items straight back on reopening. Owner, October 3.)
   Q.bought, Q.spent, Q.worth, Q.note, Q.built = 0, 0, 0, nil, 0
+  Q.toBuy = nil
   Q.vendorValue, Q.vendorCost = nil, nil
 end)
 ns:On("AUCTION_HOUSE_CLOSED", function()
@@ -3879,10 +3882,11 @@ updateBadges = function()
   for _, b in ipairs(queueView and queueView.viewChoice and queueView.viewChoice.buttons or {}) do
     if b.value == "flips" then set(b, view() ~= "flips") end
   end
-  -- Our Buy tab in the auction house window (AHTabs.lua) says how many new flips wait
-  -- while you're on another tab (owner's test AH11, November 15).
+  -- Our Buy tab in the auction house window (AHTabs.lua) says how many wait to be bought:
+  -- the queue's "to buy" when it was last shown, plus new flips since. It stays while
+  -- you're on the tab (owner's tests AH11, November 15).
   if ns.MarkAHTab and ns.AHTabsOn and ns:AHTabsOn() then
-    ns:MarkAHTab(ns:AHTabShown() ~= "buy" and n or nil)
+    ns:MarkAHTab((Q.toBuy or 0) + n)
   end
 end
 function ns:FlipsAnnounced(list)

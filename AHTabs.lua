@@ -28,6 +28,8 @@ local lib             -- LibAHTab when another addon brought it
 local made, failed
 local chosen          -- the tab picked last, kept while the window hides (Codex review, November 15)
 local closingWith     -- what was chosen as the window closed
+local lastBlizz = 1   -- Blizzard's tab picked last this visit (1 Buy, 2 Sell, 3 Auctions)
+local hookedBlizz
 
 function ns:AHTabsOn()
   return ns.db and ns.db.settings.ahTabs ~= false and not failed and AuctionHouseFrame ~= nil
@@ -66,8 +68,13 @@ local function makeOwn()
   local ah = AuctionHouseFrame
   local last = ah.Tabs and ah.Tabs[#ah.Tabs]
   if not last then error("no auction house tabs") end
-  -- Classic-style clients overlap their tabs a little (the template's art).
-  local overlap = (WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and WOW_PROJECT_ID == WOW_PROJECT_MAINLINE) and 3 or -14
+  -- The same gap as between Blizzard's own tabs (owner's screenshot, November 15: a
+  -- guessed overlap made a hovered tab run into the next).
+  local overlap = 3
+  local t1, t2 = ah.Tabs[1], ah.Tabs[2]
+  if t1 and t2 and t1:GetRight() and t2:GetLeft() then
+    overlap = math.floor(t2:GetLeft() - t1:GetRight() + 0.5)
+  end
   local root = CreateFrame("Frame", nil, ah)
   root:SetSize(10, 10)
   root:SetPoint("TOPLEFT", last, "TOPRIGHT", 0, 0)
@@ -130,7 +137,6 @@ local function make()
   host:SetScript("OnShow", function(self)
     if ns.ShowSidePanelInside then ns:ShowSidePanelInside(self, self.key == "auctions" and "auctions" or nil) end
     if ns.UpdateAHScanButtons then ns:UpdateAHScanButtons() end
-    ns:MarkAHTab(nil)
   end)
   host:SetScript("OnHide", function()
     -- The window closing hides us too: remember what was chosen before anything resets it.
@@ -148,6 +154,14 @@ local function make()
     return false
   end
   made = true
+  -- Blizzard's own tabs: note which one you pick, to open on it next visit too
+  -- (owner, November 15: "it doesn't remember to open on the Auctions and Sell tabs").
+  if not hookedBlizz then
+    hookedBlizz = true
+    for i, b in ipairs(AuctionHouseFrame.Tabs or {}) do
+      b:HookScript("OnClick", function() lastBlizz = i end)
+    end
+  end
   return true
 end
 
@@ -181,6 +195,10 @@ ns:On("AUCTION_HOUSE_SHOW", function()
     if not make() then return end
     for _, b in pairs(buttons) do b:Show() end
     ns:MarkAHTab(nil)
+    -- Blizzard's Sell or Auctions if that's where you left (ours: BuyQueue.lua SetUpSidePanel).
+    local q = ns.db.settings.buyQueue
+    local tab = not q.ahTab and q.ahBlizzTab and AuctionHouseFrame.Tabs and AuctionHouseFrame.Tabs[q.ahBlizzTab]
+    if tab and not chosen then tab:Click() end
     if ns.UpdateAHScanButtons then ns:UpdateAHScanButtons() end
   end)
 end)
@@ -189,8 +207,12 @@ end)
 -- SetUpSidePanel). The window is already hidden, but our tab still counts as chosen.
 ns:On("AUCTION_HOUSE_CLOSED", function()
   if not host then return end
-  if ns:AHTabsOn() then ns.db.settings.buyQueue.ahTab = closingWith or chosen end
-  closingWith = nil
+  if ns:AHTabsOn() then
+    local ours = closingWith or chosen
+    ns.db.settings.buyQueue.ahTab = ours
+    ns.db.settings.buyQueue.ahBlizzTab = (not ours and lastBlizz ~= 1) and lastBlizz or nil
+  end
+  closingWith, lastBlizz = nil, 1
   host:Hide()
 end)
 
