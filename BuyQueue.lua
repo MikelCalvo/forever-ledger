@@ -3485,6 +3485,12 @@ local TABS = { { "queue", "Buy queue" }, { "lists", "Shopping lists" }, { "finde
 local function showTab(tab)
   S().tab = tab
   for _, b in ipairs(side.tabs) do b:SetSelected(b.key == tab) end
+  -- Inside the auction house window (AHTabs.lua) its own My auctions tab shows your
+  -- auctions, so the panel's row keeps Buy queue, Shopping lists and Disenchant finder,
+  -- and none of them while My auctions is open.
+  for _, b in ipairs(side.tabs) do
+    b:SetShown(not side.inside or (tab ~= "auctions" and b.key ~= "auctions"))
+  end
   queueView:SetShown(tab == "queue")
   listsView:SetShown(tab == "lists")
   local finder = ns:DisenchantFinderFrame(side)
@@ -3508,9 +3514,30 @@ local function showTab(tab)
 end
 
 -- Beside the auction house, or on its own in the middle of the screen.
+local inSpecialFrames = true
+local function escapeCloses(on)
+  -- Escape closes the panel when it's on its own or beside the auction house; inside the
+  -- auction house window it's left to the window (it would have emptied our tab).
+  if on == inSpecialFrames then return end
+  inSpecialFrames = on
+  if on then
+    tinsert(UISpecialFrames, "ForeverLedgerSidePanel")
+  else
+    for i = #UISpecialFrames, 1, -1 do
+      if UISpecialFrames[i] == "ForeverLedgerSidePanel" then table.remove(UISpecialFrames, i) end
+    end
+  end
+end
+
 local function place()
   local ah = AuctionHouseFrame
   side:ClearAllPoints()
+  if side.inside then
+    side.inside = false
+    side:SetScale(((ns.db and ns.db.settings.uiScale) or 100) / 100)
+    for _, b in ipairs(side.tabs) do b:Show() end
+    escapeCloses(true)
+  end
   if ah and ah:IsShown() then
     side:SetParent(ah)
     side:SetFrameStrata(ah:GetFrameStrata())
@@ -3602,17 +3629,57 @@ local function ensureSide()
   return side
 end
 
--- The auction house opened: put the panel beside it if it was open last time.
+-- Our tabs inside the auction house window (AHTabs.lua): the panel fills the tab's area.
+-- tab: "auctions" for My auctions; nil for Buy (the panel's last tab other than that).
+function ns:ShowSidePanelInside(host, tab)
+  ensureSide()
+  side:ClearAllPoints()
+  side:SetParent(host)
+  side:SetAllPoints(host)
+  side:SetFrameStrata(host:GetFrameStrata())
+  side:SetScale(1)   -- the auction house window has its own size
+  side.floating, side.inside = false, true
+  side.close:Hide()
+  escapeCloses(false)
+  side:Show()
+  if tab ~= "auctions" then
+    tab = S().tab
+    if tab == "auctions" or not tab then tab = "queue" end
+  end
+  showTab(tab)
+end
+
+function ns:HideSidePanelInside()
+  if side and side.inside then side:Hide() end
+end
+
+-- The auction house opened: put the panel beside it if it was open last time. With our
+-- tabs inside the window, the tab that was open when you left opens again (AHTabs.lua).
 function ns:SetUpSidePanel()
   if not AuctionHouseFrame then return end
   ensureSide()
   -- Already open on its own (a list being made): keep it open, now beside the auction house.
   local keep = side.floating and side:IsShown()
+  if ns.AHTabsOn and ns:AHTabsOn() then
+    if not side.inside then side:Hide() end
+    local again = S().ahTab
+    if keep then again = "buy" end
+    if again then ns:SelectAHTab(again) end
+    return
+  end
   place()
   if S().shown or keep then side:Show(); showTab(S().tab or "queue") else side:Hide() end
 end
 
 function ns:ToggleSidePanel()
+  if ns.AHTabsOn and ns:AHTabsOn() and ns:IsAHOpen() then
+    if ns:AHTabShown() then
+      pcall(AuctionHouseFrame.SetDisplayMode, AuctionHouseFrame, AuctionHouseFrameDisplayMode.Buy)
+    else
+      ns:SelectAHTab("buy")
+    end
+    return
+  end
   ensureSide()
   place()
   S().shown = not side:IsShown()
@@ -3620,9 +3687,14 @@ function ns:ToggleSidePanel()
 end
 
 -- New flips from a full scan: open the panel on the Buy queue if it's closed. If it's
--- open, leave it alone, whatever tab you're on.
+-- open, leave it alone, whatever tab you're on. With our tabs inside the auction house
+-- window the view isn't changed under you: the Buy tab shows how many new flips.
 function ns:OpenBuyQueueGently()
   if not (ns:IsAHOpen() and AuctionHouseFrame) then return end
+  if ns.AHTabsOn and ns:AHTabsOn() then
+    if ns:AHTabShown() ~= "buy" then ns:MarkAHTab(Q.unseenFlips or 0) end
+    return
+  end
   ensureSide()
   if side:IsShown() then return end
   place()
@@ -3638,7 +3710,7 @@ end
 -- window forward only works within its own layer).
 local LAYERS = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
 local function matchProfessionLayer()
-  if not (side and side:IsShown() and not side.floating) then return end
+  if not (side and side:IsShown() and not side.floating and not side.inside) then return end
   local pf = (ProfessionsFrame and ProfessionsFrame:IsShown() and ProfessionsFrame)
     or (TradeSkillFrame and TradeSkillFrame:IsShown() and TradeSkillFrame)
   if not pf then return end
@@ -3663,6 +3735,13 @@ end)
 
 function ns:ShowSidePanel(tab)
   ensureSide()
+  -- At the auction house with our tabs: open the right one of them instead.
+  if ns.AHTabsOn and ns:AHTabsOn() and ns:IsAHOpen() then
+    if ns:SelectAHTab(tab == "auctions" and "auctions" or "buy") then
+      if tab and tab ~= "auctions" then showTab(tab) end
+      return
+    end
+  end
   place()
   if not side.floating then S().shown = true end
   side:Show()

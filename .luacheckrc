@@ -18,7 +18,9 @@ read_globals = {
   "TooltipDataProcessor", "UiMapPoint",
 
   -- Frames, UI enums, localized strings and constants supplied by Blizzard.
-  "AuctionFrame", "AuctionHouseFrame", "AuctionHouseFrameDisplayMode",
+  "AuctionFrame", "AuctionHouseFrame", "AuctionHouseFrameDisplayMode", "LibStub",
+  "PanelTemplates_DeselectTab", "PanelTemplates_SelectTab", "PanelTemplates_TabResize",
+  "WOW_PROJECT_ID", "WOW_PROJECT_MAINLINE",
   "GameTooltip", "ItemRefTooltip", "Minimap", "ProfessionsFrame", "RaidWarningFrame",
   "TradeFrameRecipientNameText", "TradeSkillFrame", "UIErrorsFrame", "UIParent",
   "ATTACHMENTS_MAX_RECEIVE", "BOOKTYPE_SPELL", "CLASS_ICON_TCOORDS", "CONTAINER_SLOTS",

@@ -83,7 +83,10 @@ ns.ThemedWindow = themedWindow
 
 function ns:ApplyScale()
   local s = ((ns.db and ns.db.settings.uiScale) or 100) / 100
-  for _, f in ipairs(ns.scaledWindows or {}) do f:SetScale(s) end
+  -- (Not the Buy queue panel while it's inside the auction house window: AHTabs.lua.)
+  for _, f in ipairs(ns.scaledWindows or {}) do
+    if not f.inside then f:SetScale(s) end
+  end
 end
 
 -- A thin horizontal line.
@@ -1135,9 +1138,23 @@ function ns:UpdateAHScanButtons()
   for _, b in ipairs({ ns.ahButton or false, ns.ahFullButton or false, ns.ahWatchButton or false }) do
     if b then b:SetShown(not docked) end
   end
+  -- With our tabs in the auction house window (AHTabs.lua) the Buy tab replaces the Buy
+  -- queue button, and the other buttons go one row lower, clear of the longer tab row.
+  local tabs = ns.AHTabsOn and ns:AHTabsOn()
+  local ah = AuctionHouseFrame
+  if ns.ahButton and ah then
+    ns.ahButton:ClearAllPoints()
+    ns.ahButton:SetPoint("TOPRIGHT", ah, "BOTTOMRIGHT", -4, (tabs or ns.ahAuctionator) and -34 or -2)
+  end
+  if ns.ahWatchButton then
+    ns.ahWatchButton:ClearAllPoints()
+    local leftOf = (tabs or not ns.ahFinderButton) and ns.ahFullButton or ns.ahFinderButton
+    if leftOf then ns.ahWatchButton:SetPoint("RIGHT", leftOf, "LEFT", -4, 0) end
+  end
   -- The Buy queue button says it closes the panel while it's open, and stays lit.
   local b = ns.ahFinderButton
   if b then
+    b:SetShown(not tabs)
     b:SetText(docked and "Close buy queue" or "Buy queue")
     if docked then b:LockHighlight() else b:UnlockHighlight() end
   end
@@ -1162,6 +1179,7 @@ function ns:OnAHShow()
     -- bottom, reaching the right side: go one row lower so we don't cover them.
     local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
     local auctionator = Auctionator ~= nil or (isLoaded and isLoaded("Auctionator"))
+    ns.ahAuctionator = auctionator
     ns.ahButton:SetPoint("TOPRIGHT", ah, "BOTTOMRIGHT", -4, auctionator and -34 or -2)
     ns.ahButton:SetFrameLevel(ah:GetFrameLevel() + 20)
     ns.ahFullButton = blizzButton(ah, "Full scan", 130, function() ns.Scan:Start("full") end)

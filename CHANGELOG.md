@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- Forever Ledger's own tabs in the auction house window: **Buy** (the Buy queue, shopping lists and Disenchant finder) and **My auctions**, after Blizzard's Buy, Sell and Auctions along the bottom. The tab you had open opens again next visit. New flips found while you're on one of Blizzard's tabs show as a count on Buy instead of changing the view. Settings, Auction house, **Forever Ledger's tabs in the auction house** (on); off puts the panel back beside the window.
+
 ## [0.26.0] - 2026-11-15
 
 ### Highlights

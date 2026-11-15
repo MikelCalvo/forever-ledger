@@ -49,5 +49,6 @@ BuyQueue.lua
 Watched.lua
 Groups.lua
 Auctions.lua
+AHTabs.lua
 PriceWindow.lua
 Probe.lua
