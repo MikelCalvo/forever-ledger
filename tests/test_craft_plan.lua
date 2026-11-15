@@ -85,3 +85,37 @@ T.test("Craft plan: a recipe that leads back to itself stops", function()
   }))
   T.eq(total, nil)
 end)
+
+T.test("Craft plan: one needed is bought, not a whole batch made (Codex review)", function()
+  local total, plan = ns.CraftPlan({ [BOLT] = 1 }, sources({
+    [BOLT] = { ladder = { { 20, 1 } }, recipe = { makes = 10, mats = { { RUNE, 1 } } } },
+    [RUNE] = { ladder = { { 100, 5 } } },
+  }))
+  T.eq(total, 20)
+  T.eq(plan[BOLT].bought, 1); T.eq(plan[BOLT].made, 0)
+end)
+
+T.test("Craft plan: a cheap material isn't counted twice when trying a craft (Codex review)", function()
+  -- BAG: 20 on the AH, or made from BOLT + RUNE; BOLT is made from RUNE. RUNE: one at 1c,
+  -- then 100c. Making the bag takes both, 101c, so it's bought.
+  local total, plan = ns.CraftPlan({ [BAG] = 1 }, sources({
+    [BAG] = { ladder = { { 20, 1 } }, recipe = { makes = 1, mats = { { BOLT, 1 }, { RUNE, 1 } } } },
+    [BOLT] = { recipe = { makes = 1, mats = { { RUNE, 1 } } } },
+    [RUNE] = { ladder = { { 1, 1 }, { 100, 5 } } },
+  }))
+  T.eq(total, 20)
+  T.eq(plan[BAG].bought, 1)
+  T.eq(plan[RUNE], nil, "trying the craft out left the real plan alone")
+end)
+
+T.test("Craft plan: a leftover from a batch serves a later need", function()
+  local total, plan = ns.CraftPlan({ [BAG] = 1 }, sources({
+    [BAG] = { recipe = { makes = 1, mats = { { BOLT, 1 }, { THREAD, 1 } } } },
+    [THREAD] = { recipe = { makes = 1, mats = { { BOLT, 1 } } } },
+    [BOLT] = { recipe = { makes = 2, mats = { { RUNE, 4 } } } },
+    [RUNE] = { ladder = { { 10, 100 } } },
+  }))
+  -- One batch of 2 bolts (40c): one for the bag, one for the thread.
+  T.eq(total, 40)
+  T.eq(plan[BOLT].made, 2); T.eq(plan[RUNE].bought, 4)
+end)

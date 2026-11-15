@@ -101,7 +101,8 @@ local refresh   -- shows `results` filtered (below)
 -- Every item with a price from the last scan, 150 a frame so the game doesn't
 -- stop for a moment on thousands of items.
 local function build()
-  local market = ns.db.prices[ns.MarketKey()] or {}
+  local key = ns.MarketKey()
+  local market = ns.db.prices[key] or {}
   local ids = {}
   for id, rec in pairs(market) do
     if type(id) == "number" and not rec.none and rec.m then ids[#ids + 1] = id end
@@ -110,6 +111,10 @@ local function build()
   building = true
   scannedAt = time()
   local function step()
+    -- Another market since it started (the neutral auction house opened or closed):
+    -- usual prices and reasons would come from it, so start again there (Codex review,
+    -- November 15).
+    if ns.MarketKey() ~= key then building = false; build(); return end
     local stop = math.min(i + 150, #ids)
     for k = i + 1, stop do
       local id = ids[k]

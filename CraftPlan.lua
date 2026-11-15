@@ -8,11 +8,15 @@ local _, ns = ...
 -- shopping lists will call it.
 --
 -- Each unit is filled from whichever is cheapest next:
---   your bags      first, at what they'd sell for (opts.ownedFree: at no cost)
---   the AH         the next listing on its price ladder (cheapest first; each used once)
---   a vendor       its price, as many as wanted
---   a craft        one more made from the cheapest of its materials, worked out the
---                  same way (a recipe's own materials can be made too, up to MAX_DEPTH)
+--   made already  a unit left over from a batch made earlier in the plan (paid for)
+--   your bags     at what they'd sell for (opts.ownedFree: at no cost)
+--   the AH        the next listing on its price ladder (cheapest first; each used once)
+--   a vendor      its price, as many as wanted
+--   a craft       one more batch, tried out first on a copy of the plan so far: its
+--                 materials come from the same listings, bags and leftovers the rest of
+--                 the plan uses (never the same cheap listing twice), and the whole batch
+--                 is paid for, shared over the units still needed (Codex review, November
+--                 15: one needed, 20c on the AH, a batch of 10 for 100c must buy)
 -- so a thin cheap end on the auction house is used, then making takes over when that
 -- gets dearer. Every unit is counted once, bought or made, never both.
 --
@@ -27,100 +31,87 @@ local MAX_DEPTH = 4
 
 function ns.CraftPlan(need, sourceOf, opts)
   opts = opts or {}
-  local cache, pos, ownedLeft, plan = {}, {}, {}, {}
+  local cache = {}
   local function src(id)
     local s = cache[id]
     if s == nil then
       s = sourceOf(id) or {}
       cache[id] = s
-      ownedLeft[id] = s.owned or 0
-      pos[id] = { level = 1, used = 0 }
     end
     return s
   end
-  local function entry(id)
-    plan[id] = plan[id] or { owned = 0, bought = 0, boughtCost = 0, vendor = 0, vendorCost = 0, made = 0 }
-    return plan[id]
+
+  -- The plan so far: where each item's ladder is up to, bags left, units made and not yet
+  -- used, and the plan's counts. A copy (for trying a craft out) shares nothing.
+  local function newState() return { pos = {}, owned = {}, left = {}, plan = {} } end
+  local function copy(st)
+    local c = newState()
+    for id, p in pairs(st.pos) do c.pos[id] = { level = p.level, used = p.used } end
+    for id, n in pairs(st.owned) do c.owned[id] = n end
+    for id, n in pairs(st.left) do c.left[id] = n end
+    return c
   end
-  -- The next AH listing's price, without taking it.
-  local function nextListing(id)
-    local s, p = src(id), pos[id]
-    local ladder = s.ladder or {}
-    local level, used = p.level, p.used
-    while ladder[level] and used >= ladder[level][2] do level, used = level + 1, 0 end
-    return ladder[level] and ladder[level][1] or nil
+  local function posOf(st, id)
+    local p = st.pos[id]
+    if not p then p = { level = 1, used = 0 }; st.pos[id] = p end
+    return p
+  end
+  local function ownedOf(st, id)
+    if st.owned[id] == nil then st.owned[id] = src(id).owned or 0 end
+    return st.owned[id]
+  end
+  local function entry(st, id)
+    st.plan[id] = st.plan[id] or { owned = 0, bought = 0, boughtCost = 0, vendor = 0, vendorCost = 0, made = 0 }
+    return st.plan[id]
+  end
+  -- The next AH listing's price (its place on the ladder moves past used-up levels).
+  local function nextListing(st, id)
+    local ladder = src(id).ladder or {}
+    local p = posOf(st, id)
+    while ladder[p.level] and p.used >= ladder[p.level][2] do p.level, p.used = p.level + 1, 0 end
+    return ladder[p.level] and ladder[p.level][1] or nil
   end
 
-  local unitCost, take
-  -- What one more unit costs now, and from where, without taking anything.
-  -- (The craft's estimate peeks at each material's next units the same way.)
-  local function peek(id, n, depth)
-    -- n units of id, walking its sources without taking them.
-    local s = src(id)
-    local total, owned = 0, ownedLeft[id]
-    local ladder = s.ladder or {}
-    local p = pos[id]
-    local level, used = p.level, p.used
-    local craftEach = (depth < MAX_DEPTH and s.recipe) and unitCost(id, depth + 1, true) or nil
-    for _ = 1, n do
-      local best
-      if owned > 0 then
-        best = opts.ownedFree and 0 or (s.ownedValue or 0)
-        owned = owned - 1
-      else
-        while ladder[level] and used >= ladder[level][2] do level, used = level + 1, 0 end
-        local listing = ladder[level] and ladder[level][1]
-        best = listing
-        if s.vendor and (not best or s.vendor < best) then best = s.vendor end
-        if craftEach and (not best or craftEach < best) then best = craftEach end
-        if not best then return nil end
-        if best == listing then used = used + 1 end
-      end
-      total = total + best
-    end
-    return total
-  end
-  -- The cost of making one more of id (per unit), or nil.
-  unitCost = function(id, depth, onlyCraft)
-    local s = src(id)
-    if not (s.recipe and depth <= MAX_DEPTH) then return nil end
+  local take
+  -- One batch of id: its materials taken in st. The copper, or nil if they can't be had.
+  local function makeBatch(st, id, depth)
     local total = 0
-    for _, m in ipairs(s.recipe.mats or {}) do
-      local c = peek(m[1], m[2], depth)
+    for _, m in ipairs(src(id).recipe.mats or {}) do
+      local c = take(st, m[1], m[2], depth + 1)
       if not c then return nil end
       total = total + c
     end
-    local each = total / math.max(s.recipe.makes or 1, 1)
-    if onlyCraft then return each end
-    return each
+    return total
   end
 
-  -- Takes n units of id, cheapest first. Returns the copper, or nil if it can't be had.
-  take = function(id, n, depth)
+  -- Takes n units of id in st, cheapest first. The copper, or nil if they can't be had.
+  take = function(st, id, n, depth)
     local s = src(id)
-    local e = entry(id)
+    local e = entry(st, id)
     local total = 0
-    local made = 0   -- units still to hand out from a craft that makes several
-    for _ = 1, n do
-      if made > 0 then
-        -- The next one from the batch already made: its share of the batch.
-        made = made - 1
-        total = total + (e.batchEach or 0)
-      elseif ownedLeft[id] > 0 then
-        ownedLeft[id] = ownedLeft[id] - 1
+    for i = 1, n do
+      if (st.left[id] or 0) > 0 then
+        st.left[id] = st.left[id] - 1   -- made earlier in the plan, paid for then
+      elseif ownedOf(st, id) > 0 then
+        st.owned[id] = st.owned[id] - 1
         e.owned = e.owned + 1
         total = total + (opts.ownedFree and 0 or (s.ownedValue or 0))
       else
-        local listing = nextListing(id)
-        local craftEach = (depth < MAX_DEPTH and s.recipe) and unitCost(id, depth + 1) or nil
+        local listing = nextListing(st, id)
         local best, how = listing, "ah"
         if s.vendor and (not best or s.vendor < best) then best, how = s.vendor, "vendor" end
-        if craftEach and (not best or craftEach < best) then best, how = craftEach, "craft" end
+        local makes = s.recipe and math.max(s.recipe.makes or 1, 1)
+        if s.recipe and depth < MAX_DEPTH then
+          local batch = makeBatch(copy(st), id, depth)
+          if batch then
+            -- The whole batch, over the units still needed here (a leftover may be wasted).
+            local each = batch / math.min(makes, n - i + 1)
+            if not best or each < best then best, how = each, "craft" end
+          end
+        end
         if not best then return nil end
         if how == "ah" then
-          local p = pos[id]
-          local ladder = s.ladder
-          while ladder[p.level] and p.used >= ladder[p.level][2] do p.level, p.used = p.level + 1, 0 end
+          local p = posOf(st, id)
           p.used = p.used + 1
           e.bought, e.boughtCost = e.bought + 1, e.boughtCost + listing
           e.top = math.max(e.top or 0, listing)
@@ -129,32 +120,23 @@ function ns.CraftPlan(need, sourceOf, opts)
           e.vendor, e.vendorCost = e.vendor + 1, e.vendorCost + s.vendor
           total = total + s.vendor
         else
-          -- Make one batch: take its materials for real.
-          local batch = 0
-          for _, m in ipairs(s.recipe.mats) do
-            local c = take(m[1], m[2], depth + 1)
-            if not c then return nil end
-            batch = batch + c
-          end
-          local makes = math.max(s.recipe.makes or 1, 1)
+          local batch = makeBatch(st, id, depth)
+          if not batch then return nil end
           e.made = e.made + makes
-          made = makes - 1
-          total = total + batch / makes   -- this unit's share; the rest come with the batch
-          e.batchEach = batch / makes
+          st.left[id] = (st.left[id] or 0) + makes - 1   -- this unit is one of them
+          total = total + batch
         end
       end
     end
-    -- Units of a batch beyond what was needed are left over (counted at their share, so
-    -- the whole batch is paid for; a leftover isn't handed to another recipe yet).
-    if made > 0 then total = total + made * (e.batchEach or 0) end
     return total
   end
 
+  local st = newState()
   local total = 0
   for id, n in pairs(need) do
-    local c = take(id, n, 0)
-    if not c then return nil, plan end
+    local c = take(st, id, n, 0)
+    if not c then return nil, st.plan end
     total = total + c
   end
-  return math.floor(total + 0.5), plan
+  return math.floor(total + 0.5), st.plan
 end

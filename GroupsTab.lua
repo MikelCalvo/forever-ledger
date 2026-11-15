@@ -584,14 +584,24 @@ function ns:BuildGroups(parent)
   f.sub:SetJustifyH("LEFT")
   f.sub:SetWordWrap(false)
   f.renameGroup = T:Button(gp, "Rename", 70, function()
-    local info = ns:GroupInfo(state.group)
-    askName("New name for the group:", info and info.name, function(name) ns:RenameGroup(state.group, name); refresh() end)
+    -- The group asked about, not whatever is picked when you answer (Codex review,
+    -- November 15: the popups don't stop you picking another group meanwhile).
+    local gid = state.group
+    local info = ns:GroupInfo(gid)
+    askName("New name for the group:", info and info.name, function(name)
+      if ns:GroupInfo(gid) then ns:RenameGroup(gid, name) end
+      refresh()
+    end)
   end, 22)
   f.renameGroup:SetPoint("TOPRIGHT", -84, 0)
   f.deleteGroup = T:Button(gp, "Delete...", 80, function()
-    local info = ns:GroupInfo(state.group)
+    local gid = state.group
+    local info = ns:GroupInfo(gid)
     confirm(("Delete your group %s? Its items stay in their other groups; groups under it move up. This can't be undone."):format(info and info.name or "?"), function()
-      ns:DeleteGroup(state.group); state.group = "mat"; groupsChanged(); refresh()
+      if not ns:GroupInfo(gid) then return end
+      ns:DeleteGroup(gid)
+      if state.group == gid then state.group = "mat" end
+      groupsChanged(); refresh()
     end)
   end, 22)
   f.deleteGroup:SetPoint("TOPRIGHT", 0, 0)
@@ -632,12 +642,13 @@ function ns:BuildGroups(parent)
   end, 22)
   f.remove:SetPoint("TOPRIGHT", 0, 0)
   f.restoreItems = T:Button(ip, "Restore items...", 110, function()
-    local added, removed = ns:BuiltinChanges(state.group)
+    local gid = state.group
+    local added, removed = ns:BuiltinChanges(gid)
     if added + removed == 0 then ns:Print("This group's items are as Forever Ledger made them already."); return end
-    local info = ns:GroupInfo(state.group)
+    local info = ns:GroupInfo(gid)
     confirm(("Put %s's items back as Forever Ledger made them? %d added by you go, %d you took out come back. Its rules stay. This can't be undone."):format(
       info and info.name or "?", added, removed), function()
-      ns:RestoreGroupItems(state.group); groupsChanged(); refresh()
+      ns:RestoreGroupItems(gid); groupsChanged(); refresh()
     end)
   end, 22)
   f.restoreItems:SetPoint("RIGHT", f.remove, "LEFT", -6, 0)
@@ -744,11 +755,15 @@ function ns:BuildGroups(parent)
   end, 22)
   f.ruleRename:SetPoint("LEFT", f.ruleCopy, "RIGHT", 6, 0)
   f.ruleDelete = T:Button(sp, "Delete...", 80, function()
-    local s = ns.db.groups.saved[state.rule]
-    local users = #ns:RuleUsers(state.rule)
+    local rid = state.rule
+    local s = ns.db.groups.saved[rid]
+    local users = #ns:RuleUsers(rid)
     confirm(("Delete your rule %s? %d group%s using it go back to Same as above. This can't be undone."):format(
       s and s.name or "?", users, users == 1 and "" or "s"), function()
-      ns:DeleteRule(state.rule); state.rule = nil; refresh()
+      if not ns.db.groups.saved[rid] then return end
+      ns:DeleteRule(rid)
+      if state.rule == rid then state.rule = nil end
+      refresh()
     end)
   end, 22)
   f.ruleDelete:SetPoint("LEFT", f.ruleRename, "RIGHT", 6, 0)

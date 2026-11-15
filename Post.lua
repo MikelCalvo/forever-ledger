@@ -85,12 +85,18 @@ local function cheapestOf(id, link)
   local cheapest = rec and not rec.none and rec.m or nil
   -- Only a recent price (Settings: maxAgeHours, 12 by default): an old cheapest may have
   -- sold long ago, and undercutting it would give gold away. Then the usual price is used.
-  if cheapest and rec.t and time() - rec.t > (ns.db.settings.maxAgeHours or 12) * 3600 then cheapest = nil end
-  -- Gear: this version's cheapest ("of the Monkey"), as the price helper does.
-  if link and cheapest and ns.VersionOfLink and ns.SuffixPrice then
+  local maxAge = (ns.db.settings.maxAgeHours or 12) * 3600
+  if cheapest and rec.t and time() - rec.t > maxAge then cheapest = nil end
+  -- Gear: this version's cheapest ("of the Monkey"), as the price helper does, only if
+  -- that version's own price is recent (Codex review, November 15: a fresh search of the
+  -- item kept an old version price alive). A version with no recent price of its own has
+  -- no cheapest: the usual price and the floor decide until the lookup brings the real one.
+  if link and rec and ns.VersionOfLink and ns.SuffixPrice then
     local suffix = ns:VersionOfLink(id, link)
-    local m = suffix and ns:SuffixPrice(id, suffix)
-    if m and m > 0 then cheapest = m end
+    if suffix then
+      local m, _, t = ns:SuffixPrice(id, suffix)
+      if m and m > 0 and t and time() - t <= maxAge then cheapest = m else cheapest = nil end
+    end
   end
   return cheapest, rec
 end
@@ -106,9 +112,16 @@ local edits = {}     -- [key] = { price, qty, hours } typed in this visit
 local live = {}      -- [key] = the listings now: { t, rows, total, cheapest } or { t, failed = true }
 local frame
 local scrollPost = false
-local pending        -- a post waiting for the game's confirmation: { fn, args }
+local pending        -- a post waiting for the game's confirmation: { fn, args, key, price, qty, hours, bag, slot }
 
-local function keyOf(e) return e.gear and (e.bag .. ":" .. e.slot) or tostring(e.id) end
+-- Commodities are one entry per item; anything else (gear, bags, recipes) one per copy,
+-- since each is posted on its own (Codex review, November 15: two bags made one entry and
+-- one post retired both). A copy's key carries its link, so a different copy sorted into
+-- the same slot is never taken for it, nor given its typed price.
+local function keyOf(e)
+  if e.single then return (e.link or tostring(e.id)) .. "@" .. e.bag .. ":" .. e.slot end
+  return tostring(e.id)
+end
 
 local MARK = { ah = "Post", middle = "Post", keep = "Keep", vendor = "Vendor", de = "Disenchant" }
 local MARK_COLOR = { Post = { 0.62, 0.91, 0.86 }, Keep = { 0.73, 0.74, 0.78 }, Vendor = { 0.94, 0.83, 0.54 },
@@ -138,9 +151,15 @@ local function readBags()
       local info = CC.GetContainerItemInfo(bag, slot)
       if info and info.itemID and not info.isBound and (info.quality or 1) > 0 then
         local id = info.itemID
-        local gear = ns.IsGearItem and ns:IsGearItem(id)
-        if gear then
-          list[#list + 1] = { id = id, count = 1, link = info.hyperlink, bag = bag, slot = slot, gear = true }
+        local gear = ns.IsGearItem and ns:IsGearItem(id) or false
+        local commodity = false
+        if not gear and AH and AH.GetItemCommodityStatus and ItemLocation and ItemLocation.CreateFromBagAndSlot then
+          local ok, st = pcall(AH.GetItemCommodityStatus, ItemLocation:CreateFromBagAndSlot(bag, slot))
+          commodity = ok and st == 2
+        end
+        if not commodity then
+          list[#list + 1] = { id = id, count = gear and 1 or (info.stackCount or 1), link = info.hyperlink,
+            bag = bag, slot = slot, gear = gear, single = true }
         elseif byId[id] then
           byId[id].count = byId[id].count + (info.stackCount or 1)
         else
@@ -180,7 +199,7 @@ local function price(e)
   e.hours = typed.hours or (rule and rule.hours) or 24
   local keep = (rule and rule.keep) or 0
   e.qty = typed.qty or math.max(0, e.count - keep)
-  if e.gear then e.qty = math.min(e.qty, 1) end
+  if e.single then e.qty = math.min(e.qty, e.count) end
 end
 
 local refresh
@@ -221,15 +240,25 @@ end
 ---------------------------------------------------------------------------
 local function locationOf(e)
   if not (ItemLocation and ItemLocation.CreateFromBagAndSlot) then return end
-  -- The slot may have changed since the list was read: find the item again.
   local CC = C_Container
   local info = CC.GetContainerItemInfo(e.bag, e.slot)
-  if not (info and info.itemID == e.id) then
+  -- A copy (gear, bags...) must still be in its slot: the same item, the same link, not
+  -- bound (Codex review, November 15: a better version sorted into the slot would have been
+  -- posted at the shown one's price). Moved: nothing, and the list is read again.
+  if e.single then
+    if info and info.itemID == e.id and not info.isBound and info.hyperlink == e.link
+      and (info.stackCount or 1) >= (e.qty or 1) then
+      return ItemLocation:CreateFromBagAndSlot(e.bag, e.slot)
+    end
+    return
+  end
+  -- A commodity: any stack of it will do; the slot may have changed since the list was read.
+  if not (info and info.itemID == e.id and not info.isBound) then
     local last = NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4
     for bag = 0, last do
       for slot = 1, CC.GetContainerNumSlots(bag) or 0 do
         local i2 = CC.GetContainerItemInfo(bag, slot)
-        if i2 and i2.itemID == e.id and not i2.isBound and (not e.gear or i2.hyperlink == e.link) then
+        if i2 and i2.itemID == e.id and not i2.isBound then
           e.bag, e.slot = bag, slot
           return ItemLocation:CreateFromBagAndSlot(bag, slot)
         end
@@ -392,12 +421,32 @@ end
 -- Post the highlighted item (a click on Post, or a wheel tick with Scroll to post on).
 local function postCurrent()
   if pending then
-    -- The game asked to confirm the last one: this click or tick confirms it.
+    -- The game asked to confirm the last one: this click or tick confirms it, but only
+    -- exactly what was shown when it asked (Codex review, November 15: a price, quantity
+    -- or length changed, or the row skipped, would have confirmed the old post).
     local p = pending
     pending = nil
+    local e = entries[cur]
+    local same = e and keyOf(e) == p.key and e.price == p.price and e.qty == p.qty and e.hours == p.hours
+      and not skipped[p.key] and not posted[p.key] and not (e.floor and e.price < e.floor)
+      and e.bag == p.bag and e.slot == p.slot
+    if same then
+      local info = C_Container.GetContainerItemInfo(p.bag, p.slot)
+      same = info ~= nil and info.itemID == e.id and (not e.single or info.hyperlink == e.link)
+    end
+    if not same then
+      say("It changed since the game asked to confirm: click Post again.")
+      if refresh then refresh() end
+      return
+    end
     local ok, err = pcall(p.fn, unpack(p.args))
-    if not ok then say("Couldn't confirm: " .. tostring(err)) end
+    if not ok then
+      say("Couldn't confirm: " .. tostring(err))
+      if refresh then refresh() end
+      return
+    end
     posted[p.key] = true
+    say(("Posted %d %s at %s each."):format(p.qty, ns.ItemName(e.id), ns.MoneyPlain(p.price)))
     cur = nextUsable(cur, 1)
     if refresh then refresh() end
     return
@@ -432,13 +481,14 @@ local function postCurrent()
   if commodity then
     fn, confirmFn, args = AH.PostCommodity, AH.ConfirmPostCommodity, { loc, dur, e.qty, e.price }
   else
-    fn, confirmFn, args = AH.PostItem, AH.ConfirmPostItem, { loc, dur, 1, nil, e.price }
+    -- One copy (its own slot): gear 1, a stack of something else as many as chosen.
+    fn, confirmFn, args = AH.PostItem, AH.ConfirmPostItem, { loc, dur, e.qty, nil, e.price }
   end
   if not fn then say("This game client can't post from here: use Blizzard's Sell tab."); return end
   local ok, needsConfirm = pcall(fn, unpack(args))
   if not ok then say("Couldn't post: " .. tostring(needsConfirm)); return end
   if needsConfirm == true and confirmFn then
-    pending = { fn = confirmFn, args = args, key = k }
+    pending = { fn = confirmFn, args = args, key = k, price = e.price, qty = e.qty, hours = e.hours, bag = e.bag, slot = e.slot }
     say("The auction house asks you to confirm this one: click Confirm post (or tick the wheel).")
     if refresh then refresh() end
     return
@@ -494,6 +544,7 @@ local function row(i)
     if not self.index then return end
     local e = entries[self.index]
     if button == "MiddleButton" then
+      pending = nil   -- a skip cancels a waiting confirmation (Codex review)
       local k = keyOf(e)
       skipped[k] = not skipped[k] or nil
       if skipped[k] and cur == self.index then cur = nextUsable(cur, 1) end
@@ -780,6 +831,7 @@ local function build(host)
     if not e then return end
     local n = math.min(tonumber(self:GetText()) or 0, e.count)
     edits[keyOf(e)] = edits[keyOf(e)] or {}
+    pending = nil   -- an edit cancels a waiting confirmation
     edits[keyOf(e)].qty = n
     e.qty = n
     drawItem()
@@ -788,6 +840,7 @@ local function build(host)
     local e = entries[cur]
     if not e then return end
     edits[keyOf(e)] = edits[keyOf(e)] or {}
+    pending = nil   -- an edit cancels a waiting confirmation
     edits[keyOf(e)].qty = e.count
     e.qty = e.gear and 1 or e.count
     f.qty:SetText(tostring(e.qty))
@@ -802,6 +855,7 @@ local function build(host)
     local e = entries[cur]
     if not e or not v then return end
     edits[keyOf(e)] = edits[keyOf(e)] or {}
+    pending = nil   -- an edit cancels a waiting confirmation
     edits[keyOf(e)].price = v
     e.price = v
     drawList()
@@ -816,6 +870,7 @@ local function build(host)
     local e = entries[cur]
     if not e then return end
     edits[keyOf(e)] = edits[keyOf(e)] or {}
+    pending = nil   -- an edit cancels a waiting confirmation
     edits[keyOf(e)].hours = v
     e.hours = v
     drawItem()
@@ -917,6 +972,7 @@ local function build(host)
       local p = (d.allMine or sellerText(d) == "You") and d.price or math.max(1, d.price - under)
       local k = keyOf(e)
       edits[k] = edits[k] or {}
+      pending = nil   -- an edit cancels a waiting confirmation
       edits[k].price = p
       e.price = p
       refresh()
