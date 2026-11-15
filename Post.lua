@@ -103,6 +103,7 @@ local cur = 1        -- the highlighted one
 local skipped = {}   -- [key] = true: middle-clicked, for this visit
 local posted = {}    -- [key] = true: posted this visit
 local edits = {}     -- [key] = { price, qty, hours } typed in this visit
+local live = {}      -- [key] = the listings now: { t, rows, total, cheapest } or { t, failed = true }
 local frame
 local scrollPost = false
 local pending        -- a post waiting for the game's confirmation: { fn, args }
@@ -168,6 +169,10 @@ local function price(e)
   e.rule, e.ruleFrom = rule, from or "Default"
   e.usual = usualOf(e.id)
   e.cheapest, e.rec = cheapestOf(e.id, e.gear and e.link)
+  -- The listings now, once looked up (below): the cheapest that isn't yours.
+  local l = live[keyOf(e)]
+  e.live = l and not l.failed and l or nil
+  if e.live then e.cheapest = e.live.cheapest end
   local p = ns.PostPrice(rule, e.usual, e.cheapest, ns:PostVendorFloor(e.id))
   e.suggested, e.floor, e.why, e.skipRule = p.price, p.floor, p.why, p.skip
   local typed = edits[keyOf(e)] or {}
@@ -235,6 +240,142 @@ local function locationOf(e)
   return ItemLocation:CreateFromBagAndSlot(e.bag, e.slot)
 end
 
+---------------------------------------------------------------------------
+-- The listings now (owner, AH15, November 15: the Post tab priced Carved Centaur Totem
+-- from a scan 2 hours old at 3s 32c while Blizzard's Sell page, which looks the item up,
+-- showed the cheapest at 8s 75c). Picking an item searches for it as the Sell page does;
+-- the price comes from that, and Post waits for it. The listings show as the Sell page
+-- shows them: price each, how many, the seller (yours marked).
+---------------------------------------------------------------------------
+local LIVE_FRESH = 60   -- seconds a lookup counts as current
+local asking            -- the lookup on its way: { key, id, itemKey, commodity, tok, tries }
+local askTok = 0
+local waitingFor        -- the key a busy-retry is waiting to look up
+local SORTS
+local function sorts()
+  if not SORTS and Enum and Enum.AuctionHouseSortOrder then
+    SORTS = { { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false } }
+  end
+  return SORTS or {}
+end
+
+local function sellerText(r)
+  local o = r.owners and r.owners[1]
+  if r.allMine or o == "player" then return "You", true end
+  if (r.sellers or 0) > 1 then return ("%d sellers"):format(r.sellers) end
+  return type(o) == "string" and o or ""
+end
+
+-- Reads the results of the lookup on its way. final: the wait is over, take what's there.
+local function readLive(final)
+  local a = asking
+  if not a then return end
+  local rows, total, n, complete = {}, 0, 0, false
+  if a.commodity then
+    n = AH.GetNumCommoditySearchResults(a.id) or 0
+    complete = AH.HasFullCommoditySearchResults and AH.HasFullCommoditySearchResults(a.id) or false
+    for i = 1, n do
+      local r = AH.GetCommoditySearchResultInfo(a.id, i)
+      if r and r.unitPrice then
+        local q = r.quantity or 0
+        rows[#rows + 1] = { price = r.unitPrice, qty = q, sellers = r.totalNumberOfOwners, owners = r.owners,
+          allMine = (r.numOwnerItems or 0) >= q and q > 0, someMine = (r.numOwnerItems or 0) > 0 }
+        total = total + q
+      end
+    end
+  else
+    -- The reply's key can differ in detail from the one asked for (BuyQueue.lua).
+    local key = a.replyKey or a.itemKey
+    n = AH.GetNumItemSearchResults(key) or 0
+    complete = AH.HasFullItemSearchResults and AH.HasFullItemSearchResults(key) or false
+    for i = 1, n do
+      local r = AH.GetItemSearchResultInfo(key, i)
+      if r and r.buyoutAmount and r.buyoutAmount > 0 then
+        local q = math.max(r.quantity or 1, 1)
+        rows[#rows + 1] = { price = r.buyoutAmount, qty = q, sellers = r.totalNumberOfOwners, owners = r.owners,
+          allMine = r.containsOwnerItem and true or false, refused = ns.CantBuyOut and ns:CantBuyOut(r) or false }
+        total = total + q
+      end
+    end
+  end
+  if n == 0 and not complete and not final then return end   -- still coming
+  if n == 0 and not complete then
+    live[a.key] = { t = time(), failed = true }
+  else
+    table.sort(rows, function(x, y) return x.price < y.price end)
+    local cheapest
+    for _, r in ipairs(rows) do
+      if not r.allMine and not r.refused then cheapest = r.price; break end
+    end
+    live[a.key] = { t = time(), rows = rows, total = total, cheapest = cheapest }
+  end
+  if final or complete then asking = nil end
+  for _, e in ipairs(entries) do
+    if keyOf(e) == a.key then price(e) end
+  end
+  if refresh then refresh() end
+end
+
+-- Looks the item up (unless a lookup from the last minute is there). force: Refresh.
+local function lookUp(e, force)
+  if not (e and AH and AH.SendSearchQuery and AH.MakeItemKey) then return end
+  local k = keyOf(e)
+  local l = live[k]
+  if not force and l and time() - l.t < LIVE_FRESH then return end
+  if asking and asking.key == k and GetTime() - asking.at < 5 then return end
+  if AH.IsThrottledMessageSystemReady and not AH.IsThrottledMessageSystemReady() then
+    -- Busy (Live watch searches too): try again shortly, while it's still the one shown.
+    if waitingFor == k then return end   -- a retry is already on its way
+    e.lookTries = (e.lookTries or 0) + 1
+    if e.lookTries > 20 then live[k] = { t = time(), failed = true }; e.lookTries = 0; if refresh then refresh() end; return end
+    waitingFor = k
+    C_Timer.After(0.5, function()
+      waitingFor = nil
+      local now = entries[cur]
+      if now and keyOf(now) == k then lookUp(now, force) end
+    end)
+    return
+  end
+  e.lookTries = 0
+  local loc = locationOf(e)
+  local itemKey
+  if loc and AH.GetItemKeyFromItem then
+    local ok, ik = pcall(AH.GetItemKeyFromItem, loc)
+    if ok and type(ik) == "table" then itemKey = ik end
+  end
+  itemKey = itemKey or AH.MakeItemKey(e.id)
+  local commodity = loc and AH.GetItemCommodityStatus and AH.GetItemCommodityStatus(loc) == 2 or false
+  askTok = askTok + 1
+  local tok = askTok
+  asking = { key = k, id = e.id, itemKey = itemKey, commodity = commodity, at = GetTime(), tok = tok }
+  -- A moment's room from Live watch's own searches, as the Buy queue gets (Prices.lua).
+  ns.queueBusyUntil = math.max(ns.queueBusyUntil or 0, GetTime() + 1.5)
+  ns.postSending = true
+  local ok = pcall(AH.SendSearchQuery, itemKey, sorts(), true)
+  ns.postSending = false
+  if not ok then
+    asking = nil
+    live[k] = { t = time(), failed = true }
+  else
+    -- Items with nothing listed may never get a reply.
+    C_Timer.After(4, function() if asking and asking.tok == tok then readLive(true) end end)
+  end
+  if refresh then refresh() end
+end
+
+ns:On("COMMODITY_SEARCH_RESULTS_UPDATED", function(itemID)
+  if asking and asking.commodity and asking.id == itemID then readLive(false) end
+end)
+ns:On("ITEM_SEARCH_RESULTS_UPDATED", function(itemKey)
+  if asking and not asking.commodity and itemKey and itemKey.itemID == asking.id then
+    -- Gear: only the version asked for (its stats), when the reply says which.
+    local want = asking.itemKey and asking.itemKey.itemSuffix or 0
+    if (itemKey.itemSuffix or 0) ~= want then return end
+    asking.replyKey = itemKey
+    readLive(false)
+  end
+end)
+
 local function say(text) if frame then frame.note:SetText(text or "") end end
 
 local function nextUsable(from, step)
@@ -265,6 +406,14 @@ local function postCurrent()
   if not e then return end
   local k = keyOf(e)
   if skipped[k] or posted[k] then cur = nextUsable(cur, 1); refresh(); return end
+  -- Never on an old price: the listings are looked up first (a lookup that got no answer
+  -- lets the last scan's price through, said on screen).
+  local l = live[k]
+  if not l or time() - l.t > 5 * LIVE_FRESH then
+    lookUp(e, true)
+    say("Checking the listings first: click again in a moment.")
+    return
+  end
   if not (e.price and e.price > 0) then say("Type a price first."); return end
   if e.floor and e.price < e.floor then
     say(("Under your floor (%s): type a higher price, or change the rule."):format(ns.MoneyPlain(e.floor)))
@@ -415,13 +564,79 @@ local function drawList()
   for n = #lines + 1, #frame.rows do frame.rows[n]:Hide() end
   frame.content:SetHeight(math.max(#lines * ROW_H, ROW_H))
   frame.sf.UpdateScrollBar()
-  local left = 0
-  for _, e in ipairs(entries) do
-    local k = keyOf(e)
-    if not posted[k] and not skipped[k] then left = left + 1 end
-  end
-  frame.count:SetText(#entries == 0 and "" or ("%d to post"):format(left))
   frame.emptyList:SetShown(#entries == 0)
+end
+
+-- The listings table: the listings now (or, until they come, the last scan's), with a
+-- line where yours would go.
+local LT_ROW = 18
+local function listingRows(e)
+  local l = live[keyOf(e)]
+  if l and not l.failed then return l.rows, true end
+  local rows, ladder = {}, e.rec and e.rec.l
+  if ladder then
+    local prev = 0
+    for p, n in ladder:gmatch("(%d+):(%d+)") do
+      p, n = tonumber(p), tonumber(n)
+      rows[#rows + 1] = { price = p, qty = n - prev }
+      prev = n
+    end
+  end
+  return rows, false
+end
+
+local function drawListings(e)
+  local lt = frame.item.lt
+  local k = keyOf(e)
+  local l = live[k]
+  local looking = asking and asking.key == k
+  local rows, now = listingRows(e)
+  if now then
+    lt.title:SetText("Listed now")
+    lt.info:SetText(("%d available · checked %s"):format(l.total or 0, time() - l.t < 60 and "just now" or ns.Age(l.t)))
+  else
+    local when = e.rec and e.rec.t
+    lt.title:SetText(when and ("At the last scan (%s)"):format(ns.Age and ns.Age(when) or "") or "Listings")
+    lt.info:SetText(looking and "|cffffd100Looking it up...|r" or (l and l.failed) and "|cffff8080Couldn't check now|r" or "")
+  end
+  -- Your price, in its place among them.
+  local shown = {}
+  local placed = false
+  for _, r in ipairs(rows) do
+    if not placed and e.price and r.price > e.price then
+      shown[#shown + 1] = { yours = true, price = e.price, qty = e.qty or 0 }
+      placed = true
+    end
+    shown[#shown + 1] = r
+  end
+  if not placed and e.price and #rows > 0 then shown[#shown + 1] = { yours = true, price = e.price, qty = e.qty or 0 } end
+  local fit = math.max(3, math.floor(((lt:GetHeight() or 0) - 46) / LT_ROW))
+  if (lt:GetHeight() or 0) < 60 then fit = 12 end
+  for i = 1, math.max(fit, #lt.rows) do
+    local r, d = lt.rows[i], shown[i]
+    if i <= fit and d then
+      r = r or lt.makeRow(i)
+      r.data = d
+      r.price:SetText(ns.Money(d.price))
+      r.qty:SetText(tostring(d.qty or ""))
+      if d.yours then
+        r.seller:SetText("|cff9fe8dcYours, if you post now|r")
+        r.bg:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.22)
+      else
+        local who, mine = sellerText(d)
+        r.seller:SetText(mine and "|cff9fe8dcYou|r" or (d.refused and (who .. " |cff888888(can't be bought)|r")) or who)
+        r.bg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.03 or 0)
+      end
+      r:Show()
+    elseif r then
+      r:Hide()
+    end
+  end
+  local more = #shown - fit
+  lt.more:SetText(more > 0 and ("and %d more"):format(more) or "")
+  lt.empty:SetShown(#rows == 0)
+  lt.empty:SetText(looking and "Looking it up..." or now and "None listed now: yours would be the only one."
+    or "Nothing saved for it yet.")
 end
 
 local function drawItem()
@@ -434,39 +649,34 @@ local function drawItem()
   f.name:SetText(ns.ItemName(e.id))
   local bits = { ("%d in your bags"):format(e.count) }
   if e.usual then bits[#bits + 1] = "usual " .. ns.Money(e.usual) end
-  if e.rec and e.rec.q then bits[#bits + 1] = ("%d listed at the last scan"):format(e.rec.q) end
   f.sub:SetText(table.concat(bits, " · "))
   if not f.qty:HasFocus() then f.qty:SetText(tostring(e.qty or 0)) end
   f.price:SetValue(e.price)
   f.hours:SetValue(e.hours)
+  -- What Blizzard's Sell page shows (deposit, total price), and what you get.
   local dur = HOURS_TO_INDEX[e.hours] or 3
   local deposit = ns.AuctionDeposit and select(1, ns:AuctionDeposit(e.id, math.max(e.qty or 1, 1), dur)) or 0
   local get = e.price and (ns:AfterCut(e.price, ns.neutralAH) * (e.qty or 0)) or nil
+  f.deposit:SetText(ns.Money(deposit or 0))
+  f.total:SetText(e.price and ns.Money(e.price * (e.qty or 0)) or "-")
   f.get:SetText(get and ns.Money(get) or "-")
-  local why = e.why or ""
-  if e.price and e.suggested and e.price ~= e.suggested then why = "your price (suggested " .. ns.MoneyPlain(e.suggested) .. ")" end
-  f.why:SetText(("%s%s. Deposit %s. |cff9fe8dcRule from: %s.|r"):format(
-    why:sub(1, 1):upper(), why:sub(2), ns.MoneyPlain(deposit or 0), e.ruleFrom or "Default"))
   local k = keyOf(e)
-  f.post:SetText(pending and "Confirm post" or "Post")
-  f.post:SetEnabled(not posted[k] and not skipped[k] and e.price ~= nil and (e.qty or 0) > 0)
-  f.posFrom:SetText(("%d of %d"):format(cur, #entries))
-  -- The cheapest listings at the last scan (the price ladder each scan saves).
-  local lines = {}
-  local ladder = e.rec and e.rec.l
-  if ladder then
-    local prev = 0
-    for p, n in ladder:gmatch("(%d+):(%d+)") do
-      p, n = tonumber(p), tonumber(n)
-      lines[#lines + 1] = ("%s  x%d"):format(ns.Money(p), n - prev)
-      prev = n
-      if #lines >= 8 then break end
-    end
+  local l = live[k]
+  local why = e.why or ""
+  if e.price and e.suggested and e.price ~= e.suggested then why = "your price (suggested " .. ns.MoneyPlain(e.suggested) .. ")"
+  elseif not e.live and e.cheapest then why = why .. ", at the last scan" end
+  f.why:SetText(("%s%s. |cff9fe8dcRule from: %s.|r"):format(why:sub(1, 1):upper(), why:sub(2), e.ruleFrom or "Default"))
+  f.post:SetText(pending and "Confirm post" or not l and "Checking..." or "Post")
+  f.post:SetEnabled(pending ~= nil or (l ~= nil and not posted[k] and not skipped[k] and e.price ~= nil and (e.qty or 0) > 0))
+  local left = 0
+  for _, x in ipairs(entries) do
+    local xk = keyOf(x)
+    if not posted[xk] and not skipped[xk] then left = left + 1 end
   end
-  f.ladder:SetText(#lines > 0 and table.concat(lines, "\n") or "|cff888888No listings saved for it yet: a scan (or Live watch) fills this.|r")
-  local when = e.rec and e.rec.t
-  f.ladderTitle:SetText(when and ("Cheapest at the last scan (%s)"):format(ns.Age and ns.Age(when) or date("%H:%M", when))
-    or "Cheapest at the last scan")
+  f.posFrom:SetText(("%d of %d · %d left"):format(cur, #entries, left))
+  drawListings(e)
+  -- Look it up (no-op while the last lookup is fresh).
+  lookUp(e)
 end
 
 refresh = function()
@@ -523,11 +733,9 @@ local function build(host)
     self:SetText(frame.showAll and "Show: Everything" or "Show: Worth posting")
     ns:RefreshPost()
   end, 22)
-  frame.showBtn:SetPoint("TOPLEFT", 62, -10)   -- right of the window's portrait
-  frame.count = T:Text(frame, 11, T.dim)
-  frame.count:SetPoint("LEFT", frame.showBtn, "RIGHT", 10, 0)
+  frame.showBtn:SetPoint("TOPLEFT", 8, -10)   -- (OnShow: right of the portrait if it's there)
   frame.scrollSwitch = T:Check(frame, function(b) setScrollPost(b:GetChecked()) end, "switch")
-  frame.scrollSwitch:SetPoint("TOPLEFT", listBox, "TOPRIGHT", -150, 24)
+  frame.scrollSwitch:SetPoint("LEFT", frame.showBtn, "RIGHT", 14, 0)
   frame.scrollSwitch.label:SetText("Scroll to post")
   frame.scrollSwitch:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -614,11 +822,22 @@ local function build(host)
   end)
   f.hours:SetPoint("TOPLEFT", hoursL, "BOTTOMLEFT", 0, -3)
 
-  local getL = label("You get after the cut", f.qty, 0)
+  -- Deposit, total price and what you get, side by side under the boxes.
+  local depL = label("Deposit", f.qty, 0)
+  f.deposit = T:Text(f, 13)
+  f.deposit:SetPoint("TOPLEFT", depL, "BOTTOMLEFT", 0, -3)
+  local totalL = T:Text(f, 10, T.dim)
+  totalL:SetPoint("LEFT", depL, "LEFT", 130, 0)
+  totalL:SetText("Total price")
+  f.total = T:Text(f, 13)
+  f.total:SetPoint("TOPLEFT", totalL, "BOTTOMLEFT", 0, -3)
+  local getL = T:Text(f, 10, T.dim)
+  getL:SetPoint("LEFT", totalL, "LEFT", 120, 0)
+  getL:SetText("You get after the cut")
   f.get = T:Text(f, 14, { 0.88, 0.72, 0.35 })
   f.get:SetPoint("TOPLEFT", getL, "BOTTOMLEFT", 0, -3)
   f.why = T:Text(f, 11, T.dim)
-  f.why:SetPoint("TOPLEFT", f.get, "BOTTOMLEFT", 0, -8)
+  f.why:SetPoint("TOPLEFT", f.deposit, "BOTTOMLEFT", 0, -10)
   f.why:SetPoint("RIGHT", f, "RIGHT", 0, 0)
   f.why:SetJustifyH("LEFT")
 
@@ -641,18 +860,91 @@ local function build(host)
   frame.note:SetPoint("RIGHT", f, "RIGHT", 0, 0)
   frame.note:SetJustifyH("LEFT")
 
-  f.ladderTitle = T:Text(f, 10, T.dim)
-  f.ladderTitle:SetPoint("TOPLEFT", frame.note, "BOTTOMLEFT", 0, -12)
-  f.ladder = T:Text(f, 11)
-  f.ladder:SetPoint("TOPLEFT", f.ladderTitle, "BOTTOMLEFT", 0, -4)
-  f.ladder:SetJustifyH("LEFT")
-  f.ladder:SetSpacing(2)
+  -- The listings, as Blizzard's Sell page lists them: price each, how many, the seller.
+  local lt = CreateFrame("Frame", nil, f)
+  lt:SetPoint("TOPLEFT", frame.note, "BOTTOMLEFT", 0, -10)
+  lt:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+  T:Border(lt)
+  f.lt = lt
+  lt.title = T:Text(lt, 12)
+  lt.title:SetPoint("TOPLEFT", 8, -8)
+  lt.refresh = T:Button(lt, "Refresh", 70, function()
+    local e = entries[cur]
+    if e then lookUp(e, true) end
+  end, 20)
+  lt.refresh:SetPoint("TOPRIGHT", -6, -4)
+  lt.info = T:Text(lt, 11, T.dim)
+  lt.info:SetPoint("RIGHT", lt.refresh, "LEFT", -8, 0)
+  local PRICE_X, PRICE_W, QTY_W, SELLER_X = 8, 120, 70, 220
+  local function cells(parent, size, color)
+    local p = T:Text(parent, size, color)
+    p:SetPoint("LEFT", PRICE_X, 0)
+    p:SetWidth(PRICE_W)
+    p:SetJustifyH("RIGHT")
+    local q = T:Text(parent, size, color)
+    q:SetPoint("LEFT", PRICE_X + PRICE_W, 0)
+    q:SetWidth(QTY_W)
+    q:SetJustifyH("RIGHT")
+    local s = T:Text(parent, size, color)
+    s:SetPoint("LEFT", SELLER_X, 0)
+    s:SetPoint("RIGHT", -8, 0)
+    s:SetJustifyH("LEFT")
+    s:SetWordWrap(false)
+    return p, q, s
+  end
+  local head = CreateFrame("Frame", nil, lt)
+  head:SetHeight(16)
+  head:SetPoint("TOPLEFT", 4, -28)
+  head:SetPoint("TOPRIGHT", -4, -28)
+  local hp, hq, hs = cells(head, 10, T.dim)
+  hp:SetText("Price each"); hq:SetText("Available"); hs:SetText("Seller")
+  lt.rows = {}
+  function lt.makeRow(i)
+    local r = CreateFrame("Button", nil, lt)
+    r:SetHeight(LT_ROW)
+    r:SetPoint("TOPLEFT", 4, -(44 + (i - 1) * LT_ROW))
+    r:SetPoint("TOPRIGHT", -4, -(44 + (i - 1) * LT_ROW))
+    r.bg = T:Fill(r, { 1, 1, 1, 0 })
+    local hl = r:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.12)
+    r.price, r.qty, r.seller = cells(r, 11)
+    -- Click a listing to price yours under it, as on Blizzard's Sell page.
+    r:SetScript("OnClick", function(self)
+      local e, d = entries[cur], self.data
+      if not (e and d and not d.yours) then return end
+      local under = (e.rule and e.rule.undercut) or 1
+      local p = (d.allMine or sellerText(d) == "You") and d.price or math.max(1, d.price - under)
+      local k = keyOf(e)
+      edits[k] = edits[k] or {}
+      edits[k].price = p
+      e.price = p
+      refresh()
+    end)
+    r:SetScript("OnEnter", function(self)
+      if not (self.data and not self.data.yours) then return end
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine("Click to price yours just under this one.", 1, 1, 1, true)
+      GameTooltip:Show()
+    end)
+    r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    lt.rows[i] = r
+    return r
+  end
+  lt.more = T:Text(lt, 10, T.dim)
+  lt.more:SetPoint("BOTTOMRIGHT", -8, 5)
+  lt.empty = T:Text(lt, 11, T.dim)
+  lt.empty:SetPoint("TOP", 0, -60)
 
   frame.none = T:Text(frame, 12, T.dim)
   frame.none:SetPoint("TOPLEFT", listBox, "TOPRIGHT", 14, -10)
   frame.none:SetText("Pick something on the left.")
 
   frame:SetScript("OnShow", function()
+    -- Right of the window's portrait, unless our tabs hid it (AHTabs.lua).
+    local hidden = ns.AHPortraitHidden and ns:AHPortraitHidden()
+    frame.showBtn:ClearAllPoints()
+    frame.showBtn:SetPoint("TOPLEFT", hidden and 8 or 62, -10)
     setScrollPost(false)
     ns:RefreshPost()
   end)

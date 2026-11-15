@@ -44,6 +44,38 @@ end
 -- The tab you picked, even while the window is hidden; nil after picking a Blizzard tab.
 function ns:AHTabChosen() return chosen end
 
+-- The window's portrait (the auctioneer's face, top left) takes room our tabs can use
+-- (owner, AH15, November 15): hidden while one of ours is open, back on Blizzard's tabs.
+-- The game's ButtonFrameTemplate_HidePortrait swaps to the border without a portrait
+-- ring; without it the portrait pieces are just hidden. Only what was shown comes back
+-- (a UI addon may hide it itself).
+local portraitHidden, portraitWasShown
+local function setPortrait(show)
+  local ah = AuctionHouseFrame
+  if not ah then return end
+  if show then
+    if not portraitHidden then return end
+    portraitHidden = false
+    if portraitWasShown and ButtonFrameTemplate_ShowPortrait then pcall(ButtonFrameTemplate_ShowPortrait, ah) end
+    for part in pairs(portraitWasShown or {}) do part:Show() end
+    portraitWasShown = nil
+    return
+  end
+  if portraitHidden then return end
+  portraitHidden = true
+  portraitWasShown = nil
+  for _, part in pairs({ ah.PortraitContainer, ah.portrait, ah.PortraitFrame, _G.AuctionHouseFramePortrait }) do
+    if part and part.IsShown and part:IsShown() then
+      portraitWasShown = portraitWasShown or {}
+      portraitWasShown[part] = true
+    end
+  end
+  if not portraitWasShown then return end
+  if ButtonFrameTemplate_HidePortrait then pcall(ButtonFrameTemplate_HidePortrait, ah) end
+  for part in pairs(portraitWasShown) do part:Hide() end
+end
+function ns:AHPortraitHidden() return portraitHidden and portraitWasShown ~= nil end
+
 local function deselectOurs()
   for _, b in pairs(buttons) do
     if PanelTemplates_DeselectTab then PanelTemplates_DeselectTab(b) end
@@ -136,6 +168,7 @@ local function make()
   host:SetFrameLevel(ah:GetFrameLevel() + 10)
   host:Hide()
   host:SetScript("OnShow", function(self)
+    setPortrait(false)
     -- Post has its own view (Post.lua); Buy and My auctions show the Buy queue panel.
     local post = ns.PostFrame and ns:PostFrame(self)
     if self.key == "post" then
@@ -150,6 +183,7 @@ local function make()
   host:SetScript("OnHide", function()
     -- The window closing hides us too: remember what was chosen before anything resets it.
     if not AuctionHouseFrame:IsVisible() then closingWith = chosen end
+    setPortrait(true)
     if ns.HideSidePanelInside then ns:HideSidePanelInside() end
     if ns.UpdateAHScanButtons then ns:UpdateAHScanButtons() end
   end)

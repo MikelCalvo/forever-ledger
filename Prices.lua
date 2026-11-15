@@ -1125,7 +1125,7 @@ if C_AuctionHouse and hooksecurefunc then
       -- (Which one, for the browse sweep's log: owner, November 10, the sweep waited for a
       -- search with none made by hand, so the game's own window may send them.)
       hooksecurefunc(C_AuctionHouse, fn, function()
-        if Scan.sending or ns.queueSending then return end
+        if Scan.sending or ns.queueSending or ns.postSending then return end
         ns.lastUserSearch, ns.lastUserSearchBy, ns.lastUserSearchFrom = GetTime(), fn, nil
         if ns.db.settings.debug and debugstack then
           local ok, stack = pcall(debugstack, 2, 12, 0)

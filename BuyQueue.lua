@@ -3563,8 +3563,8 @@ local function showTab(tab)
     b:SetShown(not side.inside or (tab ~= "auctions" and b.key ~= "auctions"))
   end
   -- Inside the window, the row starts right of its portrait (owner's screenshot AH9,
-  -- November 15: it covered "Buy queue").
-  local x = side.inside and 62 or 4
+  -- November 15: it covered "Buy queue"), unless our tabs hid it (AHTabs.lua).
+  local x = (side.inside and not (ns.AHPortraitHidden and ns:AHPortraitHidden())) and 62 or 4
   for _, b in ipairs(side.tabs) do
     if b:IsShown() then
       b:ClearAllPoints()
