@@ -83,6 +83,9 @@ end
 local function cheapestOf(id, link)
   local rec = (ns.db.prices[ns.MarketKey()] or {})[id]
   local cheapest = rec and not rec.none and rec.m or nil
+  -- Only a recent price (Settings: maxAgeHours, 12 by default): an old cheapest may have
+  -- sold long ago, and undercutting it would give gold away. Then the usual price is used.
+  if cheapest and rec.t and time() - rec.t > (ns.db.settings.maxAgeHours or 12) * 3600 then cheapest = nil end
   -- Gear: this version's cheapest ("of the Monkey"), as the price helper does.
   if link and cheapest and ns.VersionOfLink and ns.SuffixPrice then
     local suffix = ns:VersionOfLink(id, link)
