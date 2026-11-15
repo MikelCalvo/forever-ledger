@@ -74,3 +74,9 @@ globals = { "StaticPopupDialogs", "SlashCmdList", "UISpecialFrames", "ColorPicke
 files["Core.lua"] = {
   globals = { "ForeverLedgerDB", "SLASH_FOREVERLEDGER1", "SLASH_FOREVERLEDGER2" },
 }
+
+-- AHTabs.lua clears AuctionHouseFrame.displayMode after emptying Blizzard's content for
+-- our tabs (as the shared LibAHTab does), so a Blizzard tab clicked next opens again.
+files["AHTabs.lua"] = {
+  globals = { "AuctionHouseFrame" },
+}
