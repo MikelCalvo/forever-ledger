@@ -431,6 +431,8 @@ local function buildMinimapButton()
 
   mm:SetScript("OnClick", function(_, which)
     if IsShiftKeyDown() then ns:ShowSidePanel("lists")
+    elseif IsControlKeyDown() and ns.GeneralSessionRunning then   -- (sessions, back November 15)
+      if ns:GeneralSessionRunning() then ns:StopGeneralSession() else ns:StartGeneralSession() end
     elseif which == "RightButton" then ns:ToggleUI("shuffles") else ns:ToggleUI() end
   end)
   mm:SetScript("OnDragStart", function(self)
@@ -449,6 +451,9 @@ local function buildMinimapButton()
     GameTooltip:AddLine("Click to open or close.", 1, 1, 1)
     GameTooltip:AddLine("Right-click for shuffles.", 1, 1, 1)
     GameTooltip:AddLine("Shift-click for shopping lists.", 1, 1, 1)
+    if ns.GeneralSessionRunning then
+      GameTooltip:AddLine(ns:GeneralSessionRunning() and "Ctrl-click to stop the session." or "Ctrl-click to start a session.", 1, 1, 1)
+    end
     GameTooltip:AddLine("Drag to move. /fl minimap hides it.", 0.7, 0.7, 0.7)
     GameTooltip:Show()
   end)

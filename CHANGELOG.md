@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- Sessions are back, at a player's request: Ctrl-click the minimap button or type `/fl session start`, and the small tracker counts gold an hour, gold in and out and what you loot. Stopped sessions are listed in the Ledger's Sessions sub-tab, and Settings, Sessions has Count loot at. Not on the Dashboard for now.
+
 ## [0.25.0] - 2026-11-14
 
 ### Highlights

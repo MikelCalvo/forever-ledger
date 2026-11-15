@@ -642,11 +642,11 @@ function ns:WorthOfCopy(best, options, copyPrice)
 end
 
 -- What one looted item is worth: the better of the auction house after the cut and a
--- vendor; items that bind when picked up only a vendor's (they can't be listed). Unused since
--- dungeon runs were archived (November 14); kept for a farming section (Sessions.lua, Dungeons.lua).
+-- vendor (or a vendor's only: Settings, Sessions, Count loot at); items that bind when picked
+-- up only a vendor's (they can't be listed). Sessions.lua values loot by it.
 function ns:LootValue(id)
   local vendor = ns:GetSellPrice(id) or 0
-  if ns.IsClassicBound and ns:IsClassicBound(id) then return vendor end
+  if ns.db.settings.sessionValue == "vendor" or (ns.IsClassicBound and ns:IsClassicBound(id)) then return vendor end
   local price = ns:GetPrice(id)
   local ah = price and ns:AfterCut(math.floor(price)) or 0
   return math.max(ah, vendor)

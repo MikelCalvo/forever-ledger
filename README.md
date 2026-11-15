@@ -55,6 +55,7 @@
 - **Characters:** every character's bags and bank, per realm and faction, with what it's all worth and the best way to turn each item into gold.
 - **Bag value:** a bag's tooltip shows what one slot costs and the cheapest bag per slot right now.
 - **Riding fund:** how close you are to riding at 40 and epic riding at 60, mount included.
+- **Sessions:** a small tracker for gold an hour, gold in and out and what you loot, and every session listed in the Ledger.
 
 ### Getting around
 - **Welcome and Help:** a short guide the first time, Help by topic with common questions, and search boxes for Settings and Help.
@@ -127,6 +128,7 @@ Most things have a button; these are for when you'd rather type. The main ones:
 | `/fl margin 10` | Safety margin for shuffles and "buy at or below", in percent |
 | `/fl seconds 3` | Seconds per craft, used for profit per hour |
 | `/fl money` | Today's money in and out for this character |
+| `/fl session start`, `/fl session stop` | Start or stop a session (or Ctrl-click the minimap button) |
 | `/fl de` | Disenchant results so far, against what the addon expects (`/fl de reset` to start over) |
 | `/fl new`, `/fl welcome` | What's new in this version; the welcome again |
 | `/fl pair First Last` | Pair with your character on another account for live sync (do it on both); `/fl unpair` stops it and removes their characters |

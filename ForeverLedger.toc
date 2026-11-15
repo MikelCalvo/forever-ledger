@@ -38,6 +38,7 @@ Settings.lua
 UI.lua
 Help.lua
 Welcome.lua
+Sessions.lua
 Training.lua
 Sync.lua
 Version.lua

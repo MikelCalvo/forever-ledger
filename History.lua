@@ -322,7 +322,7 @@ end
 -- An entry can change after it's made (vendor trades merge, today's totals grow), so
 -- it's replaced by time rather than added to.
 ---------------------------------------------------------------------------
-local BOOK_LOGS = { "sales", "purchases", "vendorLog", "sessions" }   -- (sessions: old ones, kept since sessions were archived November 13)
+local BOOK_LOGS = { "sales", "purchases", "vendorLog", "sessions" }
 
 -- When an entry last changed: a session's end, not its start (Codex review, November 5:
 -- a long session started before the stretch being sent, so it never went).
@@ -443,6 +443,8 @@ local function onMoney()
   if dep > 0 then totals.ahDepositBack = (totals.ahDepositBack or 0) + dep end
   logOther(source, math.abs(delta) - dep, ns.CharKey(), time())
   if dep > 0 then logOther("ahDepositBack", dep, ns.CharKey(), time()) end
+  -- A running session counts it too (Sessions.lua, back November 15).
+  if ns.SessionMoney then ns:SessionMoney(source, delta) end
 
   local now, who = time(), ns.CharKey()
   for _, h in ipairs(hints) do
@@ -1428,7 +1430,7 @@ local LABELS = {
   loot = "Loot", quest = "Quests", training = "Training", flight = "Flights",
   otherIn = "Other income", otherOut = "Other spending",
 }
-ns.MONEY_LABELS = LABELS
+ns.MONEY_LABELS = LABELS   -- (Sessions.lua: the tracker's hover lists money by source)
 local INCOME = { ahSale = true, ahDepositBack = true, vendorSell = true, mailIn = true, tradeIn = true, loot = true, quest = true, otherIn = true }
 
 -- Today's money for this character as lines ("Sold to vendors: +5s"), plus the net.
