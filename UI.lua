@@ -114,6 +114,7 @@ local TABS = {
   { key = "ledger", label = "Ledger" },
   { key = "crates", label = "Crates", setting = "crates" },
   { key = "recipes", label = "Recipes" },
+  { key = "groups", label = "Groups" },   -- GroupsTab.lua (redesign build step 6)
   { key = "characters", label = "Characters" },
   { key = "settings", label = "Settings" },
   { key = "help", label = "Help" },
@@ -189,6 +190,7 @@ local function buildMain()
     crates = ns:BuildCrates(main.body),
     recipes = ns:BuildRecipes(main.body),
     characters = ns:BuildCharacters(main.body),   -- Characters.lua
+    groups = ns:BuildGroups(main.body),   -- GroupsTab.lua
     help = ns:BuildHelp(main.body),   -- Help.lua
   }
   main.views.settings = ns:BuildSettings(main.body)   -- Settings.lua
@@ -381,6 +383,8 @@ function ns:RefreshUI()
     ns:RefreshDeals()
   elseif main.view == "help" then
     ns:RefreshHelp()
+  elseif main.view == "groups" then
+    ns:RefreshGroupsTab()
   elseif main.view == "recipes" then
     ns:RefreshRecipes()
   elseif main.view == "characters" then

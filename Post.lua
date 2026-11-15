@@ -40,7 +40,7 @@ function ns.PostPrice(rule, usual, cheapest, vendorFloor)
     price = cheapest - (rule.undercut or 0)
     out.why = (rule.undercut or 0) > 0 and ("%s under the cheapest (%s)"):format(ns.MoneyPlain(rule.undercut), ns.MoneyPlain(cheapest))
       or ("the cheapest (%s)"):format(ns.MoneyPlain(cheapest))
-  elseif usual and usual > 0 then
+  elseif usual and usual > 0 and rule.start ~= "cheapest" then
     price = usual
     out.why = "the usual price (none listed now)"
   else

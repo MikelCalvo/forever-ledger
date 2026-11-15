@@ -19,7 +19,7 @@ read_globals = {
 
   -- Frames, UI enums, localized strings and constants supplied by Blizzard.
   "AuctionFrame", "AuctionHouseFrame", "AuctionHouseFrameDisplayMode", "LibStub",
-  "PanelTemplates_DeselectTab", "PanelTemplates_SelectTab", "PanelTemplates_TabResize",
+  "PanelTemplates_DeselectTab", "PanelTemplates_SelectTab", "PanelTemplates_TabResize", "ChatEdit_InsertLink",
   "WOW_PROJECT_ID", "WOW_PROJECT_MAINLINE",
   "GameTooltip", "ItemRefTooltip", "Minimap", "ProfessionsFrame", "RaidWarningFrame",
   "TradeFrameRecipientNameText", "TradeSkillFrame", "UIErrorsFrame", "UIParent",
