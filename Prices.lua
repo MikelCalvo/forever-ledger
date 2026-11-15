@@ -1775,6 +1775,44 @@ function ns:GetPrice(id)
   return nil, nil, rec and rec.t, rec
 end
 
+-- Own observations only, for the redesign's opt-in price values. A pure function:
+-- no API calls, fallback addons, cache updates or input mutation. Listed=0 is known
+-- empty; nil means unknown. Old observations never masquerade as "cheapest now".
+function ns.PriceCurrentValues(rec, now, maxAge)
+  local out = {}
+  if type(rec) ~= "table" or type(now) ~= "number" or now ~= now or now == math.huge then return out end
+  if rec.src ~= nil and rec.src ~= "scan" and rec.src ~= "full" then return out end
+  local t = rec.t
+  if type(t) ~= "number" or t ~= t or t < 0 or t > now then return out end
+  out.lastSeen = t
+  maxAge = maxAge or 12 * 3600
+  if type(maxAge) ~= "number" or maxAge ~= maxAge or maxAge < 0 or maxAge >= math.huge then return out end
+  if now - t > maxAge then out.stale = true; return out end
+  local q = rec.q
+  if type(q) == "number" and q >= 0 and q < math.huge and q % 1 == 0 then out.listed = q end
+  if rec.none or out.listed == 0 then out.listed = 0; return out end
+  if type(rec.m) == "number" and rec.m > 0 and rec.m < math.huge then out.cheapest = rec.m end
+  return out
+end
+
+-- One explicit market snapshot, including Booty Bay. Read-only even when that market
+-- has never been scanned; no schema/group/rule data or existing pricing caller changes.
+-- See History.lua PriceHistoryValues for windows, weighting and evidence counts.
+function ns:PriceValues(id, market)
+  if not ns.db or not id then return {} end
+  market = market or ns.MarketKey()
+  local now = time()
+  local function entry(root)
+    local markets = ns.db[root]
+    return markets and markets[market] and markets[market][id]
+  end
+  local out = ns.PriceHistoryValues(entry("history"), entry("historySold2"), ns.LocalDay(now),
+    ns.db.vendorSellChanged and ns.db.vendorSellChanged[id])
+  local current = ns.PriceCurrentValues(entry("prices"), now, (ns.db.settings.maxAgeHours or 12) * 3600)
+  for k, v in pairs(current) do out[k] = v end
+  return out
+end
+
 -- Copy prices from Auctionator/TSM/Auctioneer into the ledger so they're included in exports.
 function ns:PullExternal()
   local sources = ns:ExternalSources()
