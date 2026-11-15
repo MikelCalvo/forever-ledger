@@ -1011,7 +1011,7 @@ function ns:ApiReport()
     -- Buy queue (BuyQueue.lua): buying needs these, each from a click or a mouse wheel tick.
     "C_AuctionHouse.StartCommoditiesPurchase", "C_AuctionHouse.CancelCommoditiesPurchase", "C_AuctionHouse.PlaceBid",
     "C_AuctionHouse.SendBrowseQuery", "C_AuctionHouse.GetBrowseResults", "C_AuctionHouse.HasFullBrowseResults",
-    -- The flip watch's browse sweep (Sweep.lua): the whole list, and the searches that replace it.
+    -- Live watch's browse sweep (Sweep.lua): the whole list, and the searches that replace it.
     "C_AuctionHouse.RequestMoreBrowseResults", "C_AuctionHouse.SearchForItemKeys", "C_AuctionHouse.SearchForFavorites",
     "Enum.AuctionHouseFilter.PoorQuality", "Enum.AuctionHouseSortOrder.Name",
     -- Our tabs in the auction house window (AHTabs.lua), the groups (Groups.lua).

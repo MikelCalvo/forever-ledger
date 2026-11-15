@@ -303,7 +303,7 @@ setView = function(view)
   end
 end
 
--- The flip watch and price saves call this: if the Vendor flips tab is on screen, work
+-- Live watch and price saves call this: if the Vendor flips tab is on screen, work
 -- out just the flips again (not every shuffle, which took 195 ms each time), at most
 -- every 2 seconds.
 local flipsQueued = false
@@ -327,7 +327,7 @@ end
 
 -- After a full scan finds vendor flips: open the Buy queue beside the auction house, if
 -- it's closed. It never switches a tab you're on (a shopping list you're working on),
--- and the flip watch's quick checks don't open anything (owner, October 2).
+-- and Live watch's quick checks don't open anything (owner, October 2).
 function ns:OpenFlips()
   if ns.OpenBuyQueueGently then ns:OpenBuyQueueGently() end
 end
@@ -1116,7 +1116,7 @@ ns:OnReady(function()
   end)
 end)
 
--- Plain text in the status corner (the flip watch's countdown between checks).
+-- Plain text in the status corner (Live watch's countdown between checks).
 -- The Buy queue panel shows the same line (ns.statusText).
 function ns:SetStatusText(text)
   ns.statusText = text or ""
@@ -1171,7 +1171,7 @@ function ns:OnAHShow()
     ns.ahButton:HookScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_TOP")
       GameTooltip:AddLine("Pause", 1, 1, 1)
-      GameTooltip:AddLine("Holds the flip watch and the Buy queue's own lookups, so your searches and the page you're on stay as you leave them. Click Resume to carry on; closing the auction house ends it too.", nil, nil, nil, true)
+      GameTooltip:AddLine("Holds Live watch and the Buy queue's own lookups, so your searches and the page you're on stay as you leave them. Click Resume to carry on; closing the auction house ends it too.", nil, nil, nil, true)
       GameTooltip:Show()
     end)
     ns.ahButton:HookScript("OnLeave", function() GameTooltip:Hide() end)

@@ -7,6 +7,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 - Forever Ledger's own tabs in the auction house window: **Buy** (the Buy queue, shopping lists and Disenchant finder) and **My auctions**, after Blizzard's Buy, Sell and Auctions along the bottom. The tab you had open opens again next visit. New flips found while you're on one of Blizzard's tabs show as a count on Buy instead of changing the view. Settings, Auction house, **Forever Ledger's tabs in the auction house** (on); off puts the panel back beside the window.
+- Buy queue rows: a star to watch the item or stop watching it, and a short reason (FLIP, WATCH, or the shopping list's name). The numbers keep their places on the right, so a long name is shortened instead of pushing Profit off.
+
+### Changed
+- The flip watch is now called **Live watch** (it looks for watched items and deals too, not just vendor flips).
 
 ## [0.26.0] - 2026-11-15
 

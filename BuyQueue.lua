@@ -269,7 +269,7 @@ local function pausedNow()
 end
 Q.pausedNow = pausedNow   -- (for the tests)
 
--- Looking something up or waiting on a purchase's answer: the flip watch's browse sweep
+-- Looking something up or waiting on a purchase's answer: Live watch's browse sweep
 -- (Sweep.lua) waits for it before asking for its next group.
 function ns:BuyQueueBusy()
   local s = Q.state
@@ -489,7 +489,7 @@ function search()
   -- A full scan isn't waited for any more (owner, November 11: 22-24 seconds each with
   -- 222,000 listings, every 15 minutes, with nothing bought meanwhile). Being tried: the
   -- full scan log says whether it still arrives whole.
-  -- (A part of the flip watch's auction house list already on its way is, a moment at most:
+  -- (A part of Live watch's auction house list already on its way is, a moment at most:
   -- the sweep waits for the queue before asking for the next one, Sweep.lua.)
   if throttled() or (ns.SweepWaiting and ns:SweepWaiting()) then
     -- The auction house is free again in a moment (a purchase's throttle, a part of the
@@ -726,7 +726,7 @@ function Q.skip(e)
 end
 
 -- Make a section the one that looks things up and buys. Only you do this (a click, or
--- the wheel over its strip); scans and the flip watch never switch it, except that a new
+-- the wheel over its strip); scans and Live watch never switch it, except that a new
 -- flip's chime shows Vendor flips when you're not using a list (ns:FlipsAnnounced).
 local function arm(key, quiet)
   if Q.armed == key then return end
@@ -1055,7 +1055,7 @@ local lastAct = 0
 local CATCHING_UP = "The auction house is catching up: try again in a moment."
 local PLAN_SECONDS = 15   -- how long what a lookup found is trusted
 -- clicked: a click on the button (not the wheel). With nothing to buy, the button runs
--- the flip watch instead (owner, October 3: "Look again" seemed odd); the wheel never
+-- Live watch instead (owner, October 3: "Look again" seemed odd); the wheel never
 -- starts a scan.
 function ns:BuyQueueAct(clicked)
   noteListUse()
@@ -1623,7 +1623,7 @@ local function statusText()
   if left and left < 1 then
     return "You've spent your limit for this visit.",
       ("Spent %s of %s. Raise Spend at most below to buy more, or it starts again next visit."):format(money(Q.spent), money(S().limit)),
-      watching and "Stop" or "Watch flips"
+      watching and "Stop" or "Live watch"
   end
   local poorText = spendable() < GetMoney() and "%d over your limit (grayed below)." or "%d you can't afford yet (grayed below)."
   local why
@@ -1640,9 +1640,9 @@ local function statusText()
     why = (poor > 0 and poorText:format(poor))
       or (waiting > 0 and ("%d waiting for a lower price (grayed below)."):format(waiting))
       or (watching and "Watching for flips; new ones show up here.")
-      or "Click Watch flips below to keep scanning while you're here."
+      or "Click Live watch below to keep scanning while you're here."
   end
-  return "Nothing to buy yet.", Q.note and (Q.note .. " " .. why) or why, watching and "Stop" or "Watch flips"
+  return "Nothing to buy yet.", Q.note and (Q.note .. " " .. why) or why, watching and "Stop" or "Live watch"
 end
 
 -- A section that isn't armed: what it has, and how to start it.
@@ -1660,6 +1660,22 @@ local function idleText(d)
     "|cff888888Click Start to buy from this section, or click an item below to buy it first.|r"
 end
 
+-- Column places, from each row's right edge (the header's are 10 further right: the rows
+-- end left of the scroll bar). Why is a short tag (FLIP, WATCH) or the shopping list's name.
+local COL = { profit = -4, cheap = -92, limit = -136, why = -262, whyW = 70 }
+local WHY = { flip = "FLIP", watch = "WATCH" }
+
+-- The star's look: the auction house's own favorite star where the game has it.
+local function setStar(tex, on)
+  local atlas = on and "auctionhouse-icon-favorite" or "auctionhouse-icon-favorite-off"
+  local ok = tex.SetAtlas and pcall(tex.SetAtlas, tex, atlas)
+  if not ok or (tex.GetAtlas and not tex:GetAtlas()) then
+    tex:SetTexture("Interface\\Common\\ReputationStar")
+    tex:SetTexCoord(on and 0 or 0.5, on and 0.5 or 1, 0, 0.5)
+  end
+  tex:SetAlpha(on and 1 or 0.45)
+end
+
 local function laneRow(L, i)
   local r = L.rows[i]
   if r then return r end
@@ -1671,20 +1687,56 @@ local function laneRow(L, i)
   local hl = r:CreateTexture(nil, "HIGHLIGHT")
   hl:SetAllPoints()
   hl:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.12)
+  -- A star to watch the item or stop watching it (Watched.lua; owner's mockup, November 15).
+  r.star = CreateFrame("Button", nil, r)
+  r.star:SetSize(13, 13)
+  r.star:SetPoint("LEFT", 2, 0)
+  r.star.tex = r.star:CreateTexture(nil, "ARTWORK")
+  r.star.tex:SetAllPoints()
+  r.star:SetScript("OnClick", function(self)
+    local e = self:GetParent().entry
+    if not e then return end
+    if ns:IsWatched(e.id) then ns:UnwatchItem(e.id)
+    else ns:WatchItem(e.id, e.reason == "list" and e.limit or nil) end
+    rebuildNow()
+    refreshQueue()
+    if GameTooltip:IsOwned(self) then self:GetScript("OnEnter")(self) end
+  end)
+  r.star:SetScript("OnEnter", function(self)
+    local e = self:GetParent().entry
+    if not e then return end
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    if ns:IsWatched(e.id) then
+      GameTooltip:AddLine("Watched", 1, 0.82, 0)
+      GameTooltip:AddLine("Live watch looks for it every time it reads the auction house. Click to stop watching it.", 1, 1, 1, true)
+    else
+      GameTooltip:AddLine("Watch this item", 1, 1, 1)
+      GameTooltip:AddLine("Live watch then looks for it every time it reads the auction house, and it's bought here at or under your price (set it on the item's price window).", nil, nil, nil, true)
+    end
+    GameTooltip:Show()
+  end)
+  r.star:SetScript("OnLeave", function() GameTooltip:Hide() end)
   r.icon = r:CreateTexture(nil, "ARTWORK")
   r.icon:SetSize(14, 14)
-  r.icon:SetPoint("LEFT", 2, 0)
+  r.icon:SetPoint("LEFT", r.star, "RIGHT", 3, 0)
   r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  -- Columns from the right edge: the numbers keep their place and are never cut off, the
+  -- name gets the room that's left and is the one shortened (owner, November 15: "if any
+  -- of these sections is cutoff it should be the WHY section", then the name).
+  r.limit, r.n, r.profit = T:Text(r, 11), T:Text(r, 11), T:Text(r, 11)
+  r.profit:SetPoint("RIGHT", r, "RIGHT", COL.profit, 0)
+  r.n:SetPoint("RIGHT", r, "RIGHT", COL.cheap, 0)
+  r.limit:SetPoint("RIGHT", r, "RIGHT", COL.limit, 0)
+  r.why = T:Text(r, 10, T.dim)
+  r.why:SetPoint("LEFT", r, "RIGHT", COL.why, 0)
+  r.why:SetWidth(COL.whyW)
+  r.why:SetJustifyH("LEFT")
+  r.why:SetWordWrap(false)
   r.name = T:Text(r, 11)
   r.name:SetPoint("LEFT", r.icon, "RIGHT", 4, 0)
-  r.name:SetWidth(216)
+  r.name:SetPoint("RIGHT", r.why, "LEFT", -8, 0)
   r.name:SetJustifyH("LEFT")
   r.name:SetWordWrap(false)
-  r.limit, r.n, r.profit = T:Text(r, 11), T:Text(r, 11), T:Text(r, 11)
-  -- Profit gets the widest column: "10g 45s 64c" ran into Cheap (owner, October 2).
-  r.limit:SetPoint("RIGHT", r, "LEFT", 294, 0)
-  r.n:SetPoint("RIGHT", r, "LEFT", 340, 0)
-  r.profit:SetPoint("RIGHT", r, "LEFT", 432, 0)
   r:SetScript("OnClick", function(self, button)
     if button == "RightButton" then
       Q.skip(self.entry)
@@ -1704,7 +1756,7 @@ local function laneRow(L, i)
       GameTooltip:AddLine("Waiting: none listed at or under your price at the last search. Raise Up to on the list, or click Search all on the list again later.", 1, 0.82, 0, true)
     end
     if self.entry.stale then
-      GameTooltip:AddLine(("Last seen %d minutes ago, so it may be gone. Buying it (or the flip watch) checks it again."):format(
+      GameTooltip:AddLine(("Last seen %d minutes ago, so it may be gone. Buying it (or Live watch) checks it again."):format(
         math.floor(self.entry.age / 60)), 0.8, 0.8, 0.8, true)
     end
     local e = self.entry
@@ -1838,11 +1890,14 @@ local function buildLane(v, d)
   header:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", 4, -2)
   header:SetPoint("TOPRIGHT", strip, "BOTTOMRIGHT", -4, -2)
   header:SetHeight(14)
-  -- "Up to" and "Cheap" ran together (Magic's screenshot, October 3): more room between.
-  for _, c in ipairs({ { "Item", 4, "LEFT" }, { "Up to", 294, "RIGHT" }, { "Cheap", 340, "RIGHT" },
-                       { d.key == "lists" and "Now" or "Profit", 428, "RIGHT" } }) do
+  -- The same places as the rows' columns (COL), from the right; rows end 10 short of it.
+  for _, c in ipairs({ { "Item", 34, "LEFT" }, { d.key == "lists" and "List" or "Why", COL.why - 10, "WHY" },
+                       { "Up to", COL.limit - 10 }, { "Cheap", COL.cheap - 10 },
+                       { d.key == "lists" and "Now" or "Profit", COL.profit - 10 } }) do
     local fs = T:Text(header, 10, T.dim)
-    if c[3] == "LEFT" then fs:SetPoint("LEFT", c[2], 0) else fs:SetPoint("RIGHT", header, "LEFT", c[2], 0) end
+    if c[3] == "LEFT" then fs:SetPoint("LEFT", c[2], 0)
+    elseif c[3] == "WHY" then fs:SetPoint("LEFT", header, "RIGHT", c[2], 0)
+    else fs:SetPoint("RIGHT", header, "RIGHT", c[2], 0) end
     fs:SetText(c[1])
   end
   L.sf, L.content = T:Scroll(L)
@@ -1925,7 +1980,7 @@ local function buildQueueView(parent)
   v.watched:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     GameTooltip:AddLine("Watched items", 1, 1, 1)
-    GameTooltip:AddLine("Items you always want checked, each with the most you'd pay. Watch flips looks for them about every 20 seconds, and they're bought here, first in the list. Add one here or with Watch in its price window.", nil, nil, nil, true)
+    GameTooltip:AddLine("Items you always want checked, each with the most you'd pay. Live watch looks for them about every 20 seconds, and they're bought here, first in the list. Add one here or with Watch in its price window.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   v.watched:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1948,8 +2003,8 @@ local function buildQueueView(parent)
     end)
     b:HookScript("OnLeave", function() GameTooltip:Hide() end)
   end
-  -- Flips view: Watch flips. Shopping lists view: Search lists (every list bought from).
-  v.watchBtn = T:Button(v, "Watch flips", 118, function()
+  -- Flips view: Live watch. Shopping lists view: Search lists (every list bought from).
+  v.watchBtn = T:Button(v, "Live watch", 118, function()
     if view() == "lists" then ns:SearchQueueLists() else ns:ToggleFlipWatch() end
   end, 22)
   v.watchBtn:SetPoint("BOTTOMLEFT", 10, 8)
@@ -1959,7 +2014,7 @@ local function buildQueueView(parent)
       GameTooltip:AddLine("Search my lists", 1, 1, 1)
       GameTooltip:AddLine("Checks the auction house for everything on your lists ticked \"Buy from this list in the Buy queue\" (and the materials you're short of), one item at a time. What's at or under your price shows up here.", nil, nil, nil, true)
     else
-      GameTooltip:AddLine("Watch flips", 1, 1, 1)
+      GameTooltip:AddLine("Live watch", 1, 1, 1)
       GameTooltip:AddLine("Keeps looking for flips while the auction house stays open: a full scan whenever the game allows one (about every 15 minutes), and the whole auction house list read about every 20 seconds in between. New flips chime and join the queue as soon as the part of the list they're in arrives. Click again to stop.", nil, nil, nil, true)
     end
     GameTooltip:Show()
@@ -1973,8 +2028,8 @@ local function buildQueueView(parent)
   -- whole-list reading made redundant; /fl scan materials still does it).
   v.pauseBtn = T:Button(v, "Pause", 118, function() ns:ToggleScanPause() end, 22)
   v.pauseBtn:SetPoint("LEFT", v.fullBtn, "RIGHT", 6, 0)
-  tip(v.pauseBtn, "Pause", "Holds the flip watch and the Buy queue's own lookups, so your searches and the page you're on stay as you leave them. Buy, Go now and clicking a row still work. Click Resume to carry on; closing the auction house ends it too.")
-  -- Above the buttons: the flip watch's status line, the whole width; above it, what you've
+  tip(v.pauseBtn, "Pause", "Holds Live watch and the Buy queue's own lookups, so your searches and the page you're on stay as you leave them. Buy, Go now and clicking a row still work. Click Resume to carry on; closing the auction house ends it too.")
+  -- Above the buttons: Live watch's status line, the whole width; above it, what you've
   -- bought. (They shared one line, and the status was cut off once the totals grew: owner,
   -- UI pass checks, November 11.)
   v.totals = T:Text(v, 11, T.dim)
@@ -2077,7 +2132,7 @@ local function layoutLanes(v)
     -- the mouse on and scroll while farming (owner, October 2).
     local big = n == 1
     L.strip:SetHeight(big and STRIP_BIG or STRIP_H)
-    L.buy:SetSize(big and 104 or 86, big and 60 or 34)   -- wide enough for "Watch flips"
+    L.buy:SetSize(big and 104 or 86, big and 60 or 34)   -- wide enough for "Live watch"
     L.buy:GetFontString():SetFont(T.font, big and 16 or 14, "")
     L.icon:SetSize(big and 36 or 24, big and 36 or 24)
     L.line1:SetFont(T.font, big and 13 or 12, "")
@@ -2141,7 +2196,7 @@ local function fillLane(L)
   L.line1:SetText(a)
   L.line2:SetText(b or "")
   -- The button only when there's something to click (Buy, Confirm, Go now); otherwise
-  -- the mouse: the bottom row already has Watch flips (Magic: "just a duplicate").
+  -- the mouse: the bottom row already has Live watch (Magic: "just a duplicate").
   local action = label == "Buy" or label == "Confirm" or label == "Go now"
   L.buy:SetShown(action)
   L.mouse:SetShownAll(not action)
@@ -2166,6 +2221,8 @@ local function fillLane(L)
     r.name:SetText(grey and ("|cff888888" .. ns.ItemName(e.id) .. "|r") or ns.ItemName(e.id))
     r.limit:SetText(e.any and "any" or money(e.limit))
     r.n:SetText(e.waiting and "0" or (e.n and tostring(e.n) or "?"))
+    r.why:SetText(d.key == "lists" and (e.list or "") or WHY[e.reason] or "")
+    setStar(r.star.tex, ns:IsWatched(e.id))
     if d.key == "lists" then
       local rec = (ns.db.prices[ns.MarketKey()] or {})[e.id]
       local now = rec and rec.m and not rec.none and ns.MoneyPlain(rec.m) or "none"
@@ -2263,7 +2320,7 @@ function ns:UpdatePanelScanButtons()
   local v = queueView
   if not v or not v.watchBtn then return end
   local lists = view() == "lists"
-  v.watchBtn:SetText(lists and "Search my lists" or (ns:IsFlipWatching() and "Stop watching" or "Watch flips"))
+  v.watchBtn:SetText(lists and "Search my lists" or (ns:IsFlipWatching() and "Stop watching" or "Live watch"))
   -- (Only works at the auction house; Stop always does. UI pass, November 9.)
   v.watchBtn:SetEnabled((ns:IsAHOpen() or (not lists and ns:IsFlipWatching())) and not (lists and ns.Scan.active))
   local paused = ns.IsScanPaused and ns:IsScanPaused()
@@ -3433,7 +3490,7 @@ refreshLists = function()
         done == #list.items and "|cff7fd39c" or "|cffffd100", done, #list.items))
     end
   end
-  -- Search all can start while the flip watch's quick checks run (they pause for it).
+  -- Search all can start while Live watch's quick checks run (they pause for it).
   local busy = (ns.Scan.active and not ns.Scan.quiet) or ns:SearchAllRunning()
   v.searchB:SetEnabled(list ~= nil and #show > 0 and ns:IsAHOpen() and not busy)
   if search then
@@ -3791,7 +3848,7 @@ ns:On("AUCTION_HOUSE_CLOSED", function()
 end)
 
 -- New finds join their sections (the current item stays where it is). Never changes
--- which section is armed: scans and the flip watch only add to the lists.
+-- which section is armed: scans and Live watch only add to the lists.
 function rebuildNow()
   if not shown() then return end
   local before = Q.lanes

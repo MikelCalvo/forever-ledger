@@ -574,7 +574,7 @@ ns:OnReady(function()
   end)
   -- The auction house window asks for an item's listings when you open it. Our own
   -- scans do too, so those are ignored. (Checks the scan's own sends, not "a scan is
-  -- running": with the flip watch on, a scan is always running, so your pages were
+  -- running": with Live watch on, a scan is always running, so your pages were
   -- ignored and a Soldier's Armor purchase was put down as Curved Dagger, October 2.)
   hook(C_AuctionHouse, "SendSearchQuery", function(itemKey)
     -- Not the buy queue's own searches either: they run in the background while you
@@ -1317,7 +1317,7 @@ end
 local function soldEntry(e)
   local d, g, m, c = e:match("^(%d+):(%d+):(%d+):?(%d*)$")
   -- Three-number entries came from the first version, which only compared scans within
-  -- one session (the flip watch), so count them as close.
+  -- one session (Live watch), so count them as close.
   return tonumber(d), tonumber(g), tonumber(m), tonumber(c) or tonumber(m)
 end
 
@@ -1362,7 +1362,7 @@ end
 -- since Copper Ore is expected to move in bulk and a sword isn't. Turnover is units
 -- bought a day for each one usually listed: 4 a day with 5 listed beats 100 listed and
 -- none selling. Rare items that are seldom listed but go when they are get their own
--- rating. Shown only after 3 hours of scans compared (the flip watch gets there fastest).
+-- rating. Shown only after 3 hours of scans compared (Live watch gets there fastest).
 ---------------------------------------------------------------------------
 local SPEED_MIN_MINUTES = 180
 local SPEED_NONE_MINUTES = 12 * 60   -- this long with none bought: "no sales seen"

@@ -4,7 +4,7 @@ local T = ns.Theme
 ---------------------------------------------------------------------------
 -- Your auctions (owner, October 3: undercut alerts "absolutely", from the ForeverForge
 -- list). The side panel's fourth tab lists what you have up: quantity, your price each,
--- the cheapest now, and whether you've been undercut. Scans (and the flip watch) check
+-- the cheapest now, and whether you've been undercut. Scans (and Live watch) check
 -- it as they save prices; Check prices looks up all of yours at once. An undercut gets
 -- a sound and a chat line once per price. Cancel is one auction per click, two clicks
 -- each (cancelling loses the deposit). Blizzard needs a click for every cancel and post.
@@ -724,7 +724,7 @@ function ns:YourAuctionsFrame(side)
   frame.check:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:AddLine("Check prices", 1, 1, 1)
-    GameTooltip:AddLine("Looks up everything you have listed on the auction house now, one item at a time, and marks the ones that have been undercut. Full scans and the flip watch check them too.", nil, nil, nil, true)
+    GameTooltip:AddLine("Looks up everything you have listed on the auction house now, one item at a time, and marks the ones that have been undercut. Full scans and Live watch check them too.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   frame.check:HookScript("OnLeave", function() GameTooltip:Hide() end)

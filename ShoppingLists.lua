@@ -1189,7 +1189,7 @@ nextGear = function()
   if not e then
     runner = nil
     if #r.rest > 0 then
-      ns.Scan:StartList(r.rest, r.list.name)   -- the flip watch carries on when it ends
+      ns.Scan:StartList(r.rest, r.list.name)   -- Live watch carries on when it ends
     else
       ns:Print(("Searched %s."):format(r.list.name))
       if ns.FlipWatchNext then ns.FlipWatchNext() end
@@ -1240,8 +1240,8 @@ function ns:SearchAllList(list)
   local scan = ns.Scan
   if scan.active then
     if scan.quiet then
-      -- The flip watch's quick checks give way, and carry on afterwards.
-      scan:Stop("Paused the flip watch's checks for Search all.")
+      -- Live watch's quick checks give way, and carry on afterwards.
+      scan:Stop("Paused Live watch's checks for Search all.")
     else
       ns:Print("A scan is running: Search all can start when it's done.")
       return
