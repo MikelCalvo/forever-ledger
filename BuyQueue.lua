@@ -1675,6 +1675,7 @@ local function setStar(tex, on)
   end
   tex:SetAlpha(on and 1 or 0.45)
 end
+ns.SetWatchStar = setStar   -- (ScanOnce.lua's rows too)
 
 local function laneRow(L, i)
   local r = L.rows[i]
@@ -3550,7 +3551,7 @@ refreshLists = ns.Timed("Shopping lists view", refreshLists)
 -- The side panel and its tabs. Beside the auction house when it's open; anywhere else
 -- (/fl lists) it's a window of its own you can move, so lists can be made before a raid.
 ---------------------------------------------------------------------------
-local TABS = { { "queue", "Buy queue" }, { "lists", "Shopping lists" }, { "finder", "Disenchant finder" }, { "auctions", "Auctions" } }
+local TABS = { { "queue", "Buy queue" }, { "scan", "Scan once" }, { "lists", "Shopping lists" }, { "finder", "Disenchant finder" }, { "auctions", "Auctions" } }
 
 local function showTab(tab)
   S().tab = tab
@@ -3575,6 +3576,8 @@ local function showTab(tab)
   listsView:SetShown(tab == "lists")
   local finder = ns:DisenchantFinderFrame(side)
   if finder then finder:SetShown(tab == "finder") end
+  local scanView = ns.ScanOnceFrame and ns:ScanOnceFrame(side)   -- (ScanOnce.lua)
+  if scanView then scanView:SetShown(tab == "scan") end
   local mine = ns.YourAuctionsFrame and ns:YourAuctionsFrame(side)   -- (Auctions.lua)
   if mine then mine:SetShown(tab == "auctions") end
   updateBinding()

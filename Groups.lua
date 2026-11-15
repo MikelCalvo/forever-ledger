@@ -356,6 +356,10 @@ local function withParents(id)
   return set
 end
 
+-- The same as a set { [gid] = true }, for lists that filter many items at once
+-- (ScanOnce.lua works it out once per item per scan).
+function ns:ItemGroupSet(id) return withParents(id) end
+
 function ns:GroupHas(gid, id)
   if not gid or not id then return false end
   if gid == "all" then return true end

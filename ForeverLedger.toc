@@ -50,5 +50,6 @@ Watched.lua
 Groups.lua
 Auctions.lua
 AHTabs.lua
+ScanOnce.lua
 PriceWindow.lua
 Probe.lua
