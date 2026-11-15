@@ -17,6 +17,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Changed
 - The flip watch is now called **Live watch** (it looks for watched items and deals too, not just vendor flips).
 - Scan once: the Cheapest, Usual and % of usual columns have room for large prices. Groups: the add-an-item box no longer runs under the buttons.
+### Fixed
+- Ledger: a stack bought on the auction house could be put down as another purchase still waiting for its gold (20 Runecloth showed as 1 Red Wolf Meat at Runecloth's price). Each stack purchase now carries the price the game quoted, a refused one takes no gold, and two purchases paid in one go are listed one each.
+
 ## [0.26.0] - 2026-11-15
 
 ### Highlights
