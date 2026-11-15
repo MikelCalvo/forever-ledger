@@ -172,13 +172,9 @@ end
 -- { ..., fix = true } a fix (a wrench). The small ones share one card.
 ---------------------------------------------------------------------------
 ns.WHATS_NEW = {
-  version = "0.25.0",
+  version = "0.26.0",
   lines = {
-    { "Shorter tooltips: quests and crafts take one line each, \"Quests (3)\" and \"Used in crafts (12)\". Hold Shift for the lists, one craft a line with the skill it needs, yours in green.", major = true },
-    { "Darkmoon Faire turn-ins: a coral red line on every item the Faire takes for Prize Tickets, with how many and for how many tickets." },
-    { "Gear you could wear: dungeon drops and quest rewards now say what to do if you won't wear them: sell to a vendor, or disenchant when that's clearly worth more.", change = true },
-    { "Ledger times: flights, loot, repairs, quests and the rest show with their own times, not as one line a day.", change = true },
-    { "Simpler: the Leveling tab, the training advice and dungeon runs are gone. The riding fund stays.", change = true },
+    { "Sessions are back: brought back at the request of flikera in the CurseForge comments. Ctrl-click the minimap button (or type /fl session start) and a small tracker counts gold an hour, gold in and out and what you loot. Stopped sessions are in the Ledger's Sessions sub-tab." },
   },
 }
 

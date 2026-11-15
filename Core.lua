@@ -10,7 +10,7 @@ end
 ns.PREFIX = "|cffb9a2ffForever Ledger:|r"
 
 local DEFAULTS = {
-  schema = 8,
+  schema = 9,
   chars = {},       -- [charKey] = { name, realm, class, level, faction, updated, profs = { [profName] = { rank, max, updated, recipes = {...} } } }
   prices = {},      -- [marketKey][itemID] = { m = cheapest, a = avg of cheapest 20, q = listed, t = time, src = "scan" }
   vendorSell = {},  -- [itemID] = copper the vendor pays you
@@ -51,7 +51,8 @@ local DEFAULTS = {
   quietChars = {},   -- [charKey] = true: quiet mode turned on with /fl quiet there, kept until turned off (Quiet.lua)
   shopping = { lists = {} }, -- shopping lists: { lists = { { name, on, items = { { id, max, qty } } } }, current } (ShoppingLists.lua)
   watchItems = {},   -- [itemID] = { max = copper or nil for the vendor price, t = added }: watched items (Watched.lua)
-  settings = { source = "auto", maxAgeHours = 12, tooltip = true, debug = false, watch = {}, ahCut = 5, margin = 10, actionSeconds = 3, skipChars = {}, minimap = true, minimapAngle = 200, dealSound = true, dealScreen = true, dealChat = true, sellGuard = true, watchResume = true, stackTwoClicks = false, saleSound = true, deRolls = true, keepGold = 0, vendorItemsAH = false, undercutAlerts = true, undercutSound = true, updateNotice = true, priceHelper = true, soldSummary = true,
+  groups = { user = {}, added = {}, removed = {}, rules = {}, saved = {}, nextId = 1 }, -- groups and rules, account-wide (Groups.lua: shapes there)
+  settings = { source = "auto", maxAgeHours = 12, tooltip = true, debug = false, watch = {}, ahCut = 5, margin = 10, actionSeconds = 3, skipChars = {}, minimap = true, minimapAngle = 200, dealSound = true, dealScreen = true, dealChat = true, sellGuard = true, watchResume = true, stackTwoClicks = false, sessionValue = "best", saleSound = true, deRolls = true, keepGold = 0, vendorItemsAH = false, undercutAlerts = true, undercutSound = true, updateNotice = true, priceHelper = true, soldSummary = true,
     dealUsualPct = 20, dealWindow = "all", dealVendorPct = 10, dealVendorMin = 0, dealHistory = "auto", dealUsualMin = 1000, dealShowThin = false, dealsSort = {}, window = {}, ahHighlight = true, dashboard = {}, ledger = {}, deFinder = {}, crates = true, recipes = {}, openFlips = true, customers = true, customerSound = true, customerWindow = true, customerChat = false,
     svcCrafting = true, svcFood = true, svcPortal = true, svcSummon = true, svcLockpick = true,
     -- Buy queue (BuyQueue.lua): what goes in it, scroll anywhere to buy, the side panel's tab.
@@ -746,6 +747,10 @@ ns:On("ADDON_LOADED", function(name)
     ns.PlainRealmData(ForeverLedgerDB)
     ForeverLedgerDB.schema = 8
   end
+  -- Schema 9 (November 15): groups and rules (Groups.lua) start empty; nothing moves.
+  if ForeverLedgerDB.schema < 9 then
+    ForeverLedgerDB.schema = 9
+  end
   -- Settings per character (below): while a character used its own, the shared settings
   -- were also kept under settingsAccount. If the game ever saved the stand-in instead of
   -- the real table, this brings them back.
@@ -1320,9 +1325,15 @@ SlashCmdList.FOREVERLEDGER = function(msg)
     ns:PrintTrainer()
   elseif msg == "fund" then
     ns:FundCommand()
-  elseif msg == "session" or msg:match("^session ") then
-    -- Sessions were removed November 13 (Frank: none used; back if asked for).
-    ns:Print("Sessions were removed in 0.24.0.")
+  elseif msg == "session start" then
+    ns:StartGeneralSession()
+  elseif msg == "session stop" or msg == "session end" then
+    ns:StopGeneralSession()
+  elseif msg == "session" then
+    -- (Sessions were archived November 13 and are back November 15, without the Dashboard's
+    -- button: a player asked for them.)
+    if ns:GeneralSessionRunning() then ns:Print("A session is running: /fl session stop ends it.")
+    else ns:Print("/fl session start begins a session (or Ctrl-click the minimap button).") end
   elseif msg == "money" then
     ns:PrintMoney()
   elseif msg == "minimap" then
@@ -1369,6 +1380,6 @@ SlashCmdList.FOREVERLEDGER = function(msg)
       ns:Print(("Auction house cut is %g%%. Change it with /fl cut 5"):format(ns.db.settings.ahCut or 5))
     end
   else
-    ns:Print("Commands: /fl (window), /fl scan, /fl scan full, /fl scan materials, /fl stop, /fl watch, /fl quiet, /fl price, /fl queue, /fl lists, /fl pull, /fl export, /fl csv, /fl import, /fl source <auto/own/auctionator>, /fl shuffles, /fl shuffles all, /fl cut <percent>, /fl margin <percent>, /fl seconds <n>, /fl deals, /fl deals settings, /fl minimap, /fl money, /fl de, /fl pair <name>, /fl sync, /fl tooltip, /fl welcome, /fl new, /fl api, /fl debug")
+    ns:Print("Commands: /fl (window), /fl scan, /fl scan full, /fl scan materials, /fl stop, /fl watch, /fl quiet, /fl price, /fl queue, /fl lists, /fl pull, /fl export, /fl csv, /fl import, /fl source <auto/own/auctionator>, /fl shuffles, /fl shuffles all, /fl cut <percent>, /fl margin <percent>, /fl seconds <n>, /fl deals, /fl deals settings, /fl minimap, /fl money, /fl session start, /fl session stop, /fl de, /fl pair <name>, /fl sync, /fl tooltip, /fl welcome, /fl new, /fl api, /fl debug")
   end
 end

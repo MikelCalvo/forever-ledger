@@ -6,7 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
-- Vendor flips: click Profit % for return-on-cost sorting, or Profit for the existing total-profit order. Whole percentages are shown, watched items keep priority, and ordinary refreshes keep rows in place.
+- Vendor flips: click Profit % for return-on-cost sorting, or Profit for the existing total-profit order. Whole percentages are shown, watched items keep priority, and ordinary refreshes keep rows in place. Equal total profits use the higher return on cost; equal returns use the higher affordable profit.
+
+## [0.26.0] - 2026-11-15
+
+### Highlights
+- + **Sessions are back**: brought back at the request of flikera in the CurseForge comments. Ctrl-click the minimap button (or `/fl session start`) and a small tracker counts gold an hour, gold in and out and what you loot; stopped sessions are in the Ledger's Sessions sub-tab.
+
+### Added
+- Sessions are back, at a player's request: Ctrl-click the minimap button or type `/fl session start`, and the small tracker counts gold an hour, gold in and out and what you loot. Stopped sessions are listed in the Ledger's Sessions sub-tab, and Settings, Sessions has Count loot at. Not on the Dashboard for now. A session left running on one character no longer counts the time you play another.
 
 ## [0.25.0] - 2026-11-14
 

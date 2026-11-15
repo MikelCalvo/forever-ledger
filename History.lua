@@ -322,7 +322,7 @@ end
 -- An entry can change after it's made (vendor trades merge, today's totals grow), so
 -- it's replaced by time rather than added to.
 ---------------------------------------------------------------------------
-local BOOK_LOGS = { "sales", "purchases", "vendorLog", "sessions" }   -- (sessions: old ones, kept since sessions were archived November 13)
+local BOOK_LOGS = { "sales", "purchases", "vendorLog", "sessions" }
 
 -- When an entry last changed: a session's end, not its start (Codex review, November 5:
 -- a long session started before the stretch being sent, so it never went).
@@ -443,6 +443,8 @@ local function onMoney()
   if dep > 0 then totals.ahDepositBack = (totals.ahDepositBack or 0) + dep end
   logOther(source, math.abs(delta) - dep, ns.CharKey(), time())
   if dep > 0 then logOther("ahDepositBack", dep, ns.CharKey(), time()) end
+  -- A running session counts it too (Sessions.lua, back November 15).
+  if ns.SessionMoney then ns:SessionMoney(source, delta) end
 
   local now, who = time(), ns.CharKey()
   for _, h in ipairs(hints) do
@@ -1188,6 +1190,90 @@ local function pricingPoints(id)
 end
 ns.PricingPoints = pricingPoints   -- (tests)
 
+---------------------------------------------------------------------------
+-- Price values for the redesign (November 15). Opt-in: existing UsualPrice and
+-- PriceStats deliberately keep their released sampling. These pure calculations
+-- use the daily strings directly, not pricingPoints' synthetic older weeks.
+-- Input strings are borrowed, never changed; day and changed are local day numbers.
+---------------------------------------------------------------------------
+local function positivePrice(n)
+  return type(n) == "number" and n > 0 and n < math.huge
+end
+
+local function middlePrice(values)
+  table.sort(values)
+  local n = #values
+  if n % 2 == 1 then return values[(n + 1) / 2] end
+  return values[n / 2] / 2 + values[n / 2 + 1] / 2
+end
+
+-- One observation per completed day. Usual uses linear calendar-day weights:
+-- yesterday=14, fourteen days ago=1. Missing days have no weight or invented price.
+-- With at least five days, reject prices farther from the median than three scaled
+-- median absolute deviations (MAD), with a 50% median floor. The floor avoids
+-- rejecting ordinary movement in a flat market (MAD=0); a lone extreme still drops.
+-- Recent/long-term use equal-day means with the same filter when enough days exist.
+local function historyMean(points, day, days, weighted, changed)
+  local chosen, prices = {}, {}
+  for d, value in pairs(points) do
+    if d >= day - days and d < day and (not changed or d >= changed) then
+      chosen[#chosen + 1] = { value = value, weight = weighted and (days - (day - d) + 1) or 1 }
+      prices[#prices + 1] = value
+    end
+  end
+  if #chosen == 0 then return nil, 0, 0 end
+  local center, distance
+  if #chosen >= 5 then
+    center = middlePrice(prices)
+    local deviations = {}
+    for _, p in ipairs(chosen) do deviations[#deviations + 1] = math.abs(p.value - center) end
+    distance = math.max(3 * 1.4826 * middlePrice(deviations), center * 0.5)
+  end
+  local total, weights, used = 0, 0, 0
+  for _, p in ipairs(chosen) do
+    if not distance or math.abs(p.value - center) <= distance then
+      total, weights, used = total + p.value * p.weight, weights + p.weight, used + 1
+    end
+  end
+  return math.floor(total / weights + 0.5), used, #chosen - used
+end
+
+-- Returns usual/recent/longTerm (raw copper before cuts), their Days/Dropped counts,
+-- and sellsPerDay, saleUnits, saleMinutes. Unknown prices/rate remain nil, not zero.
+-- Sales include today over 30 calendar days, using the existing sell-speed evidence
+-- thresholds: 3h observed, at least 3 units unless observed for 24h; zero needs 12h.
+-- These are inferred disappearances that could not have expired, not proven sales.
+function ns.PriceHistoryValues(history, sold, day, changed)
+  local out = { usualDays = 0, recentDays = 0, longTermDays = 0,
+    usualDropped = 0, recentDropped = 0, longTermDropped = 0, saleUnits = 0, saleMinutes = 0 }
+  if type(day) ~= "number" or day < 0 or day >= math.huge or day % 1 ~= 0 then return out end
+  if not positivePrice(changed) then changed = nil end
+  local points = {}
+  for e in (type(history) == "string" and history or ""):gmatch("[^|]+") do
+    local d, m, a = e:match("^(%d+):(%d+):(%d+)$")
+    d, m, a = tonumber(d), tonumber(m), tonumber(a)
+    if d and positivePrice(m) and positivePrice(a) and a >= m then points[d] = a end
+  end
+  out.usual, out.usualDays, out.usualDropped = historyMean(points, day, 14, true, changed)
+  out.recent, out.recentDays, out.recentDropped = historyMean(points, day, 3, false, changed)
+  out.longTerm, out.longTermDays, out.longTermDropped = historyMean(points, day, 60, false, changed)
+  local sales = {}
+  for e in (type(sold) == "string" and sold or ""):gmatch("[^|]+") do
+    local d, g, m, c = e:match("^(%d+):(%d+):(%d+):?(%d*)$")
+    d, g, m, c = tonumber(d), tonumber(g), tonumber(m), tonumber(c)
+    if d and d >= day - 29 and d <= day and g and g >= 0 and g < math.huge
+      and positivePrice(m) and (not c or (c >= 0 and c <= m)) then sales[d] = { g, m } end
+  end
+  for _, p in pairs(sales) do
+    out.saleUnits, out.saleMinutes = out.saleUnits + p[1], out.saleMinutes + p[2]
+  end
+  local g, m = out.saleUnits, out.saleMinutes
+  if m >= 180 and (g >= 3 or m >= 1440 or (g == 0 and m >= 720)) then
+    out.sellsPerDay = g / m * 1440
+  end
+  return out
+end
+
 -- Returns a list of { day, cheapest, typical } for the last DAILY_DAYS days, oldest first.
 function ns:PriceHistory(id)
   return (pricingPoints(id))
@@ -1428,7 +1514,7 @@ local LABELS = {
   loot = "Loot", quest = "Quests", training = "Training", flight = "Flights",
   otherIn = "Other income", otherOut = "Other spending",
 }
-ns.MONEY_LABELS = LABELS
+ns.MONEY_LABELS = LABELS   -- (Sessions.lua: the tracker's hover lists money by source)
 local INCOME = { ahSale = true, ahDepositBack = true, vendorSell = true, mailIn = true, tradeIn = true, loot = true, quest = true, otherIn = true }
 
 -- Today's money for this character as lines ("Sold to vendors: +5s"), plus the net.

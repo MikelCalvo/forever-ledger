@@ -653,13 +653,17 @@ sortFlips = function()
   for _, e in ipairs(list) do
     local cost = math.max(e.cost or e.limit or 1, 1)
     e.sortValue = ((e.worth or 0) - cost) * math.min(e.n or 1, math.floor(cash / cost))
+    local _, _, _, roi = flipMetrics(e, cash)
+    e.roi = roi
   end
   -- Watched items at your price first: you asked for them (owner, November 10).
   table.sort(list, function(a, b)
     local wa, wb = a.reason == "watch", b.reason == "watch"
     if wa ~= wb then return wa end
     if a.sortValue ~= b.sortValue then return a.sortValue > b.sortValue end
-    return (a.profit or 0) > (b.profit or 0)
+    if (a.roi or -1) ~= (b.roi or -1) then return (a.roi or -1) > (b.roi or -1) end
+    if (a.profit or 0) ~= (b.profit or 0) then return (a.profit or 0) > (b.profit or 0) end
+    return a.id < b.id
   end)
 end
 Q.sortFlips, Q.flipMetrics = sortFlips, flipMetrics   -- (for the tests)
