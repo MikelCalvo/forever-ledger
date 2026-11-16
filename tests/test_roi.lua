@@ -150,3 +150,17 @@ T.test("Profit and return ties have a stable final order", function()
   Q.sortFlips()
   T.eq(Q.lanes.flips[1], a)
 end)
+
+T.test("Profit percent: the new column follows upstream right-anchored layout", function()
+  local f = assert(io.open("BuyQueue.lua", "r"))
+  local source = f:read("*a"); f:close()
+  local base = assert(loadstring("return " .. assert(source:match("local COL = (%b{})"))))()
+  local flips = assert(loadstring("return " .. assert(source:match("local FLIP_COL = (%b{})"))))()
+  for _, key in ipairs({"profit", "cheap", "limit", "why"}) do
+    T.eq(flips[key], base[key] - 56)
+  end
+  T.eq(flips.roi, base.profit)
+  T.eq(flips.whyW, base.whyW)
+  T.ok(source:find('r.roi:SetPoint("RIGHT", r, "RIGHT", col.roi, 0)', 1, true))
+  T.ok(source:find('button:SetPoint("RIGHT", header, "RIGHT", c[2], 0)', 1, true))
+end)
