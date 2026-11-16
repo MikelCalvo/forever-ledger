@@ -1167,7 +1167,7 @@ local function announce(all, usual)
   else
     -- Names the tab: the auction house panel only holds flips and shopping lists (owner,
     -- November 9: looked for 2 deals there and found nothing).
-    text = ("%d new %s below the usual price: see the Deals tab (/fl deals)"):format(usual, usual == 1 and "deal" or "deals")
+    text = ("%d new %s below the usual price: see Gold making, Deals (/fl)"):format(usual, usual == 1 and "deal" or "deals")
   end
   -- Off in Settings if it covers your windows (Magic, October 3: it landed on the Buy queue).
   -- Never while the auction house is open (Frank, November 15: it covered the Buy tab's
@@ -1193,7 +1193,7 @@ local function announce(all, usual)
     end
   end
   if usual > 0 and chat then
-    ns:Print(("%d new %s below the usual price: see the Deals tab (/fl deals)."):format(
+    ns:Print(("%d new %s below the usual price: see Gold making, Deals (/fl)."):format(
       usual, usual == 1 and "deal" or "deals"))
   end
 end

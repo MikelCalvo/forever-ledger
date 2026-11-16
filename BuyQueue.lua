@@ -575,6 +575,10 @@ local function peek()
   local now = GetTime()
   if now - lastPeek < PEEK_GAP or throttled() or (ns.SweepWaiting and ns:SweepWaiting()) then return end
   if ns.lastUserSearch and now - ns.lastUserSearch < USER_QUIET then return end
+  -- Not while you're on an item's buy or sell page (the panel beside Blizzard's window):
+  -- the auction house keeps one item search, and this one would replace what that page
+  -- shows, however long you stay there (Codex review of dd8fe31, as Prices.lua's checks).
+  if ns.ItemPageOpen and ns.ItemPageOpen() then return end
   for _, e in ipairs((Q.lanes or {}).flips or {}) do
     if e ~= Q.cur and not e.gear and not (peeked[e.id] and now - peeked[e.id] < PEEK_AGAIN) and ns:SweepStandIn(e.id) then
       peeked[e.id], lastPeek, peekId = now, now, e.id
@@ -722,17 +726,47 @@ local function cantAfford(e)
   if cheapest and cheapest > cash then return cheapest end
 end
 
+-- Items the auction house answered with an item search (not a commodity): each purchase
+-- buys one copy, as planItem does. Gear always is one; others are learned from replies.
+local oneAtATime = {}
+Q.oneAtATime = oneAtATime   -- (for the tests)
+
 -- How many the queue would buy now and what they'd cost (the Buy and Total columns):
 -- from the saved listings, cheapest first, at or under the limit, no more than a list still
 -- wants and what your gold covers, as a purchase works it out (planCommodity). Frank,
 -- November 15: Cheap counted what was listed under the price, rarely what you bought.
--- Also returns how many were listed at or under the limit.
+-- A list's Want is read from the list now, less purchases still on their way, as the
+-- planner caps it (Codex review of b22d836: Buy 5 while the planner bought 2).
+-- Gear and other items bought one copy a click: Buy is 1, at the price planned when the
+-- queue has looked it up, otherwise an estimate (Codex review of b22d836: Buy 3 for 60c,
+-- though a click buys the one at 10c).
+-- Also returns how many were listed at or under the limit, and for one-a-click rows
+-- "one" plus whether the price is an estimate.
 local function buyNow(e)
   if e.waiting then return 0, 0, 0 end
   local cash = spendable()
-  local want = e.reason == "list" and e.want or nil
+  local want
+  if e.reason == "list" then
+    want = e.want or math.huge
+    if Q.listLeft and ns.ListStillWanted then want = math.min(want, Q.listLeft(e.id)) end
+    want = math.max(want, 0)
+  end
   local limit = e.limit or math.huge
   local n, cost, listed = 0, 0, 0
+  local rec = (ns.db.prices[ns.MarketKey()] or {})[e.id]
+  if e.gear or oneAtATime[e.id] then
+    local each, estimate
+    if Q.cur == e and Q.plan and Q.plan.kind == "item" and Q.plan.price then
+      each = Q.plan.price
+    else
+      estimate = true
+      each = (not e.suffix and rec and not rec.none and rec.m and rec.m <= limit and rec.m) or e.cost
+        or (limit < math.huge and limit) or nil
+    end
+    listed = e.n or 1
+    if each and each > 0 and each <= cash and (not want or want > 0) then n, cost = 1, each end
+    return n, cost, listed, "one", estimate
+  end
   local function take(p, k)
     listed = listed + k
     if want then k = math.min(k, want - n) end
@@ -740,10 +774,8 @@ local function buyNow(e)
     if k > 0 then n, cost = n + k, cost + k * p end
     return k
   end
-  local rec = (ns.db.prices[ns.MarketKey()] or {})[e.id]
-  if e.gear or not (rec and rec.l) then
-    -- Gear (one stat version's listings aren't in the ladder) or no ladder: the count the
-    -- row came with, at its price each.
+  if not (rec and rec.l) then
+    -- No ladder: the count the row came with, at its price each.
     local each = e.cost or (limit < math.huge and limit) or (rec and rec.m)
     if each and each > 0 then take(each, e.n or 1) end
     return n, cost, listed
@@ -1371,6 +1403,8 @@ ns:On("COMMODITY_SEARCH_RESULTS_UPDATED", function(itemID)
 end)
 
 ns:On("ITEM_SEARCH_RESULTS_UPDATED", function(itemKey)
+  -- An item search, not a commodity: bought one copy a click (the Buy column, buyNow).
+  if itemKey and itemKey.itemID then oneAtATime[itemKey.itemID] = true end
   if not (Q.cur and itemKey and itemKey.itemID == Q.cur.id) then return end
   -- Any stat version of the item will do (they all sell to a vendor and disenchant the
   -- same), and the reply's key can differ in detail from the one asked for: matching it
@@ -1920,8 +1954,13 @@ local function laneRow(L, i)
         if e.reason == "list" and e.want and e.buyN >= e.want then held = (" The list wants %d more."):format(e.want)
         else held = (" That's what %s%s covers."):format(money(spendable()), spendable() < GetMoney() and " left to spend" or "") end
       end
-      GameTooltip:AddLine(("Buy %d for %s. %d listed at or under %s at the last look%s.%s"):format(
-        e.buyN, money(e.buyCost or 0), e.listedN or 0, limitText(e), when, held), 1, 1, 1, true)
+      if e.buyOne then
+        GameTooltip:AddLine(("Buy %d (one copy a click) for %s%s. %d listed at or under %s at the last look%s."):format(
+          e.buyN, e.buyEstimate and "about " or "", money(e.buyCost or 0), e.listedN or 0, limitText(e), when), 1, 1, 1, true)
+      else
+        GameTooltip:AddLine(("Buy %d for %s. %d listed at or under %s at the last look%s.%s"):format(
+          e.buyN, money(e.buyCost or 0), e.listedN or 0, limitText(e), when, held), 1, 1, 1, true)
+      end
       GameTooltip:AddLine("The auction house is checked again when you buy, so the count can change.", 0.7, 0.7, 0.7, true)
     end
     local e = self.entry
@@ -2404,8 +2443,8 @@ local function fillLane(L)
     r.icon:SetDesaturated(grey and true or false)
     r.name:SetText(grey and ("|cff888888" .. ns.ItemName(e.id) .. "|r") or ns.ItemName(e.id))
     r.limit:SetText(e.any and "any" or money(e.limit))
-    local buyN, buyCost, listed = buyNow(e)
-    e.buyN, e.buyCost, e.listedN = buyN, buyCost, listed
+    local buyN, buyCost, listed, one, estimate = buyNow(e)
+    e.buyN, e.buyCost, e.listedN, e.buyOne, e.buyEstimate = buyN, buyCost, listed, one, estimate
     r.n:SetText(tostring(buyN))
     r.total:SetText(buyN > 0 and money(buyCost) or "")
     r.why:SetText(d.key == "lists" and (e.list or "") or WHY[e.reason] or "")

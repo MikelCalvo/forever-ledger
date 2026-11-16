@@ -1126,8 +1126,21 @@ T.test("Buy queue: Buy and Total are what a purchase would take now", function()
   market[91301] = { m = 10, l = "10:5,12:9,20:30", t = time(), src = "scan" }
   S.money = 100000
   -- A list that wants 7: 5 at 10c, 2 at 12c; 9 listed at or under 15c.
+  local stillWanted = ns.ListStillWanted
+  local wants = 7
+  ns.ListStillWanted = function() return wants end
   local n, cost, listed = Q.buyNow({ id = 91301, limit = 15, reason = "list", want = 7 })
   T.eq(n, 7); T.eq(cost, 74); T.eq(listed, 9)
+  -- Codex review of b22d836: the list now wants 5 and 3 are on their way (bought, not yet
+  -- answered), so the planner buys 2, and so does Buy, whatever the row's own Want says.
+  wants = 5
+  local late, won = Q.lateBuys, Q.wonDue
+  Q.lateBuys = { { at = GetTime(), cur = { id = 91301 }, plan = { kind = "commodity", qty = 3 } } }
+  Q.wonDue = {}
+  n, cost = Q.buyNow({ id = 91301, limit = 15, reason = "list", want = 7 })
+  T.eq(n, 2); T.eq(cost, 20)
+  Q.lateBuys, Q.wonDue = late, won
+  ns.ListStillWanted = stillWanted
   -- A flip with 1s to spend: 5 at 10c, then the 4 at 12c your gold still covers.
   S.money = 100
   n, cost, listed = Q.buyNow({ id = 91301, limit = 15, reason = "flip" })
@@ -1135,6 +1148,20 @@ T.test("Buy queue: Buy and Total are what a purchase would take now", function()
   S.money = 70
   n, cost, listed = Q.buyNow({ id = 91301, limit = 15, reason = "flip" })
   T.eq(n, 6, "5 at 10c and one at 12c"); T.eq(cost, 62); T.eq(listed, 9)
+  -- Gear (Codex review of b22d836): one copy a click, at the cheapest known price, marked
+  -- an estimate until the queue has looked it up; then the planned auction's price.
+  S.money = 100000
+  market[91302] = { m = 10, t = time(), src = "scan" }
+  local gear = { id = 91302, gear = true, limit = 30, cost = 20, n = 3, reason = "flip" }
+  local one, estimate
+  n, cost, listed, one, estimate = Q.buyNow(gear)
+  T.eq(n, 1); T.eq(cost, 10); T.eq(listed, 3); T.eq(one, "one"); T.eq(estimate, true)
+  local cur, plan = Q.cur, Q.plan
+  Q.cur, Q.plan = gear, { kind = "item", price = 12 }
+  n, cost, listed, one, estimate = Q.buyNow(gear)
+  T.eq(n, 1); T.eq(cost, 12); T.eq(estimate, nil)
+  Q.cur, Q.plan = cur, plan
+  market[91302] = nil
   -- Waiting rows buy nothing.
   n = Q.buyNow({ id = 91301, limit = 15, reason = "list", want = 3, waiting = true })
   T.eq(n, 0)
