@@ -65,6 +65,17 @@ Settings and Help each have a **search box** above their list: type two letters 
 
 ![Tooltip for Strange Dust](images/tooltip.png)
 
+## Gold making
+
+The **Gold making** tab lists every way to make gold Forever Ledger finds, in one list (it replaces the Shuffles and Deals tabs; `/fl deals` still opens the old Deals tab for now).
+
+- **Kinds**: the buttons across the top pick crafts that sell to a vendor, crafts that sell on the auction house, conversions, vendor flips, deals well below the usual price, disenchanting, or Booty Bay against your own auction house, each with how many there are. **Everything** shows them all except Booty Bay, which needs a trip there (only Booty Bay prices from the last 3 days count).
+- **Each row**: what it costs, what it brings (after the auction house cut where it's sold there), the profit each time, and how many times you could do it with what's listed cheaply enough now (**no limit** when everything comes from vendors). **Who** says which of your characters can do it. Click a column name to sort; it starts with profit times how many (at most 20), so a big one-off doesn't hide a steady earner.
+- **Filters**: **Least profit** hides small ones, and the profession box shows one profession's crafts (disenchanting counts as Enchanting). Untick **Only my recipes** to add every profession's crafts that sell to a vendor for more than they cost, from recipes none of your characters know yet (marked *learn*). The search box narrows it by name.
+- **Saved filters**: pick filters, then **Save these filters**; they become a quick button (up to 5). Click one to use it, right-click to delete it.
+- **How it adds up**: click a craft and the panel on the right works out the cheapest way to get its materials for that many crafts. It starts at what's listed cheaply enough and, for an auction house craft, no more than about a day's sales; change it with **Crafts**. Each material is filled one at a time from the cheapest place next: your bags (at what they'd sell for, or free with **Count my bags as paid for**), the next listing on the auction house, a vendor, or making it from its own materials. So the few cheap Bolts of Runecloth listed are bought and the rest made from cloth, and nothing is counted twice. **Add materials to a shopping list** puts what's bought on a new list, each up to the highest price the plan paid.
+- Click a deal, flip, disenchant or Booty Bay row for its numbers and why; right-click any row (or **Price window**) for the item's price window. It's worked out when you open the tab, and again with **Refresh**.
+
 ## Shuffles and vendor flips
 
 - **Shuffles**: buy materials, craft, disenchant or convert, and sell, ranked by profit per hour. Click a row for every step. Blizzard nerfed most vendor shuffles, so **Sells to a vendor** may often be empty. Tick **All professions** there to see every profession's crafts that sell to a vendor for more than their materials, whoever knows them. Recipes from your profession windows come first. Ones your windows haven't shown come from the game's own data, marked (Forever), and for an item that has none, Classic's, marked (Classic); some may not be learnable in game yet. Each one's steps say the profession and who of yours knows it.
@@ -134,7 +145,8 @@ Settings and Help each have a **search box** above their list: type two letters 
 
 ## Recipes and trainers
 
-- **Recipes tab**: every recipe of your professions, who knows it, where to get it, the skill needed, and profit per craft. Types: Flip or shuffle, Crafts that sell, Enchant service, Not for sale, Not profitable. Right-click a recipe to set your own type. Click a column heading to sort.
+- **Professions tab**: your professions as tabs (the rest in the **Other professions** dropdown), then **Trainers** and **Crates**. Each profession lists every recipe: the ones your profession windows recorded and the rest from the game's own data, with who knows it, where to get it, the skill needed, and profit per craft. Types: Flip or shuffle, Crafts that sell, Enchant service, Not for sale, Not profitable. Right-click a recipe to set your own type. Click a column heading to sort.
+- **Filters**: All, Not known or Known; Type; **Where from** (Trainer, Vendor, Drop, Quest, On the AH, or Not seen yet: a recipe item nobody has spotted); **Skill** (Learnable now: one of your characters on this realm and faction has the skill; Need more skill); **Group**, by what the recipe makes (the Groups tab's groups); **Least profit** a craft; and a search. When nothing matches, the list says which choices hide it.
 - **Where from**: what you've seen in game first, otherwise original Classic data marked "(Classic)", or the auction house when the recipe item is listed there (handy for recipes new in Forever). **Pin** puts a map pin on the vendor, trainer or mob.
 - **Trainers view**: trainers you've visited, Classic ones, and the spots city guards mark when you ask them for a profession trainer (marked "guard").
 
@@ -144,7 +156,7 @@ Settings and Help each have a **search box** above their list: type two letters 
 
 ## Waylaid Crates
 
-- **Crates tab**: the cheapest way to fill each crate at today's prices, with the crate's own price and gold per Merchant's Favor. Click a crate for every bundle and what you already have in bags, bank and alts.
+- **Crates** (under Professions): the cheapest way to fill each crate at today's prices, with the crate's own price and gold per Merchant's Favor. Click a crate for every bundle and what you already have in bags, bank and alts.
 - **What a turn-in pays**: every filled crate becomes a Sealed Apprentice Crate. After your first turn-in (a one-time quest), each one pays **5s and 10 Merchant's Favor**, whatever the crate. Net cost takes the 5s off, and shows green if a crate somehow pays for itself.
 - **Shopping list for a crate**: open a crate and click **Add cheapest fill to a shopping list**. The crate and its items go on a list named after the crate, with prices high enough to buy them all at your last scan. What you already have counts towards a crate list's Want (only crate lists do this). Tick **Buy from this list in the Buy queue** on it and the Buy queue buys what you're short. Set the crate's Want to fill several at once: every item's Want follows it. The list is temporary: each crate you fill takes one off, and the list goes with the last one (or after a week).
 - Crates are sold at the turn-in posts too (Three Corners in Redridge for Alliance, near the Crossroads for Horde), and Merchant's Favor buys recipes, pets, tabards, titles and even a mount.
@@ -223,7 +235,7 @@ The in-game Help tab has these under each topic too.
 | `/fl queue`, `/fl lists` | The buy queue or shopping lists (beside the auction house, or a window of their own elsewhere) |
 | `/fl customers`, `/fl work` | The Customers window, or its Work done view; `/fl customers on` / `off` turns the customer finder on or off |
 | `/fl de` | Your disenchant results |
-| `/fl deals` | Open the Deals tab (`/fl deals list` lists them in chat) |
+| `/fl deals` | Open the old Deals tab (`/fl deals list` lists them in chat); deals are on Gold making now |
 | `/fl price` | The Price window: look up any item's price history |
 | `/fl session` | Sessions: `/fl session start` or `stop` (or Ctrl-click the minimap button) |
 | `/fl book` | Recipe data gathered so far |

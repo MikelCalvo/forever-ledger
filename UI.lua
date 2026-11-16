@@ -108,12 +108,16 @@ local setView, layoutShuffles, buildTable
 
 local TABS = {
   { key = "dashboard", label = "Dashboard" },
-  { key = "shuffles", label = "Shuffles" },
-  -- Vendor flips moved to the Buy queue beside the auction house (owner, October 2).
-  { key = "deals", label = "Deals" },
+  -- Gold making (redesign build step 6, November 15) puts Shuffles and Deals into one list.
+  -- Their tabs are hidden (/fl deals still opens Deals) until Frank has compared the two;
+  -- their code goes once Gold making has replaced them.
+  { key = "gold", label = "Gold making" },
+  { key = "shuffles", label = "Shuffles", show = function() return false end },
+  { key = "deals", label = "Deals", show = function() return false end },
   { key = "ledger", label = "Ledger" },
-  { key = "crates", label = "Crates", setting = "crates" },
-  { key = "recipes", label = "Recipes" },
+  -- Professions (redesign build step 6, November 16): Recipes with filters, Trainers and
+  -- Waylaid Crates as tabs inside it (RecipesTab.lua). The key stays "recipes".
+  { key = "recipes", label = "Professions" },
   { key = "groups", label = "Groups" },   -- GroupsTab.lua (redesign build step 6)
   { key = "characters", label = "Characters" },
   { key = "settings", label = "Settings" },
@@ -134,7 +138,7 @@ local function textArea()
   return sf
 end
 
--- Line the tabs up, leaving out any turned off in Settings (the Crates tab).
+-- Line the tabs up, leaving out any turned off in Settings or hidden.
 function ns:LayoutTabs()
   if not main then return end
   local prev
@@ -187,10 +191,10 @@ local function buildMain()
     dashboard = ns:BuildDashboard(main.body),
     ledger = ns:BuildLedger(main.body),
     deals = ns:BuildDeals(main.body),
-    crates = ns:BuildCrates(main.body),
     recipes = ns:BuildRecipes(main.body),
     characters = ns:BuildCharacters(main.body),   -- Characters.lua
     groups = ns:BuildGroups(main.body),   -- GroupsTab.lua
+    gold = ns:BuildGoldMaking(main.body),   -- GoldMaking.lua
     help = ns:BuildHelp(main.body),   -- Help.lua
   }
   main.views.settings = ns:BuildSettings(main.body)   -- Settings.lua
@@ -235,6 +239,7 @@ local function buildMain()
   main.footer = {
     dashboard = { full, newsBtn },
     deals = { full },
+    gold = { full },
     characters = { full, dataBtn },
     help = { welcomeBtn, newsBtn },
   }
@@ -377,14 +382,14 @@ function ns:RefreshUI()
     ns:RefreshDashboard(main.views.dashboard)
   elseif main.view == "ledger" then
     ns:RefreshLedger()
-  elseif main.view == "crates" then
-    ns:RefreshCrates()
   elseif main.view == "deals" then
     ns:RefreshDeals()
   elseif main.view == "help" then
     ns:RefreshHelp()
   elseif main.view == "groups" then
     ns:RefreshGroupsTab()
+  elseif main.view == "gold" then
+    ns:RefreshGoldMaking()
   elseif main.view == "recipes" then
     ns:RefreshRecipes()
   elseif main.view == "characters" then
@@ -440,7 +445,7 @@ local function buildMinimapButton()
     if IsShiftKeyDown() then ns:ShowSidePanel("lists")
     elseif IsControlKeyDown() and ns.GeneralSessionRunning then   -- (sessions, back November 15)
       if ns:GeneralSessionRunning() then ns:StopGeneralSession() else ns:StartGeneralSession() end
-    elseif which == "RightButton" then ns:ToggleUI("shuffles") else ns:ToggleUI() end
+    elseif which == "RightButton" then ns:ToggleUI("gold") else ns:ToggleUI() end
   end)
   mm:SetScript("OnDragStart", function(self)
     self:SetScript("OnUpdate", function()
@@ -456,7 +461,7 @@ local function buildMinimapButton()
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:AddLine("Forever Ledger")
     GameTooltip:AddLine("Click to open or close.", 1, 1, 1)
-    GameTooltip:AddLine("Right-click for shuffles.", 1, 1, 1)
+    GameTooltip:AddLine("Right-click for Gold making.", 1, 1, 1)
     GameTooltip:AddLine("Shift-click for shopping lists.", 1, 1, 1)
     if ns.GeneralSessionRunning then
       GameTooltip:AddLine(ns:GeneralSessionRunning() and "Ctrl-click to stop the session." or "Ctrl-click to start a session.", 1, 1, 1)

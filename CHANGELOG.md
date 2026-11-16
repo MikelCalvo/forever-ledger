@@ -13,14 +13,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - The auction house window hides its portrait while one of Forever Ledger's tabs is open, for more room.
 - My auctions: **Scroll to cancel** (each wheel tick cancels the next undercut auction), **Also cancel ones I could ask more for** (the cheapest but at least 10% under the usual price, marked "could ask more"), and middle-click to skip an auction this visit.
 - **Groups** tab in the main window: built-in groups that sort themselves by item type (gear by kind and level band: 1-15, 16-25, 26-35, 36-45, 46-55, 56-60), profession groups from the recipes, Watched and Gray items, and your own; each group's items (add, remove, restore) and its Post, Buy, Vendor and Craft rules (same as the group above, default, off, changed here, or a saved rule several groups share). The Post tab uses the post rules.
+- **Gold making** tab in the main window: every way to make gold in one list (crafts that sell to a vendor or on the auction house, conversions, vendor flips, deals, disenchanting, Booty Bay), with what each costs, brings, the profit and how many times you could do it; kind buttons with counts, least profit, a profession, only your recipes, a search and saved filter sets as quick buttons; Booty Bay (prices from the last 3 days) only on its own button. Click a craft for **How it adds up**: the cheapest way to get its materials for that many crafts (the few cheap listings bought, the rest made from their own materials where that is cheaper, your bags first, nothing counted twice), and Add materials to a shopping list.
 
 ### Changed
+- Gold making replaces the Shuffles and Deals tabs (`/fl deals` still opens the old Deals tab for now); right-click on the minimap button opens it.
+- **Professions** tab in place of Recipes and Crates: your professions, Trainers and Crates as tabs inside it. Each profession now lists every recipe, including ones your profession windows haven't shown (from the game's own data), with new filters: Where from, Skill (Learnable now, Need more skill), Group (by what it makes), Least profit, and the old All/Known, Type and search. When nothing matches, the list says which choices hide it.
 - The flip watch is now called **Live watch** (it looks for watched items and deals too, not just vendor flips).
 - Scan once: the Cheapest, Usual and % of usual columns have room for large prices. Groups: the add-an-item box no longer runs under the buttons.
 
 ### Fixed
+- Buy queue: Buy no longer counts more than a shopping list still wants once purchases still waiting for an answer are taken off, and gear (and other items bought one copy a click) shows Buy 1 at the price of the next copy, not every cheap copy at their average. The background count lookup for new flips no longer replaces an item page you have open beside the panel.
 - The big on-screen message for new flips and deals no longer shows while the auction house is open, where it covered the Buy tab; the tab's count and the chime still tell you.
-- Ledger: a stack bought on the auction house could be put down as another purchase still waiting for its gold (20 Runecloth showed as 1 Red Wolf Meat at Runecloth's price). Each stack purchase now carries the price the game quoted, a refused one takes no gold, and two purchases paid in one go are listed one each.
+- Ledger: a stack bought on the auction house could be put down as another purchase still waiting for its gold (20 Runecloth showed as 1 Red Wolf Meat at Runecloth's price). Each stack purchase now carries the price the game quoted, a refused one takes no gold, and two purchases paid in one go are listed one each. A stack whose gold comes up to a minute late, a refused stack right after one that went through, and two payments that come together while an older purchase never answered are now put down against the right items too.
 
 ## [0.26.0] - 2026-11-15
 

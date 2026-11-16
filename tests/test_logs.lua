@@ -173,6 +173,38 @@ T.test("Stack purchases: a refused one takes no gold; two in one gold change are
   T.eq(ns.db.purchases[3].id, 14047); T.eq(ns.db.purchases[3].a, 728)
 end)
 
+-- Codex review of 60da6ce, three cases from the Buy queue's real order of events.
+T.test("Stack purchases: a refused second stack leaves the first one's hint", function()
+  atAH()
+  stack(12208, 1, 100)                       -- went through, its gold still to come
+  T.fire("COMMODITY_PURCHASE_SUCCEEDED")
+  stack(14047, 20, 200, true)                -- refused
+  pay(100)
+  T.eq(#ns.db.purchases, 1)
+  T.eq(ns.db.purchases[1].id, 12208, "the first stack's gold, not the refused Runecloth")
+  T.eq(ns.db.purchases[1].q, 1); T.eq(ns.db.purchases[1].a, 100)
+end)
+
+T.test("Stack purchases: an older unanswered one doesn't hide two that add up", function()
+  atAH()
+  stack(90001, 1, 10)    -- no answer
+  stack(90002, 1, 20)
+  stack(90003, 1, 30)
+  pay(50)
+  T.eq(#ns.db.purchases, 2)
+  T.eq(ns.db.purchases[1].id, 90002); T.eq(ns.db.purchases[1].a, 20)
+  T.eq(ns.db.purchases[2].id, 90003); T.eq(ns.db.purchases[2].a, 30)
+end)
+
+T.test("Stack purchases: gold that comes late (16 s) still finds its stack", function()
+  atAH()
+  stack(14047, 20, 200)
+  S.now = S.now + 16
+  pay(200)
+  T.eq(#ns.db.purchases, 1)
+  T.eq(ns.db.purchases[1].id, 14047); T.eq(ns.db.purchases[1].q, 20)
+end)
+
 -- Frank, November 14: flights, loot, other income and the rest were only day totals, so
 -- they sorted oddly among the Ledger's timed entries. Now each has its own time too.
 T.test("Other money is logged with its time; the same kind within 5 minutes is one entry", function()
