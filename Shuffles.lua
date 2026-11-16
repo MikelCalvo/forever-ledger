@@ -1170,7 +1170,10 @@ local function announce(all, usual)
     text = ("%d new %s below the usual price: see the Deals tab (/fl deals)"):format(usual, usual == 1 and "deal" or "deals")
   end
   -- Off in Settings if it covers your windows (Magic, October 3: it landed on the Buy queue).
-  if ns.db.settings.dealScreen ~= false and RaidNotice_AddMessage and RaidWarningFrame then
+  -- Never while the auction house is open (Frank, November 15: it covered the Buy tab's
+  -- top right, and the tab's count and the chime already say it).
+  if ns.db.settings.dealScreen ~= false and RaidNotice_AddMessage and RaidWarningFrame
+    and not (ns.IsAHOpen and ns:IsAHOpen()) then
     RaidNotice_AddMessage(RaidWarningFrame, text, { r = 0.05, g = 0.82, b = 0.62 })
   end
   if ns.db.settings.dealSound and PlaySound and SOUNDKIT and SOUNDKIT.RAID_WARNING then

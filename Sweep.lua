@@ -375,6 +375,11 @@ local function stillProvisional(id, rec)
   provisional[id] = nil
   return false
 end
+-- For the Buy queue: whether this material's saved listings are still the list's stand-in
+-- (its cheapest at a count of 1), so its Buy count isn't known yet.
+function ns:SweepStandIn(id)
+  return stillProvisional(id, (ns.db.prices[ns.MarketKey()] or {})[id])
+end
 
 local function earlyJudge(id, it, now)
   local limit = limitFor(id, it)
