@@ -145,7 +145,8 @@ The **Gold making** tab lists every way to make gold Forever Ledger finds, in on
 
 ## Recipes and trainers
 
-- **Recipes tab**: every recipe of your professions, who knows it, where to get it, the skill needed, and profit per craft. Types: Flip or shuffle, Crafts that sell, Enchant service, Not for sale, Not profitable. Right-click a recipe to set your own type. Click a column heading to sort.
+- **Professions tab**: your professions as tabs (the rest in the **Other professions** dropdown), then **Trainers** and **Crates**. Each profession lists every recipe: the ones your profession windows recorded and the rest from the game's own data, with who knows it, where to get it, the skill needed, and profit per craft. Types: Flip or shuffle, Crafts that sell, Enchant service, Not for sale, Not profitable. Right-click a recipe to set your own type. Click a column heading to sort.
+- **Filters**: All, Not known or Known; Type; **Where from** (Trainer, Vendor, Drop, Quest, On the AH, or Not seen yet: a recipe item nobody has spotted); **Skill** (Learnable now: one of your characters on this realm and faction has the skill; Need more skill); **Group**, by what the recipe makes (the Groups tab's groups); **Least profit** a craft; and a search. When nothing matches, the list says which choices hide it.
 - **Where from**: what you've seen in game first, otherwise original Classic data marked "(Classic)", or the auction house when the recipe item is listed there (handy for recipes new in Forever). **Pin** puts a map pin on the vendor, trainer or mob.
 - **Trainers view**: trainers you've visited, Classic ones, and the spots city guards mark when you ask them for a profession trainer (marked "guard").
 
@@ -155,7 +156,7 @@ The **Gold making** tab lists every way to make gold Forever Ledger finds, in on
 
 ## Waylaid Crates
 
-- **Crates tab**: the cheapest way to fill each crate at today's prices, with the crate's own price and gold per Merchant's Favor. Click a crate for every bundle and what you already have in bags, bank and alts.
+- **Crates** (under Professions): the cheapest way to fill each crate at today's prices, with the crate's own price and gold per Merchant's Favor. Click a crate for every bundle and what you already have in bags, bank and alts.
 - **What a turn-in pays**: every filled crate becomes a Sealed Apprentice Crate. After your first turn-in (a one-time quest), each one pays **5s and 10 Merchant's Favor**, whatever the crate. Net cost takes the 5s off, and shows green if a crate somehow pays for itself.
 - **Shopping list for a crate**: open a crate and click **Add cheapest fill to a shopping list**. The crate and its items go on a list named after the crate, with prices high enough to buy them all at your last scan. What you already have counts towards a crate list's Want (only crate lists do this). Tick **Buy from this list in the Buy queue** on it and the Buy queue buys what you're short. Set the crate's Want to fill several at once: every item's Want follows it. The list is temporary: each crate you fill takes one off, and the list goes with the last one (or after a week).
 - Crates are sold at the turn-in posts too (Three Corners in Redridge for Alliance, near the Crossroads for Horde), and Merchant's Favor buys recipes, pets, tabards, titles and even a mount.

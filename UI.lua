@@ -115,8 +115,9 @@ local TABS = {
   { key = "shuffles", label = "Shuffles", show = function() return false end },
   { key = "deals", label = "Deals", show = function() return false end },
   { key = "ledger", label = "Ledger" },
-  { key = "crates", label = "Crates", setting = "crates" },
-  { key = "recipes", label = "Recipes" },
+  -- Professions (redesign build step 6, November 16): Recipes with filters, Trainers and
+  -- Waylaid Crates as tabs inside it (RecipesTab.lua). The key stays "recipes".
+  { key = "recipes", label = "Professions" },
   { key = "groups", label = "Groups" },   -- GroupsTab.lua (redesign build step 6)
   { key = "characters", label = "Characters" },
   { key = "settings", label = "Settings" },
@@ -137,7 +138,7 @@ local function textArea()
   return sf
 end
 
--- Line the tabs up, leaving out any turned off in Settings (the Crates tab).
+-- Line the tabs up, leaving out any turned off in Settings or hidden.
 function ns:LayoutTabs()
   if not main then return end
   local prev
@@ -190,7 +191,6 @@ local function buildMain()
     dashboard = ns:BuildDashboard(main.body),
     ledger = ns:BuildLedger(main.body),
     deals = ns:BuildDeals(main.body),
-    crates = ns:BuildCrates(main.body),
     recipes = ns:BuildRecipes(main.body),
     characters = ns:BuildCharacters(main.body),   -- Characters.lua
     groups = ns:BuildGroups(main.body),   -- GroupsTab.lua
@@ -382,8 +382,6 @@ function ns:RefreshUI()
     ns:RefreshDashboard(main.views.dashboard)
   elseif main.view == "ledger" then
     ns:RefreshLedger()
-  elseif main.view == "crates" then
-    ns:RefreshCrates()
   elseif main.view == "deals" then
     ns:RefreshDeals()
   elseif main.view == "help" then

@@ -234,11 +234,11 @@ local PAGES = {
       } },
     } },
   { key = "crates", title = "Waylaid Crates", icon = "Interface\\Icons\\INV_Crate_01",
-    desc = "The Crates tab and the cheapest way to fill each crate.",
+    desc = "Crates under Professions, and the cheapest way to fill each crate.",
     rows = {
       { sub = "Crates" },
-      { key = "crates", label = "Waylaid Crates", kind = "check", after = function() ns:LayoutTabs() end,
-        help = "The Crates tab and the \"cheapest fill\" tooltip line." },
+      { key = "crates", label = "Waylaid Crates", kind = "check", after = function() ns:LayoutTabs(); ns:RefreshRecipes() end,
+        help = "The Crates tab under Professions and the \"cheapest fill\" tooltip line." },
     } },
 
   { group = "Your gold" },
