@@ -55,5 +55,6 @@ Post.lua
 GroupsTab.lua
 CraftPlan.lua
 GoldMaking.lua
+Writs.lua
 PriceWindow.lua
 Probe.lua

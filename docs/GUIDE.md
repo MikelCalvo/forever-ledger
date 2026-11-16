@@ -145,7 +145,7 @@ The **Gold making** tab lists every way to make gold Forever Ledger finds, in on
 
 ## Recipes and trainers
 
-- **Professions tab**: your professions as tabs (the rest in the **Other professions** dropdown), then **Trainers** and **Crates**. Each profession lists every recipe: the ones your profession windows recorded and the rest from the game's own data, with who knows it, where to get it, the skill needed, and profit per craft. Types: Flip or shuffle, Crafts that sell, Enchant service, Not for sale, Not profitable. Right-click a recipe to set your own type. Click a column heading to sort.
+- **Professions tab**: your professions as tabs (the rest in the **Other professions** dropdown), then **Trainers**, **Crates** and **Writs**. Each profession lists every recipe: the ones your profession windows recorded and the rest from the game's own data, with who knows it, where to get it, the skill needed, and profit per craft. Types: Flip or shuffle, Crafts that sell, Enchant service, Not for sale, Not profitable. Right-click a recipe to set your own type. Click a column heading to sort.
 - **Filters**: All, Not known or Known; Type; **Where from** (Trainer, Vendor, Drop, Quest, On the AH, or Not seen yet: a recipe item nobody has spotted); **Skill** (Learnable now: one of your characters on this realm and faction has the skill; Need more skill); **Group**, by what the recipe makes (the Groups tab's groups); **Least profit** a craft; and a search. When nothing matches, the list says which choices hide it.
 - **Where from**: what you've seen in game first, otherwise original Classic data marked "(Classic)", or the auction house when the recipe item is listed there (handy for recipes new in Forever). **Pin** puts a map pin on the vendor, trainer or mob.
 - **Trainers view**: trainers you've visited, Classic ones, and the spots city guards mark when you ask them for a profession trainer (marked "guard").
@@ -162,6 +162,13 @@ The **Gold making** tab lists every way to make gold Forever Ledger finds, in on
 - Crates are sold at the turn-in posts too (Three Corners in Redridge for Alliance, near the Crossroads for Horde), and Merchant's Favor buys recipes, pets, tabards, titles and even a mount.
 
 ![Crates tab](images/crates.png)
+
+## Craftsman's Writs
+
+- A **Craftsman's Writ** drops from mobs and chests (sealed: Journeyman's, Expert's or Artisan's; it opens into one order) and can be traded or sold on the auction house. Each order asks for one item, delivered to a customer somewhere in the world, for faction reputation and a coin pouch; each order once a day, and you don't need the profession. Writs pay no Merchant's Favor.
+- **Writs** (under Professions, after Crates): all 150 orders with their profession, tier, reputation, customer and zone, the cheapest way to get the item (bought or made, at your last scan's prices), the cost per reputation after the coin pouch, and the writ's own auction price. Orders whose writ is in your bags come first. Filter by tier and profession, click a heading to sort, hover an order for the cheapest way step by step, click it to search the auction house.
+- **Tooltip**: on a writ, what it asks for, who wants it, and the cheapest cost; on a sealed writ, what an order of its tier costs on average.
+- The list, reputation and coin pouch amounts are from player guides (November 2026), not yet all seen in game; some customers aren't known yet.
 
 ## Customers and work
 

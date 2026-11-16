@@ -111,6 +111,7 @@ ns.HELP = {
   } },
   { "Waylaid Crates", {
     { "Crates", "Professions, Crates: the cheapest way to fill each crate at today's prices, with the crate's own price and gold per Merchant's Favor. After your first turn-in (a one-time quest), every crate pays 5s and 10 Favor; Net cost takes the 5s off, and shows green if a crate somehow pays for itself. Click a crate for every bundle and what you already have." },
+    { "Writs", "Professions, Writs: every Craftsman's Writ order (an item to deliver to a customer for reputation and a coin pouch, each once a day, no profession needed) with its customer and zone, the cheapest way to get the item at your last scan's prices, the cost per reputation after the pouch, and the writ's own auction price. Writs in your bags come first. Hover for the cheapest way step by step; click to search the auction house. The list and reward amounts are from player guides, not yet all seen in game." },
     { "Shopping list for a crate", "Open a crate and click Add cheapest fill to a shopping list: the crate and its items go on a list named after the crate, with prices high enough to buy them all at your last scan. What you already have counts towards a crate list's Want (only crate lists do this). Tick Buy from this list in the Buy queue on it to buy what you're short. Set the crate's Want to fill several at once: every item's Want follows it. The list is temporary: each crate you fill takes one off, and the list goes with the last one (or after a week)." },
   } },
   { "Customers and work", {

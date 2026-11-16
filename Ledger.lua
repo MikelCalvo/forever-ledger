@@ -432,9 +432,10 @@ local function updateSummary()
       spent, earned, profit = spent + rec.boughtTotal, earned + rec.soldTotal, profit + (rec.profit or 0)
     end
     local extra = (f.list and #f.list > MAX_ROWS) and dim((" (showing the first %d)"):format(MAX_ROWS)) or ""
-    f.summary:SetText(("%d items: spent %s, received %s, profit on resold %s%s   %s"):format(f.list and #f.list or 0,
+    -- (Short: with "showing the first 500" the hint ran off the edge, Frank's screenshot.)
+    f.summary:SetText(("%d items: spent %s, got %s, resold profit %s%s   %s"):format(f.list and #f.list or 0,
       ns.Money(math.floor(spent + 0.5)), ns.Money(math.floor(earned + 0.5)), money(math.floor(profit + 0.5)), extra,
-      dim("Double-click an item for each trade.")))
+      dim("Double-click: each trade")))
     return
   end
   local total = 0
