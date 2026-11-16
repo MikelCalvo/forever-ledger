@@ -1142,3 +1142,43 @@ T.test("Buy queue: Buy and Total are what a purchase would take now", function()
   S.money = money
   ns.db.settings.keepGold, ns.db.settings.buyQueue.limit = keep, limit
 end)
+
+-- Frank, November 15: a new flip showed Buy 1 (the list's stand-in) until it was clicked.
+-- While the queue only waits for a click, it looks such flips up by itself.
+T.test("Buy queue: a new flip's count is looked up while the queue waits for your click", function()
+  local sent = {}
+  rawset(C_AuctionHouse, "SendSearchQuery", function(key) sent[#sent + 1] = key.itemID end)
+  rawset(C_AuctionHouse, "MakeItemKey", function(id) return { itemID = id } end)
+  rawset(C_AuctionHouse, "IsThrottledMessageSystemReady", function() return true end)
+  local standIn = { [91401] = true, [91402] = true }
+  local old = ns.SweepStandIn
+  ns.SweepStandIn = function(_, id) return standIn[id] or false end
+  local lanes = Q.lanes
+  local cur = { id = 91400, lane = "flips" }
+  Q.forceActive, Q.cur, Q.state = true, cur, "ready"
+  Q.lanes = { flips = { cur, { id = 91403, gear = true }, { id = 91401 }, { id = 91402 } } }
+  ns.lastUserSearch = nil
+  S.now = S.now + 100
+  Q.peek()
+  T.same(sent, { 91401 }, "the first stand-in that isn't the one being bought, and not gear")
+  Q.peek()
+  T.eq(#sent, 1, "one at a time")
+  S.now = S.now + 2
+  Q.peek()
+  T.same(sent, { 91401, 91402 }, "the next one, a moment later")
+  S.now = S.now + 2
+  Q.state = "price"
+  standIn[91401], standIn[91402] = nil, nil
+  standIn[91404] = true
+  Q.lanes.flips[#Q.lanes.flips + 1] = { id = 91404 }
+  Q.peek()
+  T.eq(#sent, 2, "never while a purchase is being priced")
+  Q.state = "ready"
+  Q.peek()
+  T.same(sent, { 91401, 91402, 91404 })
+  ns.SweepStandIn = old
+  rawset(C_AuctionHouse, "SendSearchQuery", nil)
+  rawset(C_AuctionHouse, "MakeItemKey", nil)
+  rawset(C_AuctionHouse, "IsThrottledMessageSystemReady", nil)
+  Q.forceActive, Q.cur, Q.state, Q.lanes = nil, nil, "idle", lanes
+end)

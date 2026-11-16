@@ -561,6 +561,44 @@ function search()
 end
 Q.search = function() return search() end   -- (for the tests)
 
+-- A new flip found in the auction house list has a stand-in count: the list gives its
+-- cheapest price, not how many are at it (Sweep.lua, provisional), so it showed Buy 1 and
+-- sorted by 1's profit until its turn (Frank, November 15: Runecloth showed 1, then 18
+-- once clicked). While the queue only waits for your click, it looks the next such flip
+-- up by itself, one every PEEK_GAP seconds: the search's listings are saved (Prices.lua)
+-- and the row shows its real count and sorts by its real profit.
+local PEEK_GAP, PEEK_AGAIN = 1.5, 60
+local peeked, lastPeek, peekId = {}, 0, nil
+local function peek()
+  if not (active() and ns.SweepStandIn) or pausedNow() then return end
+  if Q.state ~= "idle" and Q.state ~= "ready" then return end
+  local now = GetTime()
+  if now - lastPeek < PEEK_GAP or throttled() or (ns.SweepWaiting and ns:SweepWaiting()) then return end
+  if ns.lastUserSearch and now - ns.lastUserSearch < USER_QUIET then return end
+  for _, e in ipairs((Q.lanes or {}).flips or {}) do
+    if e ~= Q.cur and not e.gear and not (peeked[e.id] and now - peeked[e.id] < PEEK_AGAIN) and ns:SweepStandIn(e.id) then
+      peeked[e.id], lastPeek, peekId = now, now, e.id
+      ns.queueBusyUntil = math.max(ns.queueBusyUntil or 0, now + 1.5)
+      ns.queueSending = true
+      local ok = pcall(AH.SendSearchQuery, AH.MakeItemKey(e.id), sorts(), true)
+      ns.queueSending = false
+      if ok then trace(("looked up how many of %s (a new flip)"):format(ns.ItemName(e.id))) end
+      return
+    end
+  end
+end
+Q.peek = peek   -- (for the tests)
+-- Its listings came (Prices.lua saved them first): the row's count and place again.
+ns:On("COMMODITY_SEARCH_RESULTS_UPDATED", function(itemID)
+  if itemID ~= peekId then return end
+  peekId = nil
+  C_Timer.After(0, function()
+    rebuildNow()
+    if refreshQueue then refreshQueue() end
+  end)
+end)
+if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(1, function() peek() end) end
+
 -- The cheapest one costs more than you have (the last scan's price, or what a lookup
 -- found). Those stay in the list, greyed, and are skipped until you have the gold: they
 -- used to be looked up and dropped as "none left", so with 41c every flip seemed to
