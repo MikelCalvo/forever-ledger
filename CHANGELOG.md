@@ -21,8 +21,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Scan once: the Cheapest, Usual and % of usual columns have room for large prices. Groups: the add-an-item box no longer runs under the buttons.
 
 ### Fixed
+- Buy queue: Buy no longer counts more than a shopping list still wants once purchases still waiting for an answer are taken off, and gear (and other items bought one copy a click) shows Buy 1 at the price of the next copy, not every cheap copy at their average. The background count lookup for new flips no longer replaces an item page you have open beside the panel.
 - The big on-screen message for new flips and deals no longer shows while the auction house is open, where it covered the Buy tab; the tab's count and the chime still tell you.
-- Ledger: a stack bought on the auction house could be put down as another purchase still waiting for its gold (20 Runecloth showed as 1 Red Wolf Meat at Runecloth's price). Each stack purchase now carries the price the game quoted, a refused one takes no gold, and two purchases paid in one go are listed one each.
+- Ledger: a stack bought on the auction house could be put down as another purchase still waiting for its gold (20 Runecloth showed as 1 Red Wolf Meat at Runecloth's price). Each stack purchase now carries the price the game quoted, a refused one takes no gold, and two purchases paid in one go are listed one each. A stack whose gold comes up to a minute late, a refused stack right after one that went through, and two payments that come together while an older purchase never answered are now put down against the right items too.
 
 ## [0.26.0] - 2026-11-15
 
