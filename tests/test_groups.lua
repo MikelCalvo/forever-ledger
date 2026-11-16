@@ -131,7 +131,7 @@ end)
 T.test("Rules: a sub-group follows the group above; changed here and off", function()
   T.ok(ns:SetGroupRule("mat", "post", { floorPct = 60 }))
   local f, from, gid = ns:RuleFor(CLOTH, "post")
-  T.eq(f.floorPct, 60); T.eq(f.undercut, 1, "the rest from the default"); T.eq(from, "Materials, changed here"); T.eq(gid, "mat")
+  T.eq(f.floorPct, 60); T.eq(f.undercut, 0, "the rest from the default"); T.eq(from, "Materials, changed here"); T.eq(gid, "mat")
   T.ok(ns:SetGroupRule("mat.cloth", "post", "off"))
   f, from = ns:RuleFor(CLOTH, "post")
   T.eq(f, nil); T.eq(from, "Off (Cloth)")
@@ -189,4 +189,78 @@ T.test("Groups: deleting your group moves its sub-groups up and drops its rules"
   T.eq(ns:NewGroup("   "), nil, "a group needs a name")
   T.ok(not ns:AddToGroup("prof:Tailoring:mats", HERB), "profession groups aren't changed by hand")
   T.ok(not ns:SetGroupRule("nope", "post", "off"))
+end)
+
+-- Codex review, November 15 (two P2s).
+T.test("Groups: out of a parent group means out of its sub-groups too", function()
+  ns:SetGroupRule("mat.cloth", "post", "parent")   -- (an earlier test changed Cloth's)
+  ns:SetGroupRule("mat", "post", "off")
+  local _, from = ns:RuleFor(THREAD, "post")
+  T.eq(from, "Off (Materials)")
+  T.ok(not ns:RemoveFromGroup("con", THREAD), "not in Consumables: nothing to take out")
+  T.ok(ns:RemoveFromGroup("mat", THREAD))
+  T.ok(not ns:GroupHas("mat", THREAD), "out of Materials")
+  T.ok(not ns:GroupHas("mat.cloth", THREAD), "and so out of Cloth")
+  T.same(ns:GroupFilter({ "mat" }, { THREAD, HERB }), { HERB })
+  _, from = ns:RuleFor(THREAD, "post")
+  T.eq(from, "Default", "Materials' rule no longer applies")
+  T.ok(ns:AddToGroup("mat", THREAD))
+  T.ok(ns:GroupHas("mat.cloth", THREAD), "back where it was")
+  T.eq(ns.db.groups.removed.mat, nil)
+  ns:SetGroupRule("mat", "post", "parent")
+end)
+
+T.test("Groups: a captured recipe replaces ForeverCrafts' row in profession groups", function()
+  local OLDMAT, NEWMAT, OTHER, OUT1, OUT2, OUT3 = 97620, 97621, 97622, 97623, 97624, 97625
+  local saved = ns.FOREVER_CRAFTS
+  ns.FOREVER_CRAFTS = {
+    { id = 555, prof = "Tailoring", out = OUT1, r = { { OLDMAT, 1 } } },
+    { id = 556, prof = "Tailoring", out = OUT3, r = { { OTHER, 1 } } },
+  }
+  ns.db.recipeBook = { Tailoring = { [555] = { n = "Test Robe", out = OUT2, r = { { NEWMAT, 1 } } } } }
+  ns.recipeBookStamp = (ns.recipeBookStamp or 0) + 1   -- as RecipeBook.lua does after a capture
+  T.ok(not ns:GroupHas("prof:Tailoring:mats", OLDMAT), "the replaced row's material is gone")
+  T.ok(ns:GroupHas("prof:Tailoring:mats", NEWMAT))
+  T.ok(ns:GroupHas("prof:Tailoring:mats", OTHER), "a different recipe stays")
+  T.ok(not ns:GroupHas("prof:Tailoring:crafts", OUT1))
+  T.ok(ns:GroupHas("prof:Tailoring:crafts", OUT2))
+  T.ok(ns:GroupHas("prof:Tailoring:crafts", OUT3))
+  ns:SetGroupRule("prof:Tailoring:mats", "post", "off")
+  T.eq(select(2, ns:RuleFor(OLDMAT, "post")), "Default")
+  ns:SetGroupRule("prof:Tailoring:mats", "post", "parent")
+  ns.FOREVER_CRAFTS = saved
+  ns.recipeBookStamp = ns.recipeBookStamp + 1
+end)
+
+T.test("Groups: an item added to a sub-group leaves it when taken out of the group above", function()
+  ns:AddToGroup("con.potion", HERB)
+  T.ok(ns:GroupHas("con", HERB))
+  ns:SetGroupRule("con", "post", "off")
+  T.eq(select(2, ns:RuleFor(HERB, "post")), "Off (Consumables)")
+  T.ok(ns:RemoveFromGroup("con", HERB))
+  T.ok(not ns:GroupHas("con", HERB))
+  T.ok(not ns:GroupHas("con.potion", HERB))
+  T.same(ns:GroupFilter({ "con" }, { HERB }), {})
+  T.eq(select(2, ns:RuleFor(HERB, "post")), "Default")
+  T.ok(ns:GroupHas("mat.herb", HERB), "still in its own group")
+  T.ok(ns:AddToGroup("con", HERB))
+  T.ok(ns:GroupHas("con.potion", HERB), "back in the group it was added to")
+  ns:SetGroupRule("con", "post", "parent")
+  ns:RemoveFromGroup("con.potion", HERB)
+  T.ok(not ns:GroupHas("con", HERB))
+end)
+
+T.test("Groups: gear sorts into level bands by required level", function()
+  local ROBE, SWORD, UNSEEN = 97620, 97621, 97622
+  types[ROBE], types[SWORD], types[UNSEEN] = { 4, 1 }, { 2, 7 }, { 4, 2 }
+  S.items[ROBE] = { name = "Test Robe", quality = 2, minLevel = 22 }
+  S.items[SWORD] = { name = "Test Sword", quality = 2, minLevel = 60 }
+  T.eq(ns.NaturalGroup(ROBE), "gear.cloth.l16")
+  T.eq(ns.NaturalGroup(SWORD), "gear.weapon.l56")
+  T.eq(ns.NaturalGroup(UNSEEN), "gear.leather", "not described by the game yet: its kind")
+  T.ok(ns:GroupHas("gear.cloth", ROBE), "Cloth armor holds its bands' items")
+  T.ok(ns:GroupHas("gear", ROBE))
+  T.ok(not ns:GroupHas("gear.cloth.l26", ROBE))
+  T.eq(ns:GroupInfo("gear.cloth.l16").name, "Level 16-25")
+  T.eq(ns:GroupInfo("gear.cloth.l16").parent, "gear.cloth")
 end)
