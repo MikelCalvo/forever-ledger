@@ -39,6 +39,17 @@ T.test("Gold making: the filters and the chips' counts", function()
   T.ok(ns.GoldRowShown(craft, f)); T.ok(not ns.GoldRowShown(flip, f), "22c is under 50c")
   f.least, f.search = 0, "SILK"
   T.ok(ns.GoldRowShown(craft, f)); T.ok(not ns.GoldRowShown(flip, f), "the search ignores case")
+  -- Everything leaves Booty Bay out (it needs a trip); its own button shows it.
+  -- Profession: crafts of that profession only; disenchanting is Enchanting.
+  craft.prof = "First Aid"
+  T.ok(ns.GoldRowShown(craft, { kind = "all", least = 0, prof = "First Aid", search = "" }))
+  T.ok(not ns.GoldRowShown(craft, { kind = "all", least = 0, prof = "Tailoring", search = "" }))
+  T.ok(not ns.GoldRowShown(flip, { kind = "all", least = 0, prof = "Tailoring", search = "" }), "a flip has no profession")
+  T.ok(ns.GoldRowShown(flip, { kind = "all", least = 0, prof = "all", search = "" }))
+  local bb = { kind = "bootybay", name = "Staff of Jordan", profit = 5000 }
+  T.ok(not ns.GoldRowShown(bb, { kind = "all", least = 0, search = "" }))
+  T.ok(ns.GoldRowShown(bb, { kind = "bootybay", least = 0, search = "" }))
+  T.ok(ns.GoldRowShown(bb, { least = 0, search = "" }), "counted for its own button")
 end)
 
 T.test("Gold making: ranked by profit times how many, at most 20", function()
@@ -96,6 +107,7 @@ T.test("Gold making: shuffles, flips and recipes nobody knows in one list", func
   local shirt, gloves = byName["Test Shirt"], byName["Test Gloves"]
   T.ok(shirt, "the known shirt craft")
   T.eq(shirt.kind, "craftVendor"); T.eq(shirt.id, SHIRT); T.eq(shirt.who, "Tester")
+  T.eq(shirt.prof, "Tailoring")
   T.eq(shirt.cost, 100); T.eq(shirt.profit, 200); T.eq(shirt.brings, 300)
   T.ok(not shirt.unknown)
   T.ok(gloves, "the gloves: a recipe nobody knows")

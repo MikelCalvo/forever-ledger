@@ -20,19 +20,19 @@ local T = ns.Theme
 
 local KINDS = {
   { key = "all", label = "Everything" },
-  { key = "craftVendor", label = "Crafts for vendors", tag = "Craft, vendor" },
-  { key = "craftAH", label = "Crafts for the AH", tag = "Craft, AH" },
+  { key = "craftVendor", label = "Vendor crafts", tag = "Craft, vendor" },
+  { key = "craftAH", label = "AH crafts", tag = "Craft, AH" },
   { key = "convert", label = "Conversions", tag = "Conversion" },
   { key = "flip", label = "Vendor flips", tag = "Vendor flip" },
   { key = "deal", label = "Deals", tag = "Deal" },
-  { key = "disenchant", label = "Disenchanting", tag = "Disenchant" },
+  { key = "disenchant", label = "Disenchant", tag = "Disenchant" },
   { key = "bootybay", label = "Booty Bay", tag = "Booty Bay" },
 }
 local KIND_TAG = {}
 for _, k in ipairs(KINDS) do KIND_TAG[k.key] = k.tag end
 
 local KIND_TIP = {
-  all = "Every way to make gold below, together.",
+  all = "Every kind below together, except Booty Bay, which needs a trip there: pick it on its own.",
   craftVendor = "Crafts a vendor pays more for than their materials cost.",
   craftAH = "Crafts that sell on the auction house for more than their materials cost, after the cut.",
   convert = "Turning one thing into another (essences, transmutes) that's worth more.",
@@ -45,6 +45,8 @@ local KIND_TIP = {
 local DEAL_AGE = 3600          -- deals from prices of the last hour, as the Deals tab
 local NEUTRAL_MIN = 0.10       -- Booty Bay: at least 10% better after both cuts
 local NEUTRAL_LISTED = 3       -- and at least this many listed where you buy
+local NEUTRAL_FRESH = 3 * 86400 -- Booty Bay prices from the last 3 days only (Frank's screenshot, November
+                                -- 15: a thousand rows from old asking prices filled Everything)
 local PLAN_DEFAULT = 10        -- crafts planned when nothing says how many
 local PLAN_MAX = 200
 local STALE = 120              -- seconds before opening the tab works the list out again
@@ -76,8 +78,11 @@ end
 -- kind (for the chips' counts).
 function ns.GoldRowShown(row, f)
   if f.kind and f.kind ~= "all" and row.kind ~= f.kind then return false end
+  -- Everything leaves Booty Bay out: it needs a trip, and its thin market would fill the list.
+  if f.kind == "all" and row.kind == "bootybay" then return false end
   if (row.profit or 0) < (f.least or 0) then return false end
   if f.mine and row.unknown then return false end
+  if f.prof and f.prof ~= "all" and row.prof ~= f.prof then return false end
   local s = f.search and f.search:lower() or ""
   if s ~= "" and not ((row.name or ""):lower():find(s, 1, true)) then return false end
   return true
@@ -127,6 +132,7 @@ local function S()
   g.kind = g.kind or "all"
   if g.mine == nil then g.mine = true end
   g.least = g.least or 0
+  g.prof = g.prof or "all"
   g.sort = g.sort or { key = "total", desc = true }
   g.sets = g.sets or {}
   return g
@@ -151,9 +157,11 @@ local function shuffleRow(s, section)
   local row = { key = s.key, kind = kind, s = s, id = id, name = ns:ShuffleName(s),
     cost = s.cost, profit = s.profit, brings = s.cost + s.profit, count = ns:ShuffleRuns(s) }
   if o.kind == "craft" then
+    row.prof = o.prof
     row.who = firstName(o.who) or myName()
     row.whoLong = o.who and ("Known by " .. o.who) or "You know this recipe."
   elseif o.kind == "disenchant" then
+    row.prof = "Enchanting"
     local who = ns:BestEnchanter()
     row.who = firstName(who) or "an enchanter"
   else
@@ -192,13 +200,13 @@ local function neutralRows(out)
   local realm = ns.RealmName() or "?"
   for id in pairs(ns.db.prices[realm .. "|Neutral"] or {}) do
     local c = ns:NeutralCompare(id)
-    if c then
+    if c and c.t and time() - c.t <= NEUTRAL_FRESH then
       -- Buy at Booty Bay, sell here.
       if c.buyProfit > 0 and c.there > 0 and c.buyProfit / c.there >= NEUTRAL_MIN and c.listedThere >= 1
         and c.listedHere >= NEUTRAL_LISTED then
         out[#out + 1] = { key = "bb:in:" .. id, kind = "bootybay", c = c, dir = "in", id = id, name = ns.ItemName(id),
           who = "anyone", cost = c.there, brings = c.netHere, profit = c.buyProfit, count = c.listedThere,
-          tag = "Booty Bay > here" }
+          tag = "Buy at BB" }
       end
       -- Buy here, sell at Booty Bay.
       local gain = c.netThere - c.here
@@ -206,7 +214,7 @@ local function neutralRows(out)
         and c.listedThere >= NEUTRAL_LISTED then
         out[#out + 1] = { key = "bb:out:" .. id, kind = "bootybay", c = c, dir = "out", id = id, name = ns.ItemName(id),
           who = "anyone", cost = c.here, brings = c.netThere, profit = gain, count = c.listedHere,
-          tag = "Here > Booty Bay" }
+          tag = "Sell at BB" }
       end
     end
   end
@@ -325,8 +333,8 @@ local planN = {}             -- crafts to plan, per row key, when changed by han
 local refresh
 
 -- Columns from the right edge: right-aligned numbers, then Who and Kind left-aligned.
-local COL = { count = -4, profit = -54, brings = -134, cost = -214, who = -358, whoW = 62, kind = -444, kindW = 80 }
-local MONEY_W = 76
+local COL = { count = -4, countW = 50, profit = -60, brings = -130, cost = -200, who = -340, whoW = 62, kind = -428, kindW = 80 }
+local MONEY_W = 66
 local HEADERS = {
   { key = "name", label = "Idea", tip = "What to buy or craft. Click a row for how it adds up; right-click for its price window." },
   { key = "kind", label = "Kind", tip = "How it makes gold. Hover a row for the details." },
@@ -348,6 +356,15 @@ local SORT = {
 }
 
 local function money(c) return c and ns.Money(c) or "" end
+-- Shorter money for the table: to the silver from 1g, to the gold from 100g, so big prices
+-- fit their column (Frank's screenshot: 116g 82s... cut off). The panel and hovers keep it all.
+local function short(c)
+  if not c then return "" end
+  c = math.floor(c + 0.5)
+  if c >= 1000000 then c = math.floor(c / 10000 + 0.5) * 10000
+  elseif c >= 10000 then c = math.floor(c / 100 + 0.5) * 100 end
+  return ns.Money(c)
+end
 
 -- A vendor flip in words (ShuffleDetails adds a per-hour line that means nothing for a flip).
 local function flipText(r)
@@ -359,7 +376,7 @@ end
 
 local function filters(kind)
   local g = S()
-  return { kind = kind, least = g.least, mine = g.mine, search = f and f.search:GetText() or "" }
+  return { kind = kind, least = g.least, mine = g.mine, prof = g.prof, search = f and f.search:GetText() or "" }
 end
 
 local function work()
@@ -471,7 +488,7 @@ local function drawChips()
   for _, r in ipairs(rows or {}) do
     if ns.GoldRowShown(r, base) then
       counts[r.kind] = (counts[r.kind] or 0) + 1
-      counts.all = (counts.all or 0) + 1
+      if r.kind ~= "bootybay" then counts.all = (counts.all or 0) + 1 end
     end
   end
   local kind = S().kind
@@ -531,9 +548,9 @@ local function drawList()
     r.name:SetText(qualityName(e.id, e.name or ns.ItemName(e.id) or "?") .. (e.unknown and " |cff888888(learn)|r" or ""))
     r.kind:SetText(e.tag or KIND_TAG[e.kind] or "")
     r.who:SetText(e.who or "")
-    r.cost:SetText(money(e.cost))
-    r.brings:SetText(money(e.brings))
-    r.profit:SetText("|cff7fd39c" .. money(e.profit) .. "|r")
+    r.cost:SetText(short(e.cost))
+    r.brings:SetText(short(e.brings))
+    r.profit:SetText("|cff7fd39c" .. short(e.profit) .. "|r")
     r.count:SetText(e.count and tostring(e.count) or "|cff888888no limit|r")
     r:Show()
   end
@@ -547,11 +564,11 @@ local function drawList()
 
   local parts = {}
   if workedAt then
-    parts[#parts + 1] = ("Worked out at %s"):format(date("%H:%M", workedAt))
     local last = ns.db.lastFullScan
-    if last then parts[#parts + 1] = ("prices from your last full scan %s"):format(ns.Age(last)) end
+    parts[#parts + 1] = ("Worked out at %s%s"):format(date("%H:%M", workedAt),
+      last and (" from prices of your last full scan (%s)"):format(ns.Age(last)) or "")
   end
-  if #shown > MAX_ROWS then parts[#parts + 1] = ("the best %d of %d shown"):format(MAX_ROWS, #shown) end
+  if #shown > MAX_ROWS then parts[#parts + 1] = ("The best %d of %d shown"):format(MAX_ROWS, #shown) end
   if noPrice > 0 and not g.mine then
     parts[#parts + 1] = ("%d crafts left out: a material has no price yet"):format(noPrice)
   end
@@ -738,7 +755,7 @@ end
 
 local function applySet(set)
   local g = S()
-  g.kind, g.least, g.mine = set.kind or "all", set.least or 0, set.mine ~= false
+  g.kind, g.least, g.mine, g.prof = set.kind or "all", set.least or 0, set.mine ~= false, set.prof or "all"
   f.search:SetText(set.search or "")
   f.least:SetValue(g.least)
   f.mine:SetChecked(g.mine)
@@ -784,12 +801,16 @@ function ns:BuildGoldMaking(parent)
   f.least:SetPoint("LEFT", lt, "RIGHT", 8, 0)
   f.least:SetOptions(leastOptions())
   f.mine = T:Check(f, function(self) S().mine = self:GetChecked(); refresh() end)
-  f.mine:SetPoint("LEFT", f.least, "RIGHT", 16, 0)
-  f.mine.label:SetText("Only recipes my characters know")
+  -- Profession (Frank, November 15: no way to filter by profession). Disenchanting counts as
+  -- Enchanting; flips, deals and Booty Bay have none, so they go when one is picked.
+  f.prof = T:Dropdown(f, 130, function(v) S().prof = v; refresh() end)
+  f.prof:SetPoint("LEFT", f.least, "RIGHT", 10, 0)
+  f.mine:SetPoint("LEFT", f.prof, "RIGHT", 14, 0)
+  f.mine.label:SetText("Only my recipes")
   f.mine:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("Only recipes my characters know", 1, 1, 1)
-    GameTooltip:AddLine("Off: also every profession's crafts that sell to a vendor for more than they cost, from recipes none of your characters know yet (marked learn). Hover one for where its recipe data comes from.", nil, nil, nil, true)
+    GameTooltip:AddLine("Only my recipes", 1, 1, 1)
+    GameTooltip:AddLine("On: only recipes one of your characters knows. Off: also every profession's crafts that sell to a vendor for more than they cost, from recipes none of your characters know yet (marked learn). Hover one for where its recipe data comes from.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   f.mine:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -833,7 +854,7 @@ function ns:BuildGoldMaking(parent)
       GameTooltip:AddLine(set.name, 1, 1, 1)
       local kindLabel = "Everything"
       for _, k in ipairs(KINDS) do if k.key == set.kind then kindLabel = k.label end end
-      GameTooltip:AddLine(("%s, least profit %s%s%s"):format(kindLabel, (set.least or 0) > 0 and ns.MoneyPlain(set.least) or "any",
+      GameTooltip:AddLine(("%s%s, least profit %s%s%s"):format(kindLabel, (set.prof and set.prof ~= "all") and (", " .. set.prof) or "", (set.least or 0) > 0 and ns.MoneyPlain(set.least) or "any",
         set.mine == false and ", every recipe" or "", (set.search or "") ~= "" and (", \"" .. set.search .. "\"") or ""), nil, nil, nil, true)
       GameTooltip:AddLine("Click to use. Right-click to delete.", 0.6, 0.6, 0.6)
       GameTooltip:Show()
@@ -848,7 +869,7 @@ function ns:BuildGoldMaking(parent)
     askName(function(name)
       local g = S()
       if #g.sets >= MAX_SETS then return end
-      g.sets[#g.sets + 1] = { name = name:sub(1, 30), kind = g.kind, least = g.least, mine = g.mine, search = f.search:GetText() }
+      g.sets[#g.sets + 1] = { name = name:sub(1, 30), kind = g.kind, least = g.least, mine = g.mine, prof = g.prof, search = f.search:GetText() }
       refresh()
     end)
   end, 20)
@@ -879,7 +900,7 @@ function ns:BuildGoldMaking(parent)
     elseif spot[3] == "RIGHTEDGE" then
       b:SetPoint("LEFT", header, "RIGHT", spot[2], 0); b:SetWidth(70); fs:SetJustifyH("LEFT")
     else
-      b:SetPoint("RIGHT", header, "RIGHT", spot[2], 0); b:SetWidth(MONEY_W); fs:SetJustifyH("RIGHT")
+      b:SetPoint("RIGHT", header, "RIGHT", spot[2], 0); b:SetWidth(h.key == "count" and COL.countW or MONEY_W); fs:SetJustifyH("RIGHT")
     end
     b:SetScript("OnClick", function()
       local s = S().sort
@@ -970,6 +991,17 @@ refresh = function()
   if not rows then work() end
   local g = S()
   f.least:SetValue(g.least)
+  -- The professions in the list (and the one picked, even when none of its rows are left).
+  local profs, seen = {}, {}
+  for _, r in ipairs(rows or {}) do
+    if r.prof and not seen[r.prof] then seen[r.prof] = true; profs[#profs + 1] = r.prof end
+  end
+  if g.prof ~= "all" and not seen[g.prof] then profs[#profs + 1] = g.prof end
+  table.sort(profs)
+  local opts = { { value = "all", label = "All professions" } }
+  for _, p in ipairs(profs) do opts[#opts + 1] = { value = p, label = p } end
+  f.prof:SetOptions(opts)
+  f.prof:SetValue(g.prof)
   f.mine:SetChecked(g.mine)
   drawChips()
   drawSets()
