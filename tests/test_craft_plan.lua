@@ -119,3 +119,22 @@ T.test("Craft plan: a leftover from a batch serves a later need", function()
   T.eq(total, 40)
   T.eq(plan[BOLT].made, 2); T.eq(plan[RUNE].bought, 4)
 end)
+
+-- Codex review, November 15: need 2 bolts; one listed at 49c, the next at 10s; a batch of 2
+-- costs 1s. Buying the 49c one and then making a whole batch for the other came to 1s 49c.
+T.test("Craft plan: a whole batch beats a cheap first listing when the next is dear", function()
+  local total, plan = ns.CraftPlan({ [BOLT] = 2 }, sources({
+    [BOLT] = { ladder = { { 49, 1 }, { 1000, 1 } }, recipe = { makes = 2, mats = { { RUNE, 4 } } } },
+    [RUNE] = { ladder = { { 25, 100 } } },
+  }))
+  T.eq(total, 100)
+  T.eq(plan[BOLT].made, 2); T.eq(plan[BOLT].bought, 0)
+  T.eq(plan[RUNE].bought, 4)
+  -- Three needed: the 49c one bought, then one batch for the other two.
+  total, plan = ns.CraftPlan({ [BOLT] = 3 }, sources({
+    [BOLT] = { ladder = { { 49, 1 }, { 1000, 1 } }, recipe = { makes = 2, mats = { { RUNE, 4 } } } },
+    [RUNE] = { ladder = { { 25, 100 } } },
+  }))
+  T.eq(total, 149)
+  T.eq(plan[BOLT].bought, 1); T.eq(plan[BOLT].made, 2)
+end)

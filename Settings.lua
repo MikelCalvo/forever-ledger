@@ -133,7 +133,7 @@ local PAGES = {
         { key = "dealSound", label = "Chime for new flips and deals", kind = "check", help = "Plays the raid warning sound when a scan finds new vendor flips or deals." },
         { key = "quietWatch", label = "Quiet mode while Live watch runs", kind = "check", after = function() ns:UpdateQuiet() end,
           help = "While Live watch runs: the game's music, effects, ambience and voices go off, and Forever Ledger's chimes play at full volume, even with the game in the background, plus a chime when you win an auction. Your sound settings come back when the watch stops. /fl quiet turns it on for one character until you type it again." },
-        { key = "dealScreen", label = "Big message on screen", kind = "check", help = "Shows new flips and deals in large text at the top of the screen, where raid warnings go. Turn it off if it covers your windows." },
+        { key = "dealScreen", label = "Big message on screen", kind = "check", help = "Shows new flips and deals in large text at the top of the screen, where raid warnings go, except while the auction house is open (the Buy tab counts them there). Turn it off if it covers your windows." },
         { key = "dealChat", label = "Chat line for new flips and deals", kind = "check", help = "Lists each new vendor flip and deal in chat." },
       } },
       { name = "Disenchant finder", rows = {

@@ -7,7 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 - Forever Ledger's own tabs in the auction house window: **Buy** (the Buy queue, shopping lists and Disenchant finder) and **My auctions**, after Blizzard's Buy, Sell and Auctions along the bottom. The tab you had open opens again next visit. New flips found while you're on one of Blizzard's tabs show as a count on Buy instead of changing the view. Settings, Auction house, **Forever Ledger's tabs in the auction house** (on); off puts the panel back beside the window.
-- Buy queue rows: a star to watch the item or stop watching it, and a short reason (FLIP, WATCH, or the shopping list's name). The numbers keep their places on the right, so a long name is shortened instead of pushing Profit off.
+- Buy queue rows: a star to watch the item or stop watching it, and a short reason (FLIP, WATCH, or the shopping list's name). The numbers keep their places on the right, so a long name is shortened instead of pushing Profit off. **Buy** and **Total** replace Cheap: how many the queue would buy now (listed at or under Up to, no more than the list wants or your gold covers) and what they cost; Profit counts just those. A new flip's count is looked up while the queue waits for your click, instead of showing 1 until its turn.
 - **Scan once**, a new view on the Buy tab for looking things over: one reading of the whole auction house, then everything in the groups you tick (a group tree on the left, ticked groups add together) with its cheapest price, usual price, % of usual and how many are listed, best deals first, and a name search. The list stays as scanned until you scan again.
 - **Post** tab in the auction house window: your bags grouped, a price ready for each from its post rule (the same as the cheapest, never below 70% of the usual price or what a vendor pays after the cut), how many and how long, the deposit, total price and what you get; Post, Skip and Previous, middle-click to skip, and Scroll to post (each wheel tick posts the next one). Picking an item looks it up on the auction house as the Sell page does, and the price comes from the listings now, shown below it (price each, how many, seller; click one to price yours the same). Each auction house visit looks the listings up again, so a price from one auction house is never used at another.
 - The auction house window hides its portrait while one of Forever Ledger's tabs is open, for more room.
@@ -19,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Scan once: the Cheapest, Usual and % of usual columns have room for large prices. Groups: the add-an-item box no longer runs under the buttons.
 
 ### Fixed
+- The big on-screen message for new flips and deals no longer shows while the auction house is open, where it covered the Buy tab; the tab's count and the chime still tell you.
 - Ledger: a stack bought on the auction house could be put down as another purchase still waiting for its gold (20 Runecloth showed as 1 Red Wolf Meat at Runecloth's price). Each stack purchase now carries the price the game quoted, a refused one takes no gold, and two purchases paid in one go are listed one each.
 
 ## [0.26.0] - 2026-11-15
