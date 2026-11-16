@@ -19,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Changed
 - Gold making replaces the Shuffles and Deals tabs (`/fl deals` still opens the old Deals tab for now); right-click on the minimap button opens it.
 - **Professions** tab in place of Recipes and Crates: your professions, Trainers and Crates as tabs inside it. Each profession now lists every recipe, including ones your profession windows haven't shown (from the game's own data), with new filters: Where from, Skill (Learnable now, Need more skill), Group (by what it makes), Least profit, and the old All/Known, Type and search. When nothing matches, the list says which choices hide it.
+- Ledger: **By item** in place of Resale lists every item you bought or sold, not only ones both bought and sold: how many bought and sold, average buy and sell prices, profit each and profit on the resold ones, with spent and received totals at the bottom. Hover for the totals and where; double-click an item for each trade of it. Sales, Purchases and By item filter by group and rarity, and a search in quotes matches one item exactly.
 - The flip watch is now called **Live watch** (it looks for watched items and deals too, not just vendor flips).
 - Scan once: the Cheapest, Usual and % of usual columns have room for large prices. Groups: the add-an-item box no longer runs under the buttons.
 
