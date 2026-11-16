@@ -19,6 +19,10 @@ local _, ns = ...
 --                 15: one needed, 20c on the AH, a batch of 10 for 100c must buy)
 -- so a thin cheap end on the auction house is used, then making takes over when that
 -- gets dearer. Every unit is counted once, bought or made, never both.
+-- When buying the next unit is cheaper than a batch but a batch could be made, the rest of
+-- what's needed is worked out both ways (buy this one, or make a batch now) and the cheaper
+-- whole is kept (Codex review, November 15: a 49c bolt then 10s ones, against a batch of 2
+-- for 1s). Inside that look ahead the plan is filled unit by unit, so it stays quick.
 --
 -- sourceOf(id) returns { ladder = { { price, count }, ... } (cheapest first) or nil,
 --   vendor = copper each or nil, recipe = { makes = n, mats = { { id, qty }, ... } } or
@@ -74,18 +78,41 @@ function ns.CraftPlan(need, sourceOf, opts)
 
   local take
   -- One batch of id: its materials taken in st. The copper, or nil if they can't be had.
-  local function makeBatch(st, id, depth)
+  local function makeBatch(st, id, depth, simple)
     local total = 0
     for _, m in ipairs(src(id).recipe.mats or {}) do
-      local c = take(st, m[1], m[2], depth + 1)
+      local c = take(st, m[1], m[2], depth + 1, simple)
       if not c then return nil end
       total = total + c
     end
     return total
   end
 
+  -- One unit of id the chosen way (how: "ah", "vendor" or "craft"), in st. The copper.
+  local function takeOne(st, id, how, depth, simple)
+    local s, e = src(id), entry(st, id)
+    if how == "ah" then
+      local listing = nextListing(st, id)
+      local p = posOf(st, id)
+      p.used = p.used + 1
+      e.bought, e.boughtCost = e.bought + 1, e.boughtCost + listing
+      e.top = math.max(e.top or 0, listing)
+      return listing
+    elseif how == "vendor" then
+      e.vendor, e.vendorCost = e.vendor + 1, e.vendorCost + s.vendor
+      return s.vendor
+    end
+    local makes = math.max(s.recipe.makes or 1, 1)
+    local batch = makeBatch(st, id, depth, simple)
+    if not batch then return nil end
+    e.made = e.made + makes
+    st.left[id] = (st.left[id] or 0) + makes - 1   -- this unit is one of them
+    return batch
+  end
+
   -- Takes n units of id in st, cheapest first. The copper, or nil if they can't be had.
-  take = function(st, id, n, depth)
+  -- simple: no looking ahead (used inside a look ahead, so it stays quick).
+  take = function(st, id, n, depth, simple)
     local s = src(id)
     local e = entry(st, id)
     local total = 0
@@ -101,31 +128,32 @@ function ns.CraftPlan(need, sourceOf, opts)
         local best, how = listing, "ah"
         if s.vendor and (not best or s.vendor < best) then best, how = s.vendor, "vendor" end
         local makes = s.recipe and math.max(s.recipe.makes or 1, 1)
+        local canMake = false
         if s.recipe and depth < MAX_DEPTH then
-          local batch = makeBatch(copy(st), id, depth)
+          local batch = makeBatch(copy(st), id, depth, true)
           if batch then
+            canMake = true
             -- The whole batch, over the units still needed here (a leftover may be wasted).
             local each = batch / math.min(makes, n - i + 1)
             if not best or each < best then best, how = each, "craft" end
           end
         end
         if not best then return nil end
-        if how == "ah" then
-          local p = posOf(st, id)
-          p.used = p.used + 1
-          e.bought, e.boughtCost = e.bought + 1, e.boughtCost + listing
-          e.top = math.max(e.top or 0, listing)
-          total = total + listing
-        elseif how == "vendor" then
-          e.vendor, e.vendorCost = e.vendor + 1, e.vendorCost + s.vendor
-          total = total + s.vendor
-        else
-          local batch = makeBatch(st, id, depth)
-          if not batch then return nil end
-          e.made = e.made + makes
-          st.left[id] = (st.left[id] or 0) + makes - 1   -- this unit is one of them
-          total = total + batch
+        -- Buying this one looks cheaper, but a batch now may fill the rest for less (Codex
+        -- review, November 15: need 2, one listed at 49c then 10s, a batch of 2 for 1s:
+        -- buying the 49c one, then making a whole batch for the other, came to 1s 49c).
+        -- So the rest of what's needed is worked out both ways and the cheaper kept.
+        if not simple and canMake and how ~= "craft" and n - i >= 1 then
+          local a, b = copy(st), copy(st)
+          local ca = takeOne(a, id, how, depth, true)
+          local ra = ca and take(a, id, n - i, depth, true)
+          local cb = takeOne(b, id, "craft", depth, true)
+          local rb = cb and take(b, id, n - i, depth, true)
+          if cb and rb and not (ca and ra and ca + ra <= cb + rb) then how = "craft" end
         end
+        local c = takeOne(st, id, how, depth, simple)
+        if not c then return nil end
+        total = total + c
       end
     end
     return total
