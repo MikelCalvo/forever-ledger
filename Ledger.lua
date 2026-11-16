@@ -189,21 +189,21 @@ local function records(tab, from, charOK, match, opts)
     for _, e in ipairs(ns.db.sales) do
       if keep(e) then
         local id = e.n and byName[e.n:lower()]
-        sales[#sales + 1] = { t = e.t, id = id, item = e.n or "?", icon = iconOf(id or e.n), qty = e.q, total = e.a,
+        sales[#sales + 1] = { t = e.t, id = id, item = e.n or "?", iconKey = id or e.n, qty = e.q, total = e.a,
           where = "Auction", who = e.b, char = e.c, kind = "Auction sale" }
       end
     end
     for _, e in ipairs(ns.db.purchases) do
       if keep(e) then
         -- No quantity means a non-commodity purchase, which is always one item.
-        buys[#buys + 1] = { t = e.t, id = e.id, item = nameOf(e.id), icon = iconOf(e.id), qty = e.q or 1, total = e.a,
+        buys[#buys + 1] = { t = e.t, id = e.id, item = nameOf(e.id), iconKey = e.id, qty = e.q or 1, total = e.a,
           where = "Auction", char = e.c, kind = "Auction purchase" }
       end
     end
     for _, e in ipairs(ns.db.vendorLog) do
       if keep(e) and e.id then
         local sold = e.s == "sell"
-        local r = { t = e.t, id = e.id, item = nameOf(e.id), icon = iconOf(e.id), qty = e.q, total = e.a, where = "Vendor",
+        local r = { t = e.t, id = e.id, item = nameOf(e.id), iconKey = e.id, qty = e.q, total = e.a, where = "Vendor",
           char = e.c, kind = sold and "Sold to vendor" or "Bought from vendor" }
         if sold then sales[#sales + 1] = r else buys[#buys + 1] = r end
       end
@@ -213,7 +213,7 @@ local function records(tab, from, charOK, match, opts)
       if keep(m) then
         local auction = m.k == "sale" or m.k == "buy"
         local sold = m.k == "sale" or m.k == "vsell"
-        local r = { t = m.t, month = true, id = m.id, item = m.id and nameOf(m.id) or m.n or "?", icon = iconOf(m.id or m.n),
+        local r = { t = m.t, month = true, id = m.id, item = m.id and nameOf(m.id) or m.n or "?", iconKey = m.id or m.n,
           qty = m.q, total = m.a, where = auction and "Auction" or "Vendor", char = m.c,
           kind = auction and (sold and "Auction sales" or "Auction purchases") or (sold and "Sold to vendors" or "Bought from vendors") }
         if sold then sales[#sales + 1] = r else buys[#buys + 1] = r end
@@ -249,11 +249,11 @@ local function records(tab, from, charOK, match, opts)
       local function add(r, sold)
         local x = by[r.item]
         if not x then
-          x = { item = r.item, id = r.id, icon = r.icon, bought = 0, boughtTotal = 0, sold = 0, soldTotal = 0,
+          x = { item = r.item, id = r.id, iconKey = r.iconKey, bought = 0, boughtTotal = 0, sold = 0, soldTotal = 0,
             byItem = true, where = {}, first = r.t, last = r.t }
           by[r.item] = x
         end
-        x.icon, x.id = x.icon or r.icon, x.id or r.id
+        x.iconKey, x.id = x.iconKey or r.iconKey, x.id or r.id
         local q = r.qty or 1
         if sold then x.sold, x.soldTotal = x.sold + q, x.soldTotal + r.total
         else x.bought, x.boughtTotal = x.bought + q, x.boughtTotal + r.total end
@@ -551,26 +551,37 @@ local function charChoice()
   f.chars:SetOptions(ns:CharacterOptions())
 end
 
--- Each item's groups, kept a minute (a redraw asks for hundreds).
+-- Each item's groups, worked out only while a group is chosen, and kept 10 minutes:
+-- for every item listed it was too slow (Frank, November 16: "script ran too long" with
+-- 1,190 items in By item).
 local groupSets, groupSetsAt = {}, 0
 local function groupSet(id)
-  if GetTime() - groupSetsAt > 60 then wipe(groupSets); groupSetsAt = GetTime() end
+  if GetTime() - groupSetsAt > 600 then wipe(groupSets); groupSetsAt = GetTime() end
   if not groupSets[id] then groupSets[id] = ns.ItemGroupSet and ns:ItemGroupSet(id) or {} end
   return groupSets[id]
 end
+local qualities = {}
+local function qualityOf(id)
+  local q = qualities[id]
+  if q == nil then
+    q = ns.ItemQuality and ns.ItemQuality(id) or false
+    if q then qualities[id] = q end   -- (not cached while the game hasn't loaded the item)
+  end
+  return q or nil
+end
 
--- The Group and Rarity choices: only those the listed items have.
+-- The Group choices (every top group and yours, not checked against the items: that was
+-- the slow part) and the Rarity choices the listed items have.
 local function itemChoices(seen)
-  local present, rar = {}, {}
+  local rar = {}
   for id in pairs(seen) do
-    for gid in pairs(groupSet(id)) do present[gid] = true end
-    local q = ns.ItemQuality and ns.ItemQuality(id)
+    local q = qualityOf(id)
     if q then rar[q] = true end
   end
   local gopts, hasG = { { value = "all", label = "Any group" } }, { all = true }
   if ns.GroupTree then
     for _, g in ipairs(ns:GroupTree()) do
-      if present[g.id] and (g.kind == "user" or (g.kind == "builtin" and g.depth <= 1)) then
+      if g.kind == "user" or (g.kind == "builtin" and g.depth <= 1) then
         gopts[#gopts + 1] = { value = g.id, label = (g.depth > 0 and "   " or "") .. g.name }
         hasG[g.id] = true
       end
@@ -835,8 +846,9 @@ function ns:RefreshLedger()
   local list
   if itemTab then
     local function itemOK(id)
-      return (s.group == "all" or groupSet(id)[s.group] ~= nil)
-        and (s.rarity == "all" or ns.ItemQuality and ns.ItemQuality(id) == tonumber(s.rarity))
+      -- Rarity first: it is quick, and an item it rules out needs no group look-up.
+      return (s.rarity == "all" or qualityOf(id) == tonumber(s.rarity))
+        and (s.group == "all" or groupSet(id)[s.group] ~= nil)
     end
     local function run()
       local seen = {}
@@ -909,6 +921,9 @@ function ns:RefreshLedger()
     r:SetWidth(width)
     r.stripe:SetShown(i % 2 == 0)
     for key, fs in pairs(r.cells) do fs:SetShown(lay[key] ~= nil) end
+    -- The icon, looked up for shown rows only (for every record it was part of the "script
+    -- ran too long", Frank, November 16).
+    if rec.icon == nil then rec.icon = rec.iconKey and iconOf(rec.iconKey) or false end
     for _, c in ipairs(cols) do
       local fs = cell(r, c.key)
       fs:ClearAllPoints()
@@ -925,7 +940,7 @@ function ns:RefreshLedger()
       fs:SetText(show(rec, c.key))
       fs:Show()
     end
-    r.icon:SetShown(lay.item ~= nil and rec.icon ~= nil)
+    r.icon:SetShown(lay.item ~= nil and rec.icon and true or false)
     r:Show()
   end
   for i = n + 1, #rows do rows[i]:Hide() end
