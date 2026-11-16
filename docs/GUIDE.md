@@ -65,6 +65,17 @@ Settings and Help each have a **search box** above their list: type two letters 
 
 ![Tooltip for Strange Dust](images/tooltip.png)
 
+## Gold making
+
+The **Gold making** tab lists every way to make gold Forever Ledger finds, in one list (it replaces the Shuffles and Deals tabs; `/fl deals` still opens the old Deals tab for now).
+
+- **Kinds**: the buttons across the top pick crafts that sell to a vendor, crafts that sell on the auction house, conversions, vendor flips, deals well below the usual price, disenchanting, or Booty Bay against your own auction house, each with how many there are. **Everything** shows them all.
+- **Each row**: what it costs, what it brings (after the auction house cut where it's sold there), the profit each time, and how many times you could do it with what's listed cheaply enough now (**no limit** when everything comes from vendors). **Who** says which of your characters can do it. Click a column name to sort; it starts with profit times how many (at most 20), so a big one-off doesn't hide a steady earner.
+- **Filters**: **Least profit** hides small ones. Untick **Only recipes my characters know** to add every profession's crafts that sell to a vendor for more than they cost, from recipes none of your characters know yet (marked *learn*). The search box narrows it by name.
+- **Saved filters**: pick filters, then **Save these filters**; they become a quick button (up to 5). Click one to use it, right-click to delete it.
+- **How it adds up**: click a craft and the panel on the right works out the cheapest way to get its materials for that many crafts. It starts at what's listed cheaply enough and, for an auction house craft, no more than about a day's sales; change it with **Crafts**. Each material is filled one at a time from the cheapest place next: your bags (at what they'd sell for, or free with **Count my bags as paid for**), the next listing on the auction house, a vendor, or making it from its own materials. So the few cheap Bolts of Runecloth listed are bought and the rest made from cloth, and nothing is counted twice. **Add materials to a shopping list** puts what's bought on a new list, each up to the highest price the plan paid.
+- Click a deal, flip, disenchant or Booty Bay row for its numbers and why; right-click any row (or **Price window**) for the item's price window. It's worked out when you open the tab, and again with **Refresh**.
+
 ## Shuffles and vendor flips
 
 - **Shuffles**: buy materials, craft, disenchant or convert, and sell, ranked by profit per hour. Click a row for every step. Blizzard nerfed most vendor shuffles, so **Sells to a vendor** may often be empty. Tick **All professions** there to see every profession's crafts that sell to a vendor for more than their materials, whoever knows them. Recipes from your profession windows come first. Ones your windows haven't shown come from the game's own data, marked (Forever), and for an item that has none, Classic's, marked (Classic); some may not be learnable in game yet. Each one's steps say the profession and who of yours knows it.
@@ -223,7 +234,7 @@ The in-game Help tab has these under each topic too.
 | `/fl queue`, `/fl lists` | The buy queue or shopping lists (beside the auction house, or a window of their own elsewhere) |
 | `/fl customers`, `/fl work` | The Customers window, or its Work done view; `/fl customers on` / `off` turns the customer finder on or off |
 | `/fl de` | Your disenchant results |
-| `/fl deals` | Open the Deals tab (`/fl deals list` lists them in chat) |
+| `/fl deals` | Open the old Deals tab (`/fl deals list` lists them in chat); deals are on Gold making now |
 | `/fl price` | The Price window: look up any item's price history |
 | `/fl session` | Sessions: `/fl session start` or `stop` (or Ctrl-click the minimap button) |
 | `/fl book` | Recipe data gathered so far |

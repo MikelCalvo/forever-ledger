@@ -13,8 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - The auction house window hides its portrait while one of Forever Ledger's tabs is open, for more room.
 - My auctions: **Scroll to cancel** (each wheel tick cancels the next undercut auction), **Also cancel ones I could ask more for** (the cheapest but at least 10% under the usual price, marked "could ask more"), and middle-click to skip an auction this visit.
 - **Groups** tab in the main window: built-in groups that sort themselves by item type (gear by kind and level band: 1-15, 16-25, 26-35, 36-45, 46-55, 56-60), profession groups from the recipes, Watched and Gray items, and your own; each group's items (add, remove, restore) and its Post, Buy, Vendor and Craft rules (same as the group above, default, off, changed here, or a saved rule several groups share). The Post tab uses the post rules.
+- **Gold making** tab in the main window: every way to make gold in one list (crafts that sell to a vendor or on the auction house, conversions, vendor flips, deals, disenchanting, Booty Bay), with what each costs, brings, the profit and how many times you could do it; kind buttons with counts, least profit, only recipes your characters know, a search and saved filter sets as quick buttons. Click a craft for **How it adds up**: the cheapest way to get its materials for that many crafts (the few cheap listings bought, the rest made from their own materials where that is cheaper, your bags first, nothing counted twice), and Add materials to a shopping list.
 
 ### Changed
+- Gold making replaces the Shuffles and Deals tabs (`/fl deals` still opens the old Deals tab for now); right-click on the minimap button opens it.
 - The flip watch is now called **Live watch** (it looks for watched items and deals too, not just vendor flips).
 - Scan once: the Cheapest, Usual and % of usual columns have room for large prices. Groups: the add-an-item box no longer runs under the buttons.
 

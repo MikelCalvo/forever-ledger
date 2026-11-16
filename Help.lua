@@ -54,6 +54,13 @@ ns.HELP = {
     { "Darkmoon Faire", "Items the Darkmoon Faire takes for Prize Tickets get a coral red line: how many a turn-in takes, the tickets it gives and who takes them (Small Furry Paw: 5 for 1 ticket, Yebb Neblegear). Animal parts, and Blacksmithing, Engineering and Leatherworking crafts. Classic's list: Forever may have changed it. Settings, Tooltips." },
     { "Sells", "How fast an item sells: Fast, Steady, Slow, Rare (seldom listed, goes quickly) or No sales seen, judged against items of the same kind, so ore and swords aren't held to the same bar. It counts listings that vanished before they could have expired, so it builds up as you run full scans (fastest with Live watch) and shows after 3 hours of scans compared (and, in the first day, at least 3 sales)." },
   } },
+  { "The Gold making tab", {
+    { "Gold making tab", "Every way to make gold Forever Ledger finds, in one list: crafts that sell to a vendor or on the auction house, conversions, vendor flips, deals well below the usual price, disenchanting, and Booty Bay against your own auction house. Each row: what it costs, what it brings, the profit each time and how many times you could do it with what's listed cheaply enough now. Click a column name to sort; it starts with profit times how many. It's worked out when you open the tab (Refresh to do it again). It replaces the Shuffles and Deals tabs: /fl deals still opens the old Deals tab for now." },
+    { "Kinds and filters", "The buttons across the top pick a kind, with how many of each. Least profit hides small ones. Untick Only recipes my characters know to add every profession's crafts that sell to a vendor for more than they cost, from recipes nobody of yours knows yet (marked learn). Search narrows it by name." },
+    { "Saved filters", "Pick filters, then Save these filters: they become a quick button (up to 5). Click one to use it, right-click to delete it." },
+    { "How it adds up", "Click a craft: the panel on the right works out the cheapest way to get its materials for that many crafts (it starts at what's listed cheaply enough, and for an auction house craft no more than about a day's sales; change it with Crafts). Each material is filled one at a time from the cheapest place next: your bags (at what they'd sell for, or free with Count my bags as paid for), the next listing on the auction house, a vendor, or making it from its own materials. So a few cheap Bolts of Runecloth are bought and the rest made from cloth, and nothing is counted twice. Add materials to a shopping list puts what's bought on a new list, each up to the highest price the plan paid." },
+    { "Other kinds", "Click a deal, flip, disenchant or Booty Bay row for its numbers and why. Right-click any row (or Price window) for the item's price window." },
+  } },
   { "Shuffles and vendor flips", {
     { "Shuffles", "Buy materials, craft, disenchant or convert, and sell, ranked by profit per hour. Click a row for every step. Blizzard nerfed most vendor shuffles, so Sells to a vendor may often be empty. Tick All professions there to see every profession's crafts that sell to a vendor for more than their materials, whoever knows them. Recipes from your profession windows come first. Ones your windows haven't shown come from the game's own data, marked (Forever), and for an item that has none, Classic's, marked (Classic). Some may not be learnable in game yet." },
     { "Add to shopping list", "Open a shuffle or vendor flip, pick a regular list or New list, choose how many crafts (or items), then Add to shopping list. Its purchases and price limits are added; an existing item keeps its bought count and any price you typed. A disenchant group uses its cheapest item. Crate lists and lists with Any price are left out. New lists start with buying off: check Want and Up to and tick Buy from this list when ready." },
@@ -148,7 +155,7 @@ ns.HELP = {
     { "/fl quiet", "Quiet mode on this character, until you type it again: game sound off, chimes at full volume." },
     { "/fl price", "The Price window: look up any item's price history." },
     { "/fl queue, /fl lists", "The Buy queue or shopping lists." },
-    { "/fl deals", "The Deals tab (/fl deals list in chat)." },
+    { "/fl deals", "The old Deals tab (/fl deals list in chat). Deals are on Gold making now." },
     { "/fl session", "Sessions: /fl session start or stop (or Ctrl-click the minimap button)." },
     { "/fl customers, /fl work", "The Customers window. /fl customers on or off turns the customer finder on or off." },
     { "/fl de", "Your disenchant results." },
@@ -188,7 +195,7 @@ local hv
 
 -- The sidebar's groups, like Settings'; Getting started stands on its own.
 local HELP_GROUPS = {
-  ["Auction house scans"] = "Gold making", ["Tooltips"] = "Gold making", ["Shuffles and vendor flips"] = "Gold making",
+  ["The Gold making tab"] = "Gold making", ["Auction house scans"] = "Gold making", ["Tooltips"] = "Gold making", ["Shuffles and vendor flips"] = "Gold making",
   ["Buy queue and lists"] = "Gold making", ["Deals"] = "Gold making", ["Disenchanting"] = "Gold making",
   ["Recipes and trainers"] = "Professions", ["Waylaid Crates"] = "Professions", ["Customers and work"] = "Professions",
   ["Your gold"] = "Your gold",
