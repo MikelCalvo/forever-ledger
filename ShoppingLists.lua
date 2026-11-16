@@ -714,6 +714,9 @@ local function recipeIndex()
   return idx
 end
 
+-- Forget the index (tests: an index built by another test file is otherwise kept 30 seconds).
+function ns:ForgetRecipeIndex() recipeCache = nil end
+
 -- Falls back to the original Classic recipe (ClassicItems.lua), marked classic.
 function ns:RecipeFor(id)
   local r = recipeIndex()[id]

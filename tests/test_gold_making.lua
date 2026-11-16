@@ -48,7 +48,7 @@ T.test("Gold making: ranked by profit times how many, at most 20", function()
 end)
 
 T.test("Gold making: How it adds up buys the cheap bolts and makes the rest", function()
-  S.now = S.now + 1000   -- (a new GetTime, so the recipe index is built again)
+  ns:ForgetRecipeIndex()   -- (one built by an earlier test file is kept 30 seconds)
   ns.db.recipeBook = { Tailoring = {
     [1] = { n = "Bolt of Test Cloth", out = BOLT, oq = 1, r = { { CLOTH, 4 } } },
   } }
