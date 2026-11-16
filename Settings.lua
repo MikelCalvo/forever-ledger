@@ -233,11 +233,21 @@ local PAGES = {
           help = "On a Rogue from level 16: lockbox requests, and the Offer lockpicking button." },
       } },
     } },
-  { key = "crates", title = "Waylaid Crates", icon = "Interface\\Icons\\INV_Crate_01",
+  { key = "disenchanting", title = "Disenchanting", icon = "Interface\\Icons\\INV_Enchant_Disenchant",
+    desc = "Disenchanting from your bags with one click per item.",
+    rows = {
+      { sub = "Quick disenchant" },
+      { key = "quickDE", label = "Hold a key and click to disenchant", kind = "check",
+        help = "Hold the key below and click a green, blue or purple weapon or armor in your bags: it's disenchanted. Only on a character with Enchanting, not in combat." },
+      { key = "quickDEKey", label = "Key to hold", kind = "choice", options = {
+          { "ctrlalt", "Ctrl+Alt" }, { "shiftalt", "Shift+Alt" }, { "alt", "Alt" } },
+        help = "In your bags, this key wins over the price window's click if both are the same (Tooltips, Price window click). The Disenchant window (/fl disenchant, or Disenchant at the top of the main window) lists what you can disenchant, to tick and do one click at a time." },
+    } },
+  { key = "crates", title = "Crates and writs", icon = "Interface\\Icons\\INV_Crate_01",
     desc = "Crates and Writs under Professions: the cheapest way to fill each crate, and what each writ costs per reputation.",
     rows = {
       { sub = "Crates" },
-      { key = "crates", label = "Waylaid Crates", kind = "check", after = function() ns:LayoutTabs(); ns:RefreshRecipes() end,
+      { key = "crates", label = "Crates and writs", kind = "check", after = function() ns:LayoutTabs(); ns:RefreshRecipes() end,
         help = "The Crates and Writs tabs under Professions, and their tooltip lines." },
     } },
 

@@ -56,5 +56,6 @@ GroupsTab.lua
 CraftPlan.lua
 GoldMaking.lua
 Writs.lua
+QuickDisenchant.lua
 PriceWindow.lua
 Probe.lua

@@ -99,6 +99,7 @@ ns.HELP = {
     { "Keep in mind", "The auction house can't tell what actually sold. Buy what you'd be happy to hold for a while." },
   } },
   { "Disenchanting", {
+    { "Quick disenchant", "Hold Ctrl+Alt and click a green, blue or purple weapon or armor in your bags: it is disenchanted, one click each (the slot lights up while the key is held). Or open the Disenchant window (Disenchant at the top of the main window, or /fl disenchant): tick what to disenchant (Tick suggested ticks what the sell suggestion says to disenchant), then click Disenchant next once per item. Only ticked items. Settings, Disenchanting changes the key. Not in combat." },
     { "Disenchant estimates", "Any Enchanting skill can disenchant anything. What an item gives, and how often, are estimates from public data, so the game can differ. Greens, blues from item level 21 and purples from 40 are covered; blues below 21 aren't, as ours gave essences where the estimate says shards. Crafted wands and items the game says can't be disenchanted are left out. The rare extra crystal from high-level blues and the Arcane Salvager's bonus aren't counted." },
     { "Disenchant finder", "Beside the auction house (Buy queue button, Disenchant finder tab): eligible armor and weapons in the item levels you pick (the Item levels dropdown, with Select all and Deselect all), with what each is worth to disenchant, on average, if you sell the materials. Hover a row to see each material's price and how that adds up. Hover a level in that list for the odds and what a bad and a good roll would bring (Settings, Auction house can hide the rolls). Pick a regular shopping list or New list, then Add to shopping list for one of every shown row your Enchanting can disenchant; right-click a row to add only it. Up to uses the disenchant value less the safety margin, refreshed when added again, on Buy again or by right-clicking Up to. Type a lower price for a bigger margin; typed prices stay yours. New lists start with buying off. Any stat version of each item will do." },
   } },
@@ -111,7 +112,7 @@ ns.HELP = {
   } },
   { "Waylaid Crates", {
     { "Crates", "Professions, Crates: the cheapest way to fill each crate at today's prices, with the crate's own price and gold per Merchant's Favor. After your first turn-in (a one-time quest), every crate pays 5s and 10 Favor; Net cost takes the 5s off, and shows green if a crate somehow pays for itself. Click a crate for every bundle and what you already have." },
-    { "Writs", "Professions, Writs: every Craftsman's Writ order (an item to deliver to a customer for reputation and a coin pouch, each once a day, no profession needed) with its customer and zone, the cheapest way to get the item at your last scan's prices, the cost per reputation after the pouch, and the writ's own auction price. Writs in your bags come first. Hover for the cheapest way step by step; click to search the auction house. The list and reward amounts are from player guides, not yet all seen in game." },
+    { "Writs", "Professions, Writs: every Craftsman's Writ order (an item to deliver to a customer for reputation and a coin pouch, each once a day, no profession needed) with its customer and zone, the cheapest way to get the item at your last scan's prices, the cost per reputation after the pouch, and the writ's own auction price. Writs in your bags come first. Yours shows only the writs you have. List, or Add yours to a shopping list, puts what to buy on the Writs shopping list (the item, or its materials when making it is cheaper; what you have is used first). Hover for the cheapest way step by step; click to search the auction house. The list and reward amounts are from player guides, not yet all seen in game." },
     { "Shopping list for a crate", "Open a crate and click Add cheapest fill to a shopping list: the crate and its items go on a list named after the crate, with prices high enough to buy them all at your last scan. What you already have counts towards a crate list's Want (only crate lists do this). Tick Buy from this list in the Buy queue on it to buy what you're short. Set the crate's Want to fill several at once: every item's Want follows it. The list is temporary: each crate you fill takes one off, and the list goes with the last one (or after a week)." },
   } },
   { "Customers and work", {
@@ -162,6 +163,7 @@ ns.HELP = {
     { "/fl session", "Sessions: /fl session start or stop (or Ctrl-click the minimap button)." },
     { "/fl customers, /fl work", "The Customers window. /fl customers on or off turns the customer finder on or off." },
     { "/fl de", "Your disenchant results." },
+    { "/fl disenchant", "The Disenchant window: tick items, then one click each." },
     { "/fl book", "Recipe data gathered." },
     { "/fl pair, /fl unpair", "Link or unlink your other account." },
     { "/fl sync", "Sync status." },
