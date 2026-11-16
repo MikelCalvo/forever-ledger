@@ -333,7 +333,7 @@ local planN = {}             -- crafts to plan, per row key, when changed by han
 local refresh
 
 -- Columns from the right edge: right-aligned numbers, then Who and Kind left-aligned.
-local COL = { count = -4, countW = 50, profit = -60, brings = -130, cost = -200, who = -340, whoW = 62, kind = -428, kindW = 80 }
+local COL = { count = -4, countW = 60, profit = -68, brings = -138, cost = -208, who = -346, whoW = 62, kind = -432, kindW = 80 }
 local MONEY_W = 66
 local HEADERS = {
   { key = "name", label = "Idea", tip = "What to buy or craft. Click a row for how it adds up; right-click for its price window." },
@@ -565,12 +565,12 @@ local function drawList()
   local parts = {}
   if workedAt then
     local last = ns.db.lastFullScan
-    parts[#parts + 1] = ("Worked out at %s%s"):format(date("%H:%M", workedAt),
-      last and (" from prices of your last full scan (%s)"):format(ns.Age(last)) or "")
+    parts[#parts + 1] = ("Worked out %s%s"):format(date("%H:%M", workedAt),
+      last and (", full scan %s"):format(ns.Age(last)) or "")
   end
   if #shown > MAX_ROWS then parts[#parts + 1] = ("The best %d of %d shown"):format(MAX_ROWS, #shown) end
   if noPrice > 0 and not g.mine then
-    parts[#parts + 1] = ("%d crafts left out: a material has no price yet"):format(noPrice)
+    parts[#parts + 1] = ("%d left out: a material has no price"):format(noPrice)
   end
   f.status:SetText(table.concat(parts, ". ") .. (#parts > 0 and "." or ""))
   f.empty:SetShown(#shown == 0)
