@@ -19,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Scan once: the Cheapest, Usual and % of usual columns have room for large prices. Groups: the add-an-item box no longer runs under the buttons.
 
 ### Fixed
+- The big on-screen message for new flips and deals no longer shows while the auction house is open, where it covered the Buy tab; the tab's count and the chime still tell you.
 - Ledger: a stack bought on the auction house could be put down as another purchase still waiting for its gold (20 Runecloth showed as 1 Red Wolf Meat at Runecloth's price). Each stack purchase now carries the price the game quoted, a refused one takes no gold, and two purchases paid in one go are listed one each.
 
 ## [0.26.0] - 2026-11-15
