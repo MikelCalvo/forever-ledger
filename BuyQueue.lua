@@ -1887,13 +1887,13 @@ local function laneRow(L, i)
         else held = (" That's what %s%s covers."):format(money(spendable()), spendable() < GetMoney() and " left to spend" or "") end
       end
       if e.buyOne then
-        GameTooltip:AddLine(("Buy %d (one copy a click) for %s%s. %d listed at or under %s at the last look%s."):format(
+        ns:TooltipAddLine(("Buy %d (one copy a click) for %s%s. %d listed at or under %s at the last look%s."):format(
           e.buyN, e.buyEstimate and "about " or "", money(e.buyCost or 0), e.listedN or 0, limitText(e), when), 1, 1, 1, true)
       else
-        GameTooltip:AddLine(("Buy %d for %s. %d listed at or under %s at the last look%s.%s"):format(
+        ns:TooltipAddLine(("Buy %d for %s. %d listed at or under %s at the last look%s.%s"):format(
           e.buyN, money(e.buyCost or 0), e.listedN or 0, limitText(e), when, held), 1, 1, 1, true)
       end
-      GameTooltip:AddLine("The auction house is checked again when you buy, so the count can change.", 0.7, 0.7, 0.7, true)
+      ns:TooltipAddLine("The auction house is checked again when you buy, so the count can change.", 0.7, 0.7, 0.7, true)
     end
     local e = self.entry
     if e.reason == "flip" and e.affordN and e.n and e.affordN < e.n and e.affordN > 0 then
