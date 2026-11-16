@@ -576,8 +576,15 @@ local function panelText(r)
   local function add(s) L[#L + 1] = s or "" end
   local plan
   if r.kind == "craftVendor" or r.kind == "craftAH" then
+    -- Worked out again only when the row, the number of crafts, the bags switch or the
+    -- list's prices change: scans redraw the tab up to once a second.
     local n = planN[r.key] or planCount(r)
-    plan = ns:GoldPlan(r, n, f.ownedFree:GetChecked())
+    local free = f.ownedFree:GetChecked() and true or false
+    local key = ("%s:%d:%s:%s"):format(r.key, n, tostring(free), tostring(workedAt))
+    if f.panel.planKey ~= key then
+      f.panel.planKey, f.panel.planFor = key, ns:GoldPlan(r, n, free)
+    end
+    plan = f.panel.planFor
   end
   f.panel.plan = plan
   if plan then
