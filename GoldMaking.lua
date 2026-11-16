@@ -112,7 +112,7 @@ function ns.GoldPlanLines(need, order, plan, recipeOf, money)
     if e.vendor > 0 then parts[#parts + 1] = ("%d from a vendor (%s)"):format(e.vendor, money(e.vendorCost)) end
     if e.made > 0 then parts[#parts + 1] = ("make %d"):format(e.made) end
     local head = depth == 0 and ("%d %s"):format(need[id] or 0, "%s") or "%s"
-    lines[#lines + 1] = { depth = depth, id = id, head = head, text = table.concat(parts, ", ") }
+    lines[#lines + 1] = { depth = depth, id = id, head = head, text = table.concat(parts, ", "), parts = parts, entry = e }
     if e.made > 0 then
       local r = recipeOf(id)
       for _, m in ipairs(r and r.mats or {}) do add(m[1], depth + 1) end
@@ -588,89 +588,191 @@ local function selectedRow()
   for _, r in ipairs(shown) do if r.key == selected then return r end end
 end
 
-local function panelText(r)
-  local L = {}
-  local function add(s) L[#L + 1] = s or "" end
-  local plan
-  if r.kind == "craftVendor" or r.kind == "craftAH" then
-    -- Worked out again only when the row, the number of crafts, the bags switch or the
-    -- list's prices change: scans redraw the tab up to once a second.
-    local n = planN[r.key] or planCount(r)
-    local free = f.ownedFree:GetChecked() and true or false
-    local key = ("%s:%d:%s:%s"):format(r.key, n, tostring(free), tostring(workedAt))
-    if f.panel.planKey ~= key then
-      f.panel.planKey, f.panel.planFor = key, ns:GoldPlan(r, n, free)
-    end
-    plan = f.panel.planFor
+-- The panel is a list of lines, each one of a few kinds (Frank, November 15: the text was
+-- "quite busy"; numbers now line up on the right and each material is a row of its own):
+--   big   the profit, large      note  a short wrapped line, gray
+--   head  a section heading      pair  a label with its amount on the right
+--   item  an icon, a name and its cost, with a gray line under it (sub)
+local GREEN, RED = "|cff7fd39c", "|cffee8597"
+
+local function profitText(c, unit)
+  if not c then return "" end
+  if c < 0 then return RED .. ns.Money(-c) .. " lost " .. unit .. "|r" end
+  return GREEN .. "+" .. ns.Money(c) .. " " .. unit .. "|r"
+end
+
+local function stepsSpec(spec, s)
+  local steps = ns:ShuffleSteps(s)
+  local n = 0
+  for _ in steps:gmatch("[^\n]+") do n = n + 1 end
+  if n <= 2 then return end   -- craft then sell, or buy then sell: the row's Kind says it
+  spec[#spec + 1] = { style = "head", left = "Steps" }
+  for line in steps:gmatch("[^\n]+") do spec[#spec + 1] = { style = "note", left = line } end
+end
+
+-- A craft row: its plan for that many crafts.
+local function craftSpec(r, spec)
+  local n = planN[r.key] or planCount(r)
+  local free = f.ownedFree:GetChecked() and true or false
+  -- Worked out again only when the row, the number of crafts, the bags switch or the
+  -- list's prices change: scans redraw the tab up to once a second.
+  local key = ("%s:%d:%s:%s"):format(r.key, n, tostring(free), tostring(workedAt))
+  if f.panel.planKey ~= key then
+    f.panel.planKey, f.panel.planFor = key, ns:GoldPlan(r, n, free)
   end
+  local plan = f.panel.planFor
   f.panel.plan = plan
-  if plan then
-    add(("|cffaaaaaaFor %d %s, the cheapest way for that many:|r"):format(plan.n, plan.n == 1 and "craft" or "crafts"))
-    if not plan.total then
-      add("|cffee8597A material can't be had at today's prices (none listed and no vendor or recipe).|r")
-      return table.concat(L, "\n")
-    end
-    local lines = ns.GoldPlanLines(plan.need, plan.order, plan.plan,
-      function(id) return plan.src(id).recipe end, money)
-    for _, l in ipairs(lines) do
-      local name = ns.ItemName(l.id) or ("item " .. l.id)
-      local indent = string.rep("   ", l.depth)
-      add(indent .. (l.depth == 0 and l.head:format(name) or ("|cffbbbbbb" .. name .. "|r")) .. ":")
-      add(indent .. "   |cffbbbbbb" .. l.text .. "|r")
-    end
-    add(" ")
-    local each = plan.total / plan.n
-    add(("Materials %s, |cffffffff%s a craft|r"):format(money(plan.total), money(each)))
-    if plan.brings then
-      local profit = plan.brings - each
-      add(("Brings %s a craft (%s)"):format(money(plan.brings),
-        r.kind == "craftAH" and "on the auction house, after the cut" or "from a vendor"))
-      add((profit >= 0 and "|cff7fd39c" or "|cffee8597") .. ("Profit %s a craft (%d%%)|r"):format(
-        money(math.abs(profit)) .. (profit < 0 and " lost" or ""), each > 0 and math.floor(profit / each * 100 + 0.5) or 0))
-    end
-    if r.kind == "craftAH" and ns.SellSpeed then
-      local sp = ns:SellSpeed(r.id)
-      if sp then add("|cffaaaaaaSells: " .. ns:SellSpeedText(sp) .. "|r") end
-    end
-    add(" ")
-    add("|cffaaaaaaThen:|r")
-    add("|cffbbbbbb" .. ns:ShuffleSteps(r.s) .. "|r")
-    return table.concat(L, "\n")
+  if not (plan and plan.total) then
+    spec[#spec + 1] = { style = "note", left = RED .. "A material can't be had at today's prices: none listed, and no vendor or recipe.|r" }
+    return
   end
-  if r.kind == "deal" then
+  local each = plan.total / plan.n
+  local profit = plan.brings and (plan.brings - each)
+  spec[#spec + 1] = { style = "big", left = profitText(profit, "a craft") }
+  local bits = {}
+  if profit and each > 0 then bits[#bits + 1] = ("%d%% on what it costs"):format(math.floor(profit / each * 100 + 0.5)) end
+  if r.kind == "craftAH" and ns.SellSpeed then
+    local sp = ns:SellSpeed(r.id)
+    if sp and sp.perDay then
+      bits[#bits + 1] = sp.key == "none" and "no sales seen yet"
+        or ("sells: %s, about %d a day"):format(sp.label, math.floor(sp.perDay + 0.5))
+    end
+  end
+  if #bits > 0 then spec[#spec + 1] = { style = "note", left = table.concat(bits, ", ") } end
+  spec[#spec + 1] = { style = "head", left = ("For %d %s"):format(plan.n, plan.n == 1 and "craft" or "crafts") }
+  spec[#spec + 1] = { style = "pair", left = "Materials, a craft", right = ns.Money(each) }
+  if plan.brings then
+    spec[#spec + 1] = { style = "pair", left = r.kind == "craftAH" and "Brings, after the cut" or "A vendor pays",
+      right = ns.Money(plan.brings) }
+  end
+  spec[#spec + 1] = { style = "pair", left = "All materials", right = ns.Money(plan.total) }
+  spec[#spec + 1] = { style = "head", left = "Materials" }
+  local lines = ns.GoldPlanLines(plan.need, plan.order, plan.plan,
+    function(id) return plan.src(id).recipe end, money)
+  for _, l in ipairs(lines) do
+    local e = l.entry
+    local cost = e.boughtCost + e.vendorCost
+    if e.owned > 0 and not free then cost = cost + e.owned * (plan.src(l.id).ownedValue or 0) end
+    local name = ns.ItemName(l.id) or ("item " .. l.id)
+    local count = l.depth == 0 and plan.need[l.id] or (e.owned + e.bought + e.vendor + e.made)
+    spec[#spec + 1] = { style = "item", icon = ns:ItemIcon(l.id), indent = l.depth,
+      left = ("%d %s"):format(count, name), right = cost > 0 and ns.Money(cost) or "" }
+    local how = {}
+    if e.owned > 0 then how[#how + 1] = ("%d from your bags"):format(e.owned) end
+    if e.bought > 0 then how[#how + 1] = ("%d on the AH, up to %s"):format(e.bought, ns.Money(e.top)) end
+    if e.vendor > 0 then how[#how + 1] = ("%d from a vendor"):format(e.vendor) end
+    if e.made > 0 then how[#how + 1] = ("make %d"):format(e.made) end
+    spec[#spec + 1] = { style = "sub", indent = l.depth, left = table.concat(how, ", ") }
+  end
+  stepsSpec(spec, r.s)
+end
+
+local function panelSpec(r)
+  local spec = {}
+  if r.kind == "craftVendor" or r.kind == "craftAH" then
+    craftSpec(r, spec)
+  elseif r.kind == "deal" then
+    spec[#spec + 1] = { style = "big", left = profitText(r.profit, "each") }
     for _, l in ipairs(ns:DealExplain(r.d)) do
-      if l.head then add("|cffffd100" .. l.head .. "|r")
-      elseif l.note then add("|cffaaaaaa" .. l.note .. "|r")
-      else add(l[1] .. ": |cffffffff" .. tostring(l[2]) .. "|r") end
+      if l.head then spec[#spec + 1] = { style = "head", left = l.head }
+      elseif l.note then spec[#spec + 1] = { style = "note", left = l.note }
+      else spec[#spec + 1] = { style = "pair", left = l[1], right = tostring(l[2]) } end
     end
-    return table.concat(L, "\n")
-  end
-  if r.kind == "bootybay" then
+  elseif r.kind == "bootybay" then
     local c = r.c
-    add(r.dir == "in" and "Buy at Booty Bay, bring it here and sell it." or "Buy it here, take it to Booty Bay and sell it there.")
-    add(" ")
-    add(("Booty Bay: %s cheapest, %d listed"):format(money(c.there), c.listedThere))
-    add(("Here: %s cheapest, %d listed"):format(money(c.here), c.listedHere))
-    add(("Brings %s each after the cut and one unsold listing"):format(money(r.brings)))
-    add(("|cff7fd39cProfit %s each|r"):format(money(r.profit)))
-    add(" ")
-    add("|cffaaaaaaBooty Bay takes 15%. Its prices are from your last scan there (" .. ns.Age(c.t) .. "): scan again when you get there before buying a lot.|r")
-    return table.concat(L, "\n")
+    spec[#spec + 1] = { style = "big", left = profitText(r.profit, "each") }
+    spec[#spec + 1] = { style = "note", left = r.dir == "in" and "Buy it at Booty Bay, sell it here."
+      or "Buy it here, sell it at Booty Bay." }
+    spec[#spec + 1] = { style = "pair", left = ("Booty Bay, %d listed"):format(c.listedThere), right = ns.Money(c.there) }
+    spec[#spec + 1] = { style = "pair", left = ("Here, %d listed"):format(c.listedHere), right = ns.Money(c.here) }
+    spec[#spec + 1] = { style = "pair", left = "Brings, after the cut", right = ns.Money(r.brings) }
+    spec[#spec + 1] = { style = "note", left = "Booty Bay takes 15%. Its prices are from your scan there " .. ns.Age(c.t)
+      .. ": scan again when you get there." }
+  elseif r.kind == "flip" then
+    local s = r.s
+    spec[#spec + 1] = { style = "big", left = profitText(r.profit, "each") }
+    spec[#spec + 1] = { style = "pair", left = "Buy at up to", right = ns.Money(s.maxBuy) }
+    spec[#spec + 1] = { style = "pair", left = ("%d listed, each on average"):format(s.buys[1].listed or 0), right = ns.Money(s.cost) }
+    spec[#spec + 1] = { style = "pair", left = "A vendor pays", right = ns.Money(s.opt.value) }
+    spec[#spec + 1] = { style = "note", left = "Live watch at the auction house (Buy tab) buys these for you, one click each." }
+  else
+    spec[#spec + 1] = { style = "big", left = profitText(r.profit, r.s.single and "each" or "a time") }
+    spec[#spec + 1] = { style = "pair", left = "Costs", right = ns.Money(r.cost) }
+    spec[#spec + 1] = { style = "pair", left = "Brings", right = ns.Money(r.brings) }
+    if r.s.maxBuy and (r.s.single or r.s.group) then
+      spec[#spec + 1] = { style = "pair", left = "Buy at up to", right = ns.Money(r.s.maxBuy) }
+    end
+    spec[#spec + 1] = { style = "head", left = "Steps" }
+    for line in ns:ShuffleSteps(r.s):gmatch("[^\n]+") do spec[#spec + 1] = { style = "note", left = line } end
   end
-  add(r.kind == "flip" and flipText(r) or ns:ShuffleDetails(r.s))
-  if r.kind == "flip" then
-    add(" ")
-    add("|cffaaaaaaLive watch at the auction house (Buy tab) buys vendor flips for you, one click each.|r")
+  return spec
+end
+
+local function panelLine(i)
+  local p = f.panel
+  local l = p.lines[i]
+  if l then return l end
+  l = CreateFrame("Frame", nil, p.content)
+  l.icon = l:CreateTexture(nil, "ARTWORK")
+  l.icon:SetSize(14, 14)
+  l.icon:SetPoint("TOPLEFT", 0, 0)
+  l.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  l.left = T:Text(l, 11)
+  l.left:SetJustifyH("LEFT")
+  l.left:SetJustifyV("TOP")
+  l.right = T:Text(l, 11)
+  l.right:SetJustifyH("RIGHT")
+  l.right:SetPoint("TOPRIGHT", 0, 0)
+  l.right:SetWordWrap(false)
+  p.lines[i] = l
+  return l
+end
+
+local function drawSpec(spec)
+  local p = f.panel
+  local w = PANEL_W - 26
+  local y = 0
+  for i, d in ipairs(spec) do
+    local l = panelLine(i)
+    local indent = (d.indent or 0) * 12 + (d.style == "sub" and 18 or 0)
+    if d.style == "head" then y = y + (i > 1 and 10 or 0)
+    elseif d.style ~= "sub" and i > 1 then y = y + 3 end
+    l:ClearAllPoints()
+    l:SetPoint("TOPLEFT", p.content, "TOPLEFT", indent, -y)
+    l:SetWidth(w - indent)
+    local size, color = 11, T.text
+    if d.style == "big" then size = 15
+    elseif d.style == "head" then size, color = 10, { 1, 0.82, 0, 1 }
+    elseif d.style == "note" or d.style == "sub" then size, color = 10, T.dim end
+    T:Font(l.left, size, color)
+    T:Font(l.right, 11, T.text)
+    l.icon:SetShown(d.icon ~= nil)
+    if d.icon then l.icon:SetTexture(d.icon) end
+    l.right:SetText(d.right or "")
+    local rightW = (d.right and d.right ~= "") and (l.right:GetStringWidth() + 6) or 0
+    local iconW = d.icon and 18 or 0
+    l.left:ClearAllPoints()
+    l.left:SetPoint("TOPLEFT", iconW, d.icon and -1 or 0)
+    l.left:SetWidth(math.max(40, w - indent - iconW - rightW))
+    l.left:SetWordWrap(d.style == "note" or d.style == "sub" or d.style == "head")
+    l.left:SetText(d.left or "")
+    local h = math.max(l.left:GetStringHeight(), d.icon and 14 or 0, size)
+    l:SetHeight(h)
+    y = y + h
+    l:Show()
   end
-  return table.concat(L, "\n")
+  for i = #spec + 1, #p.lines do p.lines[i]:Hide() end
+  p.content:SetHeight(y + 8)
+  p.sf.UpdateScrollBar()
 end
 
 local function drawPanel()
   local p = f.panel
   local r = selectedRow()
+  local spec
   if not r then
     p.title:SetText("How it adds up")
-    p.body:SetText("|cffaaaaaaClick an idea on the left to see what it costs, what it brings and, for a craft, the cheapest way to get its materials for that many crafts.|r")
+    spec = { { style = "note", left = "Click an idea on the left: what it costs, what it brings and, for a craft, the cheapest way to get its materials for that many crafts." } }
     p.count:Hide(); p.countLabel:Hide(); p.ownedFree:Hide()
     p.add:Hide(); p.price:Hide()
   else
@@ -678,19 +780,17 @@ local function drawPanel()
     local isCraft = r.kind == "craftVendor" or r.kind == "craftAH"
     p.count:SetShown(isCraft); p.countLabel:SetShown(isCraft); p.ownedFree:SetShown(isCraft)
     if isCraft then p.count:SetValue(planN[r.key] or planCount(r)) end
-    p.body:SetText(panelText(r))
+    spec = panelSpec(r)
     p.add:SetShown(r.kind ~= "bootybay" and r.kind ~= "flip")
     p.add:SetText(isCraft and "Add materials to a shopping list" or "Add to a shopping list")
     p.price:Show()
   end
-  local top = p.count:IsShown() and 70 or 34
+  local top = p.count:IsShown() and 74 or 34
   p.sf:ClearAllPoints()
   p.sf:SetPoint("TOPLEFT", 8, -top)
   p.sf:SetPoint("BOTTOMRIGHT", -4, p.add:IsShown() and 64 or 36)
   p.content:SetWidth(PANEL_W - 24)
-  p.body:SetWidth(PANEL_W - 24)
-  p.content:SetHeight(p.body:GetStringHeight() + 8)
-  p.sf.UpdateScrollBar()
+  drawSpec(spec)
 end
 
 local function addToList()
@@ -946,6 +1046,17 @@ function ns:BuildGoldMaking(parent)
   p.countLabel = T:Text(p, 11, T.dim)
   p.countLabel:SetPoint("TOPLEFT", 8, -32)
   p.countLabel:SetText("Crafts")
+  -- The explanation the panel used to start with, on a hover (Frank: the panel was busy).
+  local countHover = CreateFrame("Frame", nil, p)
+  countHover:SetAllPoints(p.countLabel)
+  countHover:EnableMouse(true)
+  countHover:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:AddLine("How many crafts", 1, 1, 1)
+    GameTooltip:AddLine("The materials are worked out for this many crafts, the cheapest way for that many: each one from your bags, the next listing on the auction house, a vendor, or made from its own materials, whichever is cheapest next, and nothing counted twice. It starts at what's listed cheaply enough and, for an auction house craft, about a day's sales.", nil, nil, nil, true)
+    GameTooltip:Show()
+  end)
+  countHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
   p.count = T:Number(p, { min = 1, max = PLAN_MAX, step = 1 }, function(v)
     local r = selectedRow()
     if r then planN[r.key] = math.floor(v) end
@@ -964,11 +1075,7 @@ function ns:BuildGoldMaking(parent)
   p.ownedFree:HookScript("OnLeave", function() GameTooltip:Hide() end)
   f.ownedFree = p.ownedFree
   p.sf, p.content = T:Scroll(p)
-  p.body = T:Text(p.content, 11)
-  p.body:SetPoint("TOPLEFT", 0, 0)
-  p.body:SetJustifyH("LEFT")
-  p.body:SetJustifyV("TOP")
-  p.body:SetSpacing(2)
+  p.lines = {}
   p.add = T:Button(p, "Add materials to a shopping list", PANEL_W - 16, addToList, 24)
   p.add:SetPoint("BOTTOMLEFT", 8, 34)
   p.add:SetPrimary(true)
