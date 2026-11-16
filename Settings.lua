@@ -48,7 +48,7 @@ local PAGES = {
             { "auto", "Auto" }, { "local", "My scans" }, { "tsm", "TSM" } },
           help = "Auto uses TSM's history where it has a price, otherwise your own scans." },
         { key = "dealUsualMin", label = "Least resale profit each", kind = "money",
-          help = "Deals tab: profit after the auction house cut, reselling at the usual price or under the next listing. \"off\" for no minimum." },
+          help = "Deals (Gold making): profit after the auction house cut, reselling at the usual price or under the next listing. \"off\" for no minimum." },
       } },
       -- Parts of the addon you can switch off whole (owner, October 7: modules, so extras
       -- don't crowd the window). Off means not running at all. More join with the side tabs.

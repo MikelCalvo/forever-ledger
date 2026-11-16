@@ -57,5 +57,6 @@ ScanOnce.lua
 Post.lua
 GroupsTab.lua
 CraftPlan.lua
+GoldMaking.lua
 PriceWindow.lua
 Probe.lua

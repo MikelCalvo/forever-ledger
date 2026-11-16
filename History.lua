@@ -45,7 +45,10 @@ end
 ns.LogOtherMoney = logOther
 local LEDGER_MONTHS_KEPT = 365 * 86400   -- monthly totals kept this long
 local PENDING_SECONDS = 5   -- how long a hint (repair, posting fee, mail) waits for the gold change
-local PURCHASE_SECONDS = 15 -- an auction house purchase can answer slowly (BuyQueue.lua waits as long; gold audit, November 9)
+-- An auction house purchase can answer slowly: its hint is kept as long as the Buy queue
+-- still takes a late answer (BuyQueue.lua LATE_SECONDS, 60) and a little more (Codex review
+-- of 60da6ce: gold at 16 seconds found the 15-second hint gone and logged the wrong item).
+local PURCHASE_SECONDS = 65
 
 -- Days follow the player's own clock (a UTC day would start in the US evening).
 local function localDay(t)
@@ -234,17 +237,46 @@ local function takeHints(delta)
   for _, h in ipairs(pending) do
     if not h.exact and h.amount == want then return { take(h) } end
   end
-  local sum, picks = 0, {}
+  -- Several whose amounts add up to it exactly (two purchases paid in one gold change). Every
+  -- set is tried, not just the first ones that fit: an older purchase that never answered
+  -- (10c) mustn't hide the two that did (20c and 30c paid as 50c; Codex review of
+  -- 60da6ce). When several sets fit, the one with the fewest hints, then the newest.
+  local fits = {}
   for _, h in ipairs(pending) do
-    if not h.exact and h.amount and sum + h.amount <= want then sum = sum + h.amount; picks[#picks + 1] = h end
+    if h.amount and h.amount > 0 and h.amount < want then fits[#fits + 1] = h end
   end
-  if sum == want and #picks > 1 then
-    for _, h in ipairs(picks) do take(h) end
-    return picks
+  if #fits >= 2 and #fits <= 12 then
+    local best, bestOldest, chosen = nil, nil, {}
+    local function try(i, sum)
+      if sum == want and #chosen >= 2 then
+        local oldest = math.huge
+        for _, h in ipairs(chosen) do oldest = math.min(oldest, h.t) end
+        if not best or #chosen < #best or (#chosen == #best and oldest > bestOldest) then
+          best, bestOldest = {}, oldest
+          for k, h in ipairs(chosen) do best[k] = h end
+        end
+        return
+      end
+      if i > #fits or sum >= want then return end
+      local h = fits[i]
+      if sum + h.amount <= want then
+        chosen[#chosen + 1] = h
+        try(i + 1, sum + h.amount)
+        chosen[#chosen] = nil
+      end
+      try(i + 1, sum)
+    end
+    try(1, 0)
+    if best then
+      for _, h in ipairs(best) do take(h) end
+      return best
+    end
   end
   -- Then one whose amount isn't known (a repair, a stack bought with no quote) before one
-  -- whose known amount is different.
-  for _, h in ipairs(pending) do
+  -- whose known amount is different; the newest first, since a purchase's hint now waits
+  -- a minute and an old one shouldn't take a posting fee's gold.
+  for i = #pending, 1, -1 do
+    local h = pending[i]
     if not h.exact and not h.amount then return { take(h) } end
   end
   for _, h in ipairs(pending) do
@@ -592,7 +624,8 @@ ns:OnReady(function()
   hook(C_AuctionHouse, "ConfirmCommoditiesPurchase", function(itemID, quantity)
     local q = commodityQuote
     local amount = q and q.item == itemID and q.qty == quantity and q.total or nil
-    hint({ source = "ahBuy", item = itemID, qty = quantity, amount = amount, commodity = true })
+    -- With the quote, only that amount can be this purchase (exact), as a bid.
+    hint({ source = "ahBuy", item = itemID, qty = quantity, amount = amount, exact = amount and true or nil, commodity = true })
   end)
   -- The auction house window asks for an item's listings when you open it. Our own
   -- scans do too, so those are ignored. (Checks the scan's own sends, not "a scan is
@@ -1568,10 +1601,26 @@ end
 ns:On("COMMODITY_PRICE_UPDATED", function(_, totalPrice)
   if commodityQuote and type(totalPrice) == "number" and totalPrice > 0 then commodityQuote.total = totalPrice end
 end)
--- A stack purchase the game refused takes no gold: its hint goes, so it can't take the
--- next purchase's gold (the oldest one waiting: the game answers in order).
+-- A stack purchase's answer. The game's answers don't say which purchase they're for, so a
+-- hint is only marked or dropped when it's the one stack still waiting for an answer
+-- (Codex review of 60da6ce: a refused second stack took away the first one's hint, though
+-- the first had already gone through and its gold was still to come). With several waiting,
+-- nothing is dropped: quoted amounts keep them apart, and they expire with the queue's wait.
+local function waitingStacks()
+  local list = {}
+  for _, h in ipairs(pendingAll) do
+    if h.source == "ahBuy" and h.commodity and not h.answered then list[#list + 1] = h end
+  end
+  return list
+end
+ns:On("COMMODITY_PURCHASE_SUCCEEDED", function()
+  local w = waitingStacks()
+  if #w == 1 then w[1].answered = true end
+end)
 ns:On("COMMODITY_PURCHASE_FAILED", function()
+  local w = waitingStacks()
+  if #w ~= 1 then return end
   for i, h in ipairs(pendingAll) do
-    if h.source == "ahBuy" and h.commodity then table.remove(pendingAll, i); break end
+    if h == w[1] then table.remove(pendingAll, i); break end
   end
 end)

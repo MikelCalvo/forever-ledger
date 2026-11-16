@@ -109,9 +109,12 @@ local setView, layoutShuffles, buildTable
 
 local TABS = {
   { key = "dashboard", label = "Dashboard" },
-  { key = "shuffles", label = "Shuffles" },
-  -- Vendor flips moved to the Buy queue beside the auction house (owner, October 2).
-  { key = "deals", label = "Deals" },
+  -- Gold making (redesign build step 6, November 15) puts Shuffles and Deals into one list.
+  -- Their tabs are hidden (/fl deals still opens Deals) until Frank has compared the two;
+  -- their code goes once Gold making has replaced them.
+  { key = "gold", label = "Gold making" },
+  { key = "shuffles", label = "Shuffles", show = function() return false end },
+  { key = "deals", label = "Deals", show = function() return false end },
   { key = "ledger", label = "Ledger" },
   { key = "crates", label = "Crates", setting = "crates" },
   { key = "recipes", label = "Recipes" },
@@ -192,6 +195,7 @@ local function buildMain()
     recipes = ns:BuildRecipes(main.body),
     characters = ns:BuildCharacters(main.body),   -- Characters.lua
     groups = ns:BuildGroups(main.body),   -- GroupsTab.lua
+    gold = ns:BuildGoldMaking(main.body),   -- GoldMaking.lua
     help = ns:BuildHelp(main.body),   -- Help.lua
   }
   main.views.settings = ns:BuildSettings(main.body)   -- Settings.lua
@@ -236,6 +240,7 @@ local function buildMain()
   main.footer = {
     dashboard = { full, newsBtn },
     deals = { full },
+    gold = { full },
     characters = { full, dataBtn },
     help = { welcomeBtn, newsBtn },
   }
@@ -386,6 +391,8 @@ function ns:RefreshUI()
     ns:RefreshHelp()
   elseif main.view == "groups" then
     ns:RefreshGroupsTab()
+  elseif main.view == "gold" then
+    ns:RefreshGoldMaking()
   elseif main.view == "recipes" then
     ns:RefreshRecipes()
   elseif main.view == "characters" then
@@ -441,7 +448,7 @@ local function buildMinimapButton()
     if IsShiftKeyDown() then ns:ShowSidePanel("lists")
     elseif IsControlKeyDown() and ns.GeneralSessionRunning then   -- (sessions, back November 15)
       if ns:GeneralSessionRunning() then ns:StopGeneralSession() else ns:StartGeneralSession() end
-    elseif which == "RightButton" then ns:ToggleUI("shuffles") else ns:ToggleUI() end
+    elseif which == "RightButton" then ns:ToggleUI("gold") else ns:ToggleUI() end
   end)
   mm:SetScript("OnDragStart", function(self)
     self:SetScript("OnUpdate", function()
@@ -457,7 +464,7 @@ local function buildMinimapButton()
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     ns:TooltipAddLine("Forever Ledger")
     ns:TooltipAddLine("Click to open or close.", 1, 1, 1)
-    ns:TooltipAddLine("Right-click for shuffles.", 1, 1, 1)
+    ns:TooltipAddLine("Right-click for Gold making.", 1, 1, 1)
     ns:TooltipAddLine("Shift-click for shopping lists.", 1, 1, 1)
     if ns.GeneralSessionRunning then
       ns:TooltipAddLine(ns:GeneralSessionRunning() and "Ctrl-click to stop the session." or "Ctrl-click to start a session.", 1, 1, 1)

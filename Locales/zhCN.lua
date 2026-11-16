@@ -3494,6 +3494,10 @@ language.strings["Lockboxes"] = "上锁的箱子"
 language.strings["Pets and mounts"] = "宠物与坐骑"
 language.strings["Level %d-%d"] = "等级 %d-%d"
 language.postMarks = { Post = "上架", Keep = "保留", Vendor = "卖店", Disenchant = "分解", Skipped = "已跳过", Posted = "已上架" }
+language.strings["Gold making"] = "赚钱"
+language.strings["Right-click for Gold making."] = "右键点击打开赚钱页面。"
+language.strings["%d new %s below the usual price: see Gold making, Deals (/fl)"] = "发现 %d 个低于通常价格的%s，可在赚钱页的低价机会中查看（/fl）"
+language.strings["%d new %s below the usual price: see Gold making, Deals (/fl)."] = "发现 %d 个低于通常价格的%s，可在赚钱页的低价机会中查看（/fl）。"
 for english, translated in pairs(language.strings) do language.upper[string.upper(english)] = translated end
 language.strings["Darkmoon Faire: %d for %d ticket%s (%s)"] = nil
 ns.RegisterLocale("zhCN", language)
