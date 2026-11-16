@@ -41,7 +41,9 @@ ns.RULE_KINDS = { "post", "buy", "vendor", "craft" }
 -- Forever Ledger's defaults (REDESIGN_PLAN.md: Frank agreed the posting rule November 15).
 -- Prices are percents of the usual price; undercut and profits are copper.
 ns.RULE_DEFAULTS = {
-  post = { start = "usual", undercut = 1, floorPct = 70, belowFloor = "skip", keep = 0, hours = 24 },
+  -- Post matches the cheapest (Frank, November 15: listings at one price sell in the order
+  -- they went up, so 1c under only starts a race down); a rule can still undercut.
+  post = { start = "usual", undercut = 0, floorPct = 70, belowFloor = "skip", keep = 0, hours = 24 },
   buy = { underPct = 80, breakEvenProfit = nil, maxQty = 200 },
   vendor = { protectRecipes = true, under = "vendor" },
   craft = { stock = 0, minProfit = 50 },
@@ -101,6 +103,23 @@ local BUILTIN = {
   { id = "misc", name = "Miscellaneous" },
 }
 -- Fishing poles are weapons in the game's data (2/20): the hand list puts them in Fishing.
+
+-- Gear by level too (REDESIGN_PLAN.md: bind-on-equip gear by kind and level band; owner,
+-- AN19, November 15): under each kind of gear, one group per band of required level.
+-- An item the game hasn't described yet (no required level) stays in its kind's group.
+local BANDS = { { 1, 15 }, { 16, 25 }, { 26, 35 }, { 36, 45 }, { 46, 55 }, { 56, 60 } }
+do
+  local withBands = {}
+  for _, g in ipairs(BUILTIN) do
+    withBands[#withBands + 1] = g
+    if g.parent == "gear" then
+      for _, b in ipairs(BANDS) do
+        withBands[#withBands + 1] = { id = g.id .. ".l" .. b[1], parent = g.id, name = ("Level %d-%d"):format(b[1], b[2]) }
+      end
+    end
+  end
+  BUILTIN = withBands
+end
 
 local byId, children, listed, order = {}, {}, {}, {}
 for i, g in ipairs(BUILTIN) do
@@ -163,6 +182,18 @@ local function isTurnIn(id)
   return needs ~= nil and #needs > 0
 end
 
+-- A gear kind's level band for the item, by its required level (the kind if unknown).
+local function bandOf(gid, id)
+  if not ns.GetItemInfo then return gid end
+  -- (Its own line: the fifth value is the required level.)
+  local name, _, _, _, req = ns.GetItemInfo(id)
+  if not (name and type(req) == "number") then return gid end
+  for i = #BANDS, 1, -1 do
+    if req >= BANDS[i][1] then return gid .. ".l" .. BANDS[i][1] end
+  end
+  return gid .. ".l1"
+end
+
 -- The deepest built-in group an item falls in by itself (before the player's changes).
 local function naturalGroup(id)
   if listed[id] then return listed[id] end
@@ -170,7 +201,10 @@ local function naturalGroup(id)
   if c then
     for _, gid in ipairs(order) do
       for _, m in ipairs(byId[gid].match or {}) do
-        if m[1] == c and (m[2] == nil or m[2] == s) then return gid end
+        if m[1] == c and (m[2] == nil or m[2] == s) then
+          if byId[gid].parent == "gear" then return bandOf(gid, id) end
+          return gid
+        end
       end
     end
   end
@@ -185,10 +219,21 @@ local function builtinGroups(id)
   local g = store()
   local out, seen = {}, {}
   local function add(gid) if gid and not seen[gid] then seen[gid] = true; out[#out + 1] = gid end end
-  for gid, items in pairs(g.added) do if items[id] then add(gid) end end
-  local gid = naturalGroup(id)
-  while gid and g.removed[gid] and g.removed[gid][id] do gid = byId[gid].parent end
-  add(gid)
+  -- Taken out of its group or any group above it (Codex review, November 15: out of
+  -- Materials must mean out of Cloth too): it sits just above the highest one it was
+  -- taken out of, or in no built-in group if that's a top-level one. The same for the
+  -- groups it was added to and for its natural one.
+  local function placed(gid)
+    local cut, cur = nil, gid
+    while cur do
+      if g.removed[cur] and g.removed[cur][id] then cut = cur end
+      cur = byId[cur] and byId[cur].parent
+    end
+    if cut then return byId[cut].parent end
+    return gid
+  end
+  for gid, items in pairs(g.added) do if items[id] then add(placed(gid)) end end
+  add(placed(naturalGroup(id)))
   if not (g.removed.crates and g.removed.crates[id]) and inCrates(id) then add("crates") end
   if not (g.removed.turnins and g.removed.turnins[id]) and isTurnIn(id) then add("turnins") end
   table.sort(out, function(a, b)
@@ -221,10 +266,19 @@ local function professions()
       end
     end
   end
+  -- A recipe captured from the game replaces ForeverCrafts.lua's row for the same
+  -- profession and recipe (as RecipeBook.lua's CraftsUsing does; Codex review,
+  -- November 15: the old row's materials stayed in the group).
+  local seen = {}
   for prof, book in pairs(ns.db.recipeBook or {}) do
-    for _, r in pairs(book) do add(prof, r.out, r.r) end
+    for rid, r in pairs(book) do
+      seen[prof .. ":" .. tostring(rid)] = true
+      add(prof, r.out, r.r)
+    end
   end
-  for _, c in ipairs(ns.FOREVER_CRAFTS or {}) do add(c.prof, c.out, c.r) end
+  for _, c in ipairs(ns.FOREVER_CRAFTS or {}) do
+    if not seen[c.prof .. ":" .. tostring(c.id)] then add(c.prof, c.out, c.r) end
+  end
   profIndex, profStamp = idx, stamp
   return idx
 end
@@ -336,6 +390,10 @@ local function withParents(id)
   return set
 end
 
+-- The same as a set { [gid] = true }, for lists that filter many items at once
+-- (ScanOnce.lua works it out once per item per scan).
+function ns:ItemGroupSet(id) return withParents(id) end
+
 function ns:GroupHas(gid, id)
   if not gid or not id then return false end
   if gid == "all" then return true end
@@ -420,6 +478,8 @@ function ns:RemoveFromGroup(gid, id)
     g.added[gid][id] = nil
     if not next(g.added[gid]) then g.added[gid] = nil end
   else
+    -- Nothing to take out: say so rather than record a removal that changes nothing.
+    if not ns:GroupHas(gid, id) then return false end
     g.removed[gid] = g.removed[gid] or {}
     g.removed[gid][id] = true
   end

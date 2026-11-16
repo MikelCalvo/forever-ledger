@@ -393,7 +393,7 @@ end
 ns.FindAllVendorCrafts = ns.Timed("Finding every profession's vendor crafts", ns.FindAllVendorCrafts)
 
 -- Just the vendor flips: far quicker than every shuffle, so the Vendor flips tab can
--- follow the flip watch without a hitch (owner's /fl perf, October 2: the whole
+-- follow Live watch without a hitch (owner's /fl perf, October 2: the whole
 -- shuffle search ran 29 times in 106 seconds at about 195 ms each).
 -- Vendor flips have no crafting time, so they're ranked by total profit on offer.
 function ns:FindVendorFlips()
@@ -1097,7 +1097,7 @@ function ns:DealExplain(d)
   L[#L + 1] = { head = "How sure: " .. (ns.DEAL_LEVEL_TEXT[d.level] or d.level) }
   L[#L + 1] = { note = ns.DEAL_LEVEL_WHY[d.level] or "", color = { 0.75, 0.75, 0.75 } }
   for _, w in ipairs(d.warnings) do L[#L + 1] = { note = w, color = { 1, 0.6, 0.3 } } end
-  L[#L + 1] = { note = "The auction house shows what's listed, not what sold. \"Sells\" counts listings that vanished before they could have expired (bought, or canceled): a low estimate that gets better the more full scans you run, fastest with Watch flips.",
+  L[#L + 1] = { note = "The auction house shows what's listed, not what sold. \"Sells\" counts listings that vanished before they could have expired (bought, or canceled): a low estimate that gets better the more full scans you run, fastest with Live watch.",
     color = { 0.5, 0.5, 0.5 } }
   return L
 end
@@ -1182,7 +1182,7 @@ local function announce(all, usual)
     PlaySound(SOUNDKIT.RAID_WARNING, "Master")
   end
   if #flips > 0 then
-    -- Only after a full scan, not the flip watch's quick checks (ns.fullScanDone).
+    -- Only after a full scan, not Live watch's quick checks (ns.fullScanDone).
     if ns.db.settings.openFlips and ns.OpenFlips and ns.fullScanDone then ns:OpenFlips() end
     for _, f in ipairs(chat and flips or {}) do
       if f.watched == "you" then

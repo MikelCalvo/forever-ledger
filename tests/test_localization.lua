@@ -28,7 +28,7 @@ T.test("Localization: the actual purchase summary renders after repeated local u
   local ns = loadLocale("zhCN")
   local file = assert(io.open("BuyQueue.lua", "rb"))
   local code = file:read("*a"); file:close()
-  local body = assert(code:match("(  local profit = Q.vendorValue.-)  %-%- What's left of this visit's limit"))
+  local body = assert(code:match("(  local profit = Q.vendorValue.-)  Q.toBuy = total"))
   local got
   local run = assert(loadstring("return function(ns, Q, money, v, total)\n" .. body .. "\nend"))()
   run(ns, { bought = 2, spent = 100, vendorValue = 140, vendorCost = 100 },

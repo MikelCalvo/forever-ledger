@@ -196,6 +196,7 @@ local open = {}          -- per window: true while open, GetTime() when it close
 local pendingAll = {}    -- hints for the next gold change: { source, t, amount, item, qty, log }
 local lastMoney
 local lastShownItem      -- the item the auction house last showed listings for
+local commodityQuote     -- the stack purchase being priced: { item, qty, total }
 function ns.LastShownItem() return lastShownItem end
 
 local function hint(h)
@@ -240,6 +241,11 @@ local function takeHints(delta)
   if sum == want and #picks > 1 then
     for _, h in ipairs(picks) do take(h) end
     return picks
+  end
+  -- Then one whose amount isn't known (a repair, a stack bought with no quote) before one
+  -- whose known amount is different.
+  for _, h in ipairs(pending) do
+    if not h.exact and not h.amount then return { take(h) } end
   end
   for _, h in ipairs(pending) do
     if not h.exact then return { take(h) } end
@@ -461,20 +467,26 @@ local function onMoney()
   end
   if source == "ahBuy" then
     -- Commodity purchases name their item; for other purchases, use the item the
-    -- auction house last showed listings for.
-    local h = hints[1]
-    -- Non-commodity purchases (gear) are always one item.
-    local id = (h and h.item) or lastShownItem
-    addLog(ns.db.purchases, { t = now, c = who, id = id, q = (h and h.qty) or 1, a = math.abs(delta) })
-    -- It comes by mail: shopping lists count it as had until it's taken (ShoppingLists.lua).
-    if ns.NoteBoughtToMail then ns:NoteBoughtToMail(id, (h and h.qty) or 1) end
-    -- Gear: the addon doesn't save prices from gear pages (one page shows one stat
-    -- version), so take the bought one off the saved listings instead. Otherwise a
-    -- gear flip stays on Vendor flips until the next full scan (owner's test, October 1:
-    -- Hefty Battlehammer). Commodities are saved from the page, so they're left alone.
-    if (not h or h.single) and id and ns.RemoveBought then
-      local ok, err = pcall(ns.RemoveBought, ns, id, 1, math.abs(delta))
-      if not ok then ns:Debug("Couldn't take the purchase off the listings:", err) end
+    -- auction house last showed listings for. Two purchases in one gold change (their
+    -- quoted amounts add up to it) are logged one each.
+    local buys = {}
+    for _, h in ipairs(hints) do if h.source == "ahBuy" then buys[#buys + 1] = h end end
+    if #buys == 0 then buys[1] = false end
+    for _, h in ipairs(buys) do
+      local amount = (#buys > 1 and h.amount) or math.abs(delta)
+      -- Non-commodity purchases (gear) are always one item.
+      local id = (h and h.item) or lastShownItem
+      addLog(ns.db.purchases, { t = now, c = who, id = id, q = (h and h.qty) or 1, a = amount })
+      -- It comes by mail: shopping lists count it as had until it's taken (ShoppingLists.lua).
+      if ns.NoteBoughtToMail then ns:NoteBoughtToMail(id, (h and h.qty) or 1) end
+      -- Gear: the addon doesn't save prices from gear pages (one page shows one stat
+      -- version), so take the bought one off the saved listings instead. Otherwise a
+      -- gear flip stays on Vendor flips until the next full scan (owner's test, October 1:
+      -- Hefty Battlehammer). Commodities are saved from the page, so they're left alone.
+      if (not h or h.single) and id and ns.RemoveBought then
+        local ok, err = pcall(ns.RemoveBought, ns, id, 1, amount)
+        if not ok then ns:Debug("Couldn't take the purchase off the listings:", err) end
+      end
     end
   end
   ns:Debug("Money", source, delta > 0 and "+" or "-", ns.Money(math.abs(delta)))
@@ -570,12 +582,21 @@ ns:OnReady(function()
   hook(_G, "RepairAllItems", function() hint({ source = "repair" }) end)
   hook(C_AuctionHouse, "PostItem", function() hint({ source = "ahFee" }) end)
   hook(C_AuctionHouse, "PostCommodity", function() hint({ source = "ahFee" }) end)
+  -- A stack (commodity) purchase: the game quotes its total before the confirm
+  -- (COMMODITY_PRICE_UPDATED, below), so the hint carries that amount and only that gold
+  -- can be it. Without it, the gold went to the oldest purchase waiting: Frank, November
+  -- 15, 20 Runecloth at 72s 80c was put down as 1 Red Wolf Meat.
+  hook(C_AuctionHouse, "StartCommoditiesPurchase", function(itemID, quantity)
+    commodityQuote = { item = itemID, qty = quantity }
+  end)
   hook(C_AuctionHouse, "ConfirmCommoditiesPurchase", function(itemID, quantity)
-    hint({ source = "ahBuy", item = itemID, qty = quantity })
+    local q = commodityQuote
+    local amount = q and q.item == itemID and q.qty == quantity and q.total or nil
+    hint({ source = "ahBuy", item = itemID, qty = quantity, amount = amount, commodity = true })
   end)
   -- The auction house window asks for an item's listings when you open it. Our own
   -- scans do too, so those are ignored. (Checks the scan's own sends, not "a scan is
-  -- running": with the flip watch on, a scan is always running, so your pages were
+  -- running": with Live watch on, a scan is always running, so your pages were
   -- ignored and a Soldier's Armor purchase was put down as Curved Dagger, October 2.)
   hook(C_AuctionHouse, "SendSearchQuery", function(itemKey)
     -- Not the buy queue's own searches either: they run in the background while you
@@ -1318,7 +1339,7 @@ end
 local function soldEntry(e)
   local d, g, m, c = e:match("^(%d+):(%d+):(%d+):?(%d*)$")
   -- Three-number entries came from the first version, which only compared scans within
-  -- one session (the flip watch), so count them as close.
+  -- one session (Live watch), so count them as close.
   return tonumber(d), tonumber(g), tonumber(m), tonumber(c) or tonumber(m)
 end
 
@@ -1363,7 +1384,7 @@ end
 -- since Copper Ore is expected to move in bulk and a sword isn't. Turnover is units
 -- bought a day for each one usually listed: 4 a day with 5 listed beats 100 listed and
 -- none selling. Rare items that are seldom listed but go when they are get their own
--- rating. Shown only after 3 hours of scans compared (the flip watch gets there fastest).
+-- rating. Shown only after 3 hours of scans compared (Live watch gets there fastest).
 ---------------------------------------------------------------------------
 local SPEED_MIN_MINUTES = 180
 local SPEED_NONE_MINUTES = 12 * 60   -- this long with none bought: "no sales seen"
@@ -1542,3 +1563,15 @@ function ns:PrintMoney()
   for _, line in ipairs(lines) do print("    " .. line) end
   print(("    Net: %s%s"):format(net >= 0 and "+" or "-", ns.Money(math.abs(net))))
 end
+
+-- The quoted total of the stack purchase being priced (see StartCommoditiesPurchase above).
+ns:On("COMMODITY_PRICE_UPDATED", function(_, totalPrice)
+  if commodityQuote and type(totalPrice) == "number" and totalPrice > 0 then commodityQuote.total = totalPrice end
+end)
+-- A stack purchase the game refused takes no gold: its hint goes, so it can't take the
+-- next purchase's gold (the oldest one waiting: the game answers in order).
+ns:On("COMMODITY_PURCHASE_FAILED", function()
+  for i, h in ipairs(pendingAll) do
+    if h.source == "ahBuy" and h.commodity then table.remove(pendingAll, i); break end
+  end
+end)
