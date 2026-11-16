@@ -156,7 +156,7 @@ T.test("Profit percent: the new column follows upstream right-anchored layout", 
   local source = f:read("*a"); f:close()
   local base = assert(loadstring("return " .. assert(source:match("local COL = (%b{})"))))()
   local flips = assert(loadstring("return " .. assert(source:match("local FLIP_COL = (%b{})"))))()
-  for _, key in ipairs({"profit", "cheap", "limit", "why"}) do
+  for _, key in ipairs({"profit", "total", "cheap", "limit", "why"}) do
     T.eq(flips[key], base[key] - 56)
   end
   T.eq(flips.roi, base.profit)
