@@ -443,3 +443,61 @@ T.test("Localization: repeated display values avoid translation after a large qu
   ns.LocalizeDisplayText("|cff7fd39c1g 25s|r")
   T.eq(calls, before, "the complete display result is reused")
 end)
+
+T.test("Localization: Post controls and colored listing status render in Chinese", function()
+  local ns = loadLocale("zhCN")
+  for source, target in pairs({
+    ["Post"] = "上架", ["Confirm post"] = "确认上架", ["Scroll to post"] = "滚轮上架",
+    ["How many"] = "数量", ["How long"] = "时长", ["Deposit"] = "保管费",
+    ["You get after the cut"] = "扣除手续费后所得", ["Show: Everything"] = "显示全部物品",
+    ["2h"] = "2小时", ["8h"] = "8小时", ["24h"] = "24小时",
+    ["|cffffd100Looking it up...|r"] = "|cffffd100正在查询…|r",
+    ["|cffff8080Couldn't check now|r"] = "|cffff8080暂时无法查询|r",
+    ["3 sellers"] = "3 位卖家", ["18 available · checked just now"] = "在售 18 件 · 刚刚查询",
+    ["Posted 2 轻皮 at 1s 20c each."] = "已上架 2 件轻皮，单价 1银 20铜。",
+  }) do T.eq(ns.LocalizeDisplayText(source), target, source) end
+  T.eq(loadLocale("enUS").LocalizeText("Confirm post"), "Confirm post")
+end)
+T.test("Localization: Post status labels preserve the English state keys", function()
+  local f = assert(io.open("Post.lua", "r")); local code = f:read("*a"); f:close()
+  local body = assert(code:match("(      local language = ns.GetLocaleData%(%)%s+local mark =.-r.mark:SetText%(mark or label:upper%(%)%))"))
+  local run = assert(loadstring("return function(ns, label, r) " .. body .. " end"))()
+  local ns = loadLocale("zhCN")
+  for state, target in pairs({Post="上架", Keep="保留", Vendor="卖店", Disenchant="分解", Skipped="已跳过", Posted="已上架"}) do
+    local got
+    run(ns, state, {mark={SetText=function(_, text) got=ns.LocalizeDisplayText(text) end}})
+    T.eq(got, target, state)
+  end
+  local got
+  run(loadLocale("enUS"), "Posted", {mark={SetText=function(_, text) got=text end}})
+  T.eq(got, "POSTED")
+end)
+T.test("Localization: actual Post pricing footer translates each reason before composing it", function()
+  local f = assert(io.open("Post.lua", "r")); local code = f:read("*a"); f:close()
+  local body = assert(code:match("(  local why = e.why.-)  f.post:SetText"))
+  local run = assert(loadstring("return function(ns, e, f) " .. body .. " end"))()
+  local ns = loadLocale("zhCN")
+  local rule = {start="usual",undercut=1,floorPct=70,belowFloor="skip"}
+  for _, args in ipairs({{125,119},{200},{125,50}}) do
+    local result = T.ns.PostPrice(rule, args[1], args[2])
+    local got
+    run(ns, {why=result.why,ruleFrom="Default",live=true}, {why={SetText=function(_, text) got=ns.LocalizeDisplayText(text) end}})
+    T.ok(got:find("规则来源为默认",1,true), got)
+    T.eq((got:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")):find("[A-Za-z]"), nil, got)
+  end
+  local oldScan
+  run(ns, {why="the same as the cheapest (2s)",cheapest=200,ruleFrom="Default"}, {why={SetText=function(_, text) oldScan=ns.LocalizeDisplayText(text) end}})
+  T.eq(oldScan, "与最低价相同（2银），价格来自上次扫描。|cff9fe8dc规则来源为默认。|r")
+  ns.MoneyPlain=function() return "2s" end
+  local got
+  run(ns, {why="",price=100,suggested=200,ruleFrom="我的上架规则"}, {why={SetText=function(_, text) got=ns.LocalizeDisplayText(text) end}})
+  T.eq(got, "手动价格（建议 2银）。|cff9fe8dc规则来源为我的上架规则。|r")
+end)
+
+T.test("Localization: Post's built-in bag group headings are translated", function()
+  local ns = loadLocale("zhCN")
+  for _, group in ipairs(T.ns.BUILTIN_GROUPS) do
+    local text = ns.LocalizeDisplayText(group.name)
+    T.eq(text:find("[A-Za-z]"), nil, group.name .. " -> " .. text)
+  end
+end)
