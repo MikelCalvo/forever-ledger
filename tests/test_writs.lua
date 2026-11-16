@@ -41,3 +41,24 @@ T.test("Writs: cost per reputation after the coin pouch", function()
   T.eq(c and c.total, 900)
   T.eq(c and c.plan[3383].bought, 1)
 end)
+
+T.test("Writs: yours from the bags, and onto the Writs shopping list", function()
+  ns.db.inventory = ns.db.inventory or {}
+  ns.db.inventory[ns.CharKey()] = { bags = { [264012] = 1, [262888] = 2, [2589] = 20 }, bank = {} }
+  local orders, sealed = ns:YourWrits()
+  local wisdom = ns:WritFor(264012)
+  T.eq(orders[wisdom], 1)
+  T.eq(sealed.J, 2, "two sealed Journeyman's writs")
+  local key = ns.MarketKey()
+  ns.db.prices[key] = ns.db.prices[key] or {}
+  ns.db.prices[key][3383] = { m = 900, a = 900, q = 5, l = "900:2,950:5", t = S.now }
+  local list = ns:WritsToShoppingList({ wisdom })
+  T.eq(list.name, "Writs")
+  T.eq(#list.items, 1)
+  T.eq(list.items[1].id, 3383); T.eq(list.items[1].qty, 1); T.eq(list.items[1].max, 900)
+  -- The same order again: still one item, not two.
+  ns:WritsToShoppingList({ wisdom })
+  T.eq(#list.items, 1)
+  T.eq(list.items[1].qty, 1)
+  ns.db.inventory[ns.CharKey()] = nil
+end)

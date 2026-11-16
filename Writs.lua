@@ -280,6 +280,81 @@ local function howText(c, e)
   return "AH"
 end
 
+-- The writs this character has, in bags and bank (Frank, November 16, from SKTools'
+-- idea: the orders you have and what each needs): { [order] = count }, and sealed writs
+-- { [tier key] = count }. Found by item, so writs whose ID isn't listed count too.
+function ns:YourWrits()
+  local inv = ns.db.inventory and ns.db.inventory[ns.CharKey()]
+  local orders, sealed = {}, {}
+  for _, where in ipairs({ "bags", "bank" }) do
+    for id, n in pairs(inv and inv[where] or {}) do
+      local e, t = ns:WritFor(id)
+      if e then orders[e] = (orders[e] or 0) + n
+      elseif t then sealed[t.key] = (sealed[t.key] or 0) + n end
+    end
+  end
+  return orders, sealed
+end
+
+-- Orders onto the "Writs" shopping list: every order on it is planned together (the
+-- cheapest way, what you have used first, nothing counted twice) and the list holds what
+-- to buy, on the auction house or from a vendor, up to the highest price the plan paid;
+-- an order made from materials adds its materials. Kept a week, like crate lists.
+local LIST_NAME = "Writs"
+local function plan(need)
+  local cache = {}
+  return ns.CraftPlan(need, function(id)
+    if not cache[id] then cache[id] = source(id) end
+    return cache[id]
+  end, { ownedFree = true })
+end
+
+function ns:WritsToShoppingList(add)
+  local list
+  for i, l in ipairs(ns:ShoppingLists()) do
+    if l.name == LIST_NAME and l.writOrders then list = l; ns:SelectShoppingList(i) end
+  end
+  if not list then
+    list = ns:NewShoppingList(LIST_NAME)
+    list.writOrders = {}
+  end
+  list.temp, list.tempT = LIST_NAME, time()
+  for _, e in ipairs(add) do list.writOrders[e.item] = true end
+  local need = {}
+  for item in pairs(list.writOrders) do
+    local e = byItem[item]
+    if e then need[item] = (need[item] or 0) + e.qty end
+  end
+  local _, p = plan(need)
+  -- What this list added before goes, so the new plan replaces it.
+  for id in pairs(list.writItems or {}) do
+    for i = #list.items, 1, -1 do if list.items[i].id == id then table.remove(list.items, i) end end
+  end
+  list.writItems = {}
+  local added, ready = 0, 0
+  for id, x in pairs(p or {}) do
+    local qty = x.bought + x.vendor
+    if qty > 0 then
+      local top = x.top or 0
+      if x.vendor > 0 then top = math.max(top, math.ceil(x.vendorCost / x.vendor)) end
+      ns:AddToShoppingList(list, id, top, qty)
+      list.writItems[id] = true
+      added = added + 1
+    end
+  end
+  for item in pairs(need) do
+    local x = p and p[item]
+    if x and x.owned >= need[item] then ready = ready + 1 end
+  end
+  if ns.RefreshListsView then ns:RefreshListsView() end
+  local orders = 0
+  for _ in pairs(list.writOrders) do orders = orders + 1 end
+  ns:Print(("Shopping list \"%s\": %d %s for %d %s, each up to the highest price the plan paid.%s Tick Buy from this list in the Buy queue (/fl lists)."):format(
+    LIST_NAME, added, added == 1 and "item" or "items", orders, orders == 1 and "order" or "orders",
+    ready > 0 and (" You already have the item for %d."):format(ready) or ""))
+  return list
+end
+
 -- Tooltip lines on a writ (the crate setting covers both).
 function ns:WritTooltipLines(id)
   local e, tier = ns:WritFor(id)
@@ -325,6 +400,7 @@ local COLS = {
   { key = "cost", label = "Cheapest", w = 92, right = true },
   { key = "perRep", label = "Per rep", w = 66, right = true },
   { key = "writ", label = "Writ on AH", w = 72, right = true },
+  { key = "add", label = "", w = 40 },
 }
 
 local function S()
@@ -344,6 +420,7 @@ function ns:BuildWrits(parent)
   f:SetAllPoints()
   local opts = { { value = "all", label = "All" } }
   for _, k in ipairs({ "J", "E", "A" }) do opts[#opts + 1] = { value = k, label = TIERS[k].label } end
+  opts[#opts + 1] = { value = "mine", label = "Yours" }   -- the writs in your bags and bank
   f.tier = T:Choice(f, opts, function(v) S().tier = v; ns:RefreshWrits() end)
   f.tier:SetPoint("TOPLEFT", 2, -2)
   f.prof = T:Dropdown(f, 150, function(v) S().prof = v; ns:RefreshWrits() end)
@@ -355,7 +432,7 @@ function ns:BuildWrits(parent)
   f.info:SetPoint("TOPLEFT", f.tier, "BOTTOMLEFT", 0, -6)
   f.info:SetPoint("RIGHT", f, "RIGHT", -2, 0)
   f.info:SetJustifyH("LEFT")
-  f.info:SetText("A Craftsman's Writ asks for one item, delivered to a customer somewhere in the world, for reputation and a coin pouch; each order once a day, no profession needed. Cheapest: buying it or making it, at your last scan's prices. Per rep takes off the coin pouch's usual money. Reputation and pouch amounts are from player guides, not yet seen in game. Click an order to search the auction house for it.")
+  f.info:SetText("A Craftsman's Writ asks for one item, delivered to a customer somewhere in the world, for reputation and a coin pouch; each order once a day, no profession needed. Cheapest: buying it or making it, at your last scan's prices. Per rep takes off the coin pouch's usual money. Reputation and pouch amounts are from player guides, not yet seen in game. Yours: the writs in your bags and bank. List puts an order on the Writs shopping list (what to buy, or its materials when making it is cheaper). Click an order to search the auction house for it.")
   f.header = CreateFrame("Frame", nil, f)
   f.header:SetPoint("TOP", f.info, "BOTTOM", 0, -6)
   f.header:SetPoint("LEFT", f, "LEFT", 0, 0)
@@ -369,7 +446,14 @@ function ns:BuildWrits(parent)
   f.sf:SetPoint("BOTTOMRIGHT", 0, 22)
   f.summary = T:Text(f, 12)
   f.summary:SetPoint("BOTTOMLEFT", 4, 4)
-  f.summary:SetPoint("RIGHT", f, "RIGHT", -4, 0)
+  f.addMine = T:Button(f, "Add yours to a shopping list", 190, function()
+    local add = {}
+    for e in pairs(ns:YourWrits()) do add[#add + 1] = e end
+    if #add == 0 then ns:Print("No Craftsman's Writs in your bags or bank (open sealed ones first).") return end
+    ns:WritsToShoppingList(add)
+  end, 20)
+  f.addMine:SetPoint("BOTTOMRIGHT", 0, 2)
+  f.summary:SetPoint("RIGHT", f.addMine, "LEFT", -8, 0)
   f.summary:SetJustifyH("LEFT")
   f.summary:SetWordWrap(false)
   return f
@@ -427,11 +511,21 @@ local function getRow(i)
   r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
   r.cells = {}
   for _, c in ipairs(COLS) do
+    if c.key == "add" then break end   -- (a button, below)
     local fs = T:Text(r, 12)
     fs:SetWordWrap(false)
     fs:SetJustifyH(c.right and "RIGHT" or "LEFT")
     r.cells[c.key] = fs
   end
+  -- This order onto the Writs shopping list.
+  r.add = T:Button(r, "List", 38, function() if r.entry then ns:WritsToShoppingList({ r.entry }) end end, 18)
+  r.add:HookScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:AddLine("Add this order to the Writs shopping list", 1, 1, 1)
+    GameTooltip:AddLine("What to buy for it, or its materials when making it is cheaper; what you have is used first.", 0.8, 0.8, 0.8, true)
+    GameTooltip:Show()
+  end)
+  r.add:HookScript("OnLeave", function() GameTooltip:Hide() end)
   r:SetScript("OnClick", function(self)
     if self.entry and not ns:SearchAuctionHouse(self.entry.item) then
       ns:Print("Open the auction house, then click an order to search for its item.")
@@ -478,14 +572,15 @@ function ns:RefreshWrits()
   end
 
   local list, priced = {}, 0
+  local yours, sealed = ns:YourWrits()
   for _, e in ipairs(WRITS) do
-    if (s.tier == "all" or e.tier == s.tier) and (s.prof == "all" or e.prof == s.prof) then
+    if (s.tier == "all" or e.tier == s.tier or (s.tier == "mine" and yours[e])) and (s.prof == "all" or e.prof == s.prof) then
       local c = ns:WritCost(e)
       if c then priced = priced + 1 end
       local writPrice = e.writ and ns:GetPrice(e.writ)
       list[#list + 1] = { e = e, c = c, name = (itemName(e.item) or ns.ItemName(e.item)),
         cost = c and c.total, perRep = c and ns.WritPerRep(c.total, e.tier), writ = writPrice,
-        have = e.writ and bagHas(e.writ) > 0 }
+        have = yours[e] ~= nil, ready = bagHas(e.item) >= e.qty }
     end
   end
   local tierRank = { J = 1, E = 2, A = 3 }
@@ -521,12 +616,12 @@ function ns:RefreshWrits()
     r.icon:SetPoint("LEFT", r, "LEFT", lay.name.x, 0)
     local e, t = x.e, TIERS[x.e.tier]
     local values = {
-      name = (e.qty > 1 and (e.qty .. " x ") or "") .. x.name .. (x.have and (T:AccentCode() .. "  in bags|r") or ""),
+      name = (e.qty > 1 and (e.qty .. " x ") or "") .. x.name .. (x.have and (T:AccentCode() .. "  yours|r") or ""),
       prof = e.prof,
       tier = t.label,
       rep = tostring(t.rep),
       where = e.who and (e.who .. dim(", " .. (e.zone or "?"))) or dim(e.zone and (e.zone:gsub("%?$", "") .. ", not confirmed") or "not known yet"),
-      cost = x.cost and (ns.Money(math.floor(x.cost + 0.5)) .. dim(" " .. howText(x.c, e))) or dim("no price"),
+      cost = x.ready and "|cff7fd39cyou have it|r" or x.cost and (ns.Money(math.floor(x.cost + 0.5)) .. dim(" " .. howText(x.c, e))) or dim("no price"),
       perRep = x.perRep and (x.perRep <= 0 and "|cff7fd39cfree|r" or ns.Money(math.floor(x.perRep + 0.5))) or dim("?"),
       writ = x.writ and ns.Money(x.writ) or dim("-"),
     }
@@ -538,13 +633,22 @@ function ns:RefreshWrits()
       fs:SetWidth(w)
       fs:SetText(values[key])
     end
+    r.add:ClearAllPoints()
+    r.add:SetPoint("LEFT", r, "LEFT", lay.add.x, 0)
     r:Show()
   end
   for i = #list + 1, #rows do rows[i]:Hide() end
   f.content:SetHeight(math.max(#list * ROW, 30))
   f.sf.UpdateScrollBar()
+  local opened = {}
+  for _, k in ipairs({ "J", "E", "A" }) do
+    if sealed[k] then opened[#opened + 1] = ("%d Sealed %s's Writ"):format(sealed[k], TIERS[k].label) end
+  end
   f.summary:SetText(("%d orders, %d with a price.   %s"):format(#list, priced,
-    dim(priced < #list and "Orders without a price: nothing listed at your last full scan, and no materials priced." or "Hover an order for the cheapest way to get it.")))
+    #opened > 0 and (T:AccentCode() .. "Still sealed in your bags: " .. table.concat(opened, ", ") .. ": open them to see their orders.|r") or dim(priced < #list and "Orders without a price: nothing listed at your last full scan, and no materials priced." or "Hover an order for the cheapest way to get it.")))
+  if s.tier == "mine" and #list == 0 and #opened == 0 then
+    f.summary:SetText(dim("No Craftsman's Writs in your bags or bank. They drop from mobs and chests, or buy one on the auction house."))
+  end
 end
 
 ns.RefreshWrits = ns.Timed("Writs tab", ns.RefreshWrits)
