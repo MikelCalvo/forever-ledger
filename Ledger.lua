@@ -23,7 +23,9 @@ local SUBTABS = {
   { key = "all", label = "All" },
   { key = "sales", label = "Sales" },
   { key = "purchases", label = "Purchases" },
-  { key = "resale", label = "Resale" },
+  -- By item: every item bought or sold, its totals and averages (Frank, November 16,
+  -- TSM's item view). The key stays "resale" so saved sort choices carry over.
+  { key = "resale", label = "By item" },
   { key = "other", label = "Other" },
   { key = "sessions", label = "Sessions" },   -- (owner, October 4: a home for every session)
 }
@@ -66,10 +68,11 @@ local COLUMNS = {
   resale = {
     { key = "item", label = "Item" },
     { key = "bought", label = "Bought", width = 56, right = true },
-    { key = "avgBuy", label = "Avg buy", width = 90, right = true },
+    { key = "avgBuy", label = "Avg buy", width = 86, right = true },
     { key = "sold", label = "Sold", width = 50, right = true },
-    { key = "avgSell", label = "Avg sell", width = 90, right = true },
-    { key = "profit", label = "Profit", width = 100, right = true },
+    { key = "avgSell", label = "Avg sell", width = 86, right = true },
+    { key = "avgProfit", label = "Profit each", width = 86, right = true },
+    { key = "profit", label = "Profit", width = 96, right = true },
   },
   sessions = {
     { key = "t", label = "When", width = 96 },
@@ -98,8 +101,33 @@ local function settings()
   s.range = s.range or "month"
   s.char = s.char or "all"
   s.sort = s.sort or {}
+  s.group = s.group or "all"
+  s.rarity = s.rarity or "all"
   return s
 end
+
+-- Item IDs by name: auction sales are saved by name only (the mail names the item, not its
+-- ID). From the names the game has given (saved in itemNames), rebuilt when that grows.
+-- (Counted once per redraw, not per sale.)
+local idByName, idByNameSize = {}, -1
+local function nameIndex()
+  local names = ns.db.itemNames or {}
+  local count = 0
+  for _ in pairs(names) do count = count + 1 end
+  if count ~= idByNameSize then
+    idByName, idByNameSize = {}, count
+    for id, n in pairs(names) do
+      if type(n) == "string" then idByName[n:lower()] = idByName[n:lower()] or id end
+    end
+  end
+  return idByName
+end
+
+-- Rarity: the game's names and colors.
+local RARITY = {
+  [0] = { "Poor", "9d9d9d" }, [1] = { "Common", "ffffff" }, [2] = { "Uncommon", "1eff00" },
+  [3] = { "Rare", "0070dd" }, [4] = { "Epic", "a335ee" }, [5] = { "Legendary", "ff8000" },
+}
 
 local function charName(key)
   local c = ns.db.chars[key]
@@ -148,15 +176,20 @@ local function groupSimilar(list)
   return out
 end
 
-local function records(tab, from, charOK, match)
+-- opts (optional): itemOK(id) keeps only some items (Sales, Purchases, By item: the Group
+-- and Rarity choices); seen[id] = true collects every item before that, for the choices.
+local function records(tab, from, charOK, match, opts)
   local out = {}
+  opts = opts or {}
   local function keep(e) return (e.t or 0) >= from and charOK(e.c) end
 
   if tab == "sales" or tab == "purchases" or tab == "resale" or tab == "all" then
     local sales, buys = {}, {}
+    local byName = nameIndex()
     for _, e in ipairs(ns.db.sales) do
       if keep(e) then
-        sales[#sales + 1] = { t = e.t, item = e.n or "?", icon = iconOf(e.n), qty = e.q, total = e.a,
+        local id = e.n and byName[e.n:lower()]
+        sales[#sales + 1] = { t = e.t, id = id, item = e.n or "?", icon = iconOf(id or e.n), qty = e.q, total = e.a,
           where = "Auction", who = e.b, char = e.c, kind = "Auction sale" }
       end
     end
@@ -187,7 +220,20 @@ local function records(tab, from, charOK, match)
       end
     end
     for _, list in ipairs({ sales, buys }) do
-      for _, r in ipairs(list) do r.each = r.qty and r.qty > 0 and r.total / r.qty or nil end
+      for _, r in ipairs(list) do
+        r.each = r.qty and r.qty > 0 and r.total / r.qty or nil
+        r.id = r.id or (r.item and byName[r.item:lower()])
+        if opts.seen and r.id then opts.seen[r.id] = true end
+      end
+    end
+    -- Group and rarity (an item whose ID isn't known can't be sorted, so it's left out).
+    if opts.itemOK then
+      local function only(list)
+        local kept = {}
+        for _, r in ipairs(list) do if r.id and opts.itemOK(r.id) then kept[#kept + 1] = r end end
+        return kept
+      end
+      sales, buys = only(sales), only(buys)
     end
 
     if tab == "sales" then out = groupSimilar(sales) elseif tab == "purchases" then out = groupSimilar(buys)
@@ -196,24 +242,37 @@ local function records(tab, from, charOK, match)
       for _, r in ipairs(groupSimilar(sales)) do r.amount = r.total; out[#out + 1] = r end
       for _, r in ipairs(groupSimilar(buys)) do r.amount = -r.total; out[#out + 1] = r end
     else
-      -- Resale: items both bought and sold.
+      -- By item: every item bought or sold, with how many, the averages, and (for items
+      -- both bought and sold) the profit on the ones sold, each and in all. Auction sales
+      -- count what reached you after the cut.
       local by = {}
       local function add(r, sold)
-        local x = by[r.item] or { item = r.item, icon = r.icon, bought = 0, boughtTotal = 0, sold = 0, soldTotal = 0 }
-        by[r.item] = x
-        x.icon = x.icon or r.icon
+        local x = by[r.item]
+        if not x then
+          x = { item = r.item, id = r.id, icon = r.icon, bought = 0, boughtTotal = 0, sold = 0, soldTotal = 0,
+            byItem = true, where = {}, first = r.t, last = r.t }
+          by[r.item] = x
+        end
+        x.icon, x.id = x.icon or r.icon, x.id or r.id
         local q = r.qty or 1
         if sold then x.sold, x.soldTotal = x.sold + q, x.soldTotal + r.total
         else x.bought, x.boughtTotal = x.bought + q, x.boughtTotal + r.total end
+        local w = (sold and "sold" or "bought") .. r.where
+        x.where[w] = (x.where[w] or 0) + q
+        x.first, x.last = math.min(x.first or 0, r.t or 0), math.max(x.last or 0, r.t or 0)
       end
       for _, r in ipairs(sales) do add(r, true) end
       for _, r in ipairs(buys) do add(r, false) end
       for _, x in pairs(by) do
-        if x.bought > 0 and x.sold > 0 then
-          x.avgBuy, x.avgSell = x.boughtTotal / x.bought, x.soldTotal / x.sold
-          x.profit = (x.avgSell - x.avgBuy) * math.min(x.bought, x.sold)
-          out[#out + 1] = x
+        x.avgBuy = x.bought > 0 and x.boughtTotal / x.bought or nil
+        x.avgSell = x.sold > 0 and x.soldTotal / x.sold or nil
+        if x.avgBuy and x.avgSell then
+          x.avgProfit = x.avgSell - x.avgBuy
+          x.profit = x.avgProfit * math.min(x.bought, x.sold)
         end
+        x.bought, x.sold = x.bought > 0 and x.bought or nil, x.sold > 0 and x.sold or nil
+        x.t = x.last
+        out[#out + 1] = x
       end
     end
   end
@@ -294,11 +353,16 @@ local function records(tab, from, charOK, match)
     end
   end
 
-  -- Search: the item's name, or (All) the type too.
+  -- Search: the item's name, or (All) the type too. In quotes, that one item's name exactly
+  -- (By item's double-click puts one there: Silk Cloth, not Bolt of Silk Cloth too).
   if match ~= "" then
+    local exact = match:match('^"(.+)"$')
     local kept = {}
     for _, r in ipairs(out) do
-      if ((r.item or "") .. " " .. (r.kind or "")):lower():find(match, 1, true) then kept[#kept + 1] = r end
+      local hit
+      if exact then hit = (r.item or ""):lower() == exact
+      else hit = ((r.item or "") .. " " .. (r.kind or "")):lower():find(match, 1, true) end
+      if hit then kept[#kept + 1] = r end
     end
     out = kept
   end
@@ -315,6 +379,7 @@ local rows, headers = {}, {}
 local shown = {}          -- the records on screen, in order (for selecting by row)
 local sel = {}            -- [record key] = true: the selected rows
 local anchor, dragging    -- the row a Shift-click or drag starts from; a drag under way
+local lastClick = { t = 0 }   -- (By item's double-click)
 
 -- A key that stays the same for a record across redraws (selections survive them).
 local function recKey(rec)
@@ -360,10 +425,22 @@ local function updateSummary()
       "|cff" .. (net >= 0 and "7fd39c+" or "ee8597-") .. ns.Money(math.floor(math.abs(net) + 0.5)) .. "|r"))
     return
   end
+  if s.tab == "resale" then
+    -- By item: what the items cost, what they brought, and the profit on those resold.
+    local spent, earned, profit = 0, 0, 0
+    for _, rec in ipairs(f.list or {}) do
+      spent, earned, profit = spent + rec.boughtTotal, earned + rec.soldTotal, profit + (rec.profit or 0)
+    end
+    local extra = (f.list and #f.list > MAX_ROWS) and dim((" (showing the first %d)"):format(MAX_ROWS)) or ""
+    f.summary:SetText(("%d items: spent %s, received %s, profit on resold %s%s   %s"):format(f.list and #f.list or 0,
+      ns.Money(math.floor(spent + 0.5)), ns.Money(math.floor(earned + 0.5)), money(math.floor(profit + 0.5)), extra,
+      dim("Double-click an item for each trade.")))
+    return
+  end
   local total = 0
   for _, rec in ipairs(f.list or {}) do total = total + signedOf(rec, s.tab) end
-  local words = { all = "entries", sales = "sales", purchases = "purchases", resale = "items bought and sold", other = "entries", sessions = "sessions" }
-  local label = (s.tab == "resale" and "profit") or (s.tab == "sessions" and "gold") or ((s.tab == "other" or s.tab == "all") and "net") or "total"
+  local words = { all = "entries", sales = "sales", purchases = "purchases", other = "entries", sessions = "sessions" }
+  local label = (s.tab == "sessions" and "gold") or ((s.tab == "other" or s.tab == "all") and "net") or "total"
   local shownTotal = s.tab == "purchases" and -total or total
   local extra = (f.list and #f.list > MAX_ROWS) and dim((" (showing the first %d)"):format(MAX_ROWS)) or ""
   f.summary:SetText(("%d %s, %s %s%s   %s"):format(f.list and #f.list or 0, words[s.tab] or "entries", label,
@@ -417,7 +494,7 @@ function ns:BuildLedger(parent)
   f.searchLabel = T:Text(f, 12, T.dim)
   f.searchLabel:SetPoint("TOPLEFT", 4, -40)
   f.searchLabel:SetText("Search")
-  f.search = T:EditBox(f, 180, "LEFT")
+  f.search = T:EditBox(f, 150, "LEFT")
   f.search:SetPoint("LEFT", f.searchLabel, "RIGHT", 8, 0)
   -- Redraw once typing pauses (code review, October 4: every key rebuilt every record).
   local typed = 0
@@ -462,10 +539,50 @@ end
 -- Which characters: a dropdown (Dashboard.lua's ns:CharacterOptions).
 local function charChoice()
   if not f.chars then
-    f.chars = T:Dropdown(f, 200, function(v) settings().char = v; clearSelection(); ns:RefreshLedger() end)
+    f.chars = T:Dropdown(f, 170, function(v) settings().char = v; clearSelection(); ns:RefreshLedger() end)
     f.chars:SetPoint("LEFT", f.charLabel, "RIGHT", 10, 0)
+    -- Sales, Purchases and By item: which group (the Groups tab's) and rarity.
+    f.group = T:Dropdown(f, 150, function(v) settings().group = v; clearSelection(); ns:RefreshLedger() end)
+    f.group:SetPoint("LEFT", f.chars, "RIGHT", 10, 0)
+    f.rarity = T:Dropdown(f, 120, function(v) settings().rarity = v; clearSelection(); ns:RefreshLedger() end)
+    f.rarity:SetPoint("LEFT", f.group, "RIGHT", 6, 0)
   end
   f.chars:SetOptions(ns:CharacterOptions())
+end
+
+-- Each item's groups, kept a minute (a redraw asks for hundreds).
+local groupSets, groupSetsAt = {}, 0
+local function groupSet(id)
+  if GetTime() - groupSetsAt > 60 then wipe(groupSets); groupSetsAt = GetTime() end
+  if not groupSets[id] then groupSets[id] = ns.ItemGroupSet and ns:ItemGroupSet(id) or {} end
+  return groupSets[id]
+end
+
+-- The Group and Rarity choices: only those the listed items have.
+local function itemChoices(seen)
+  local present, rar = {}, {}
+  for id in pairs(seen) do
+    for gid in pairs(groupSet(id)) do present[gid] = true end
+    local q = ns.ItemQuality and ns.ItemQuality(id)
+    if q then rar[q] = true end
+  end
+  local gopts, hasG = { { value = "all", label = "Any group" } }, { all = true }
+  if ns.GroupTree then
+    for _, g in ipairs(ns:GroupTree()) do
+      if present[g.id] and (g.kind == "user" or (g.kind == "builtin" and g.depth <= 1)) then
+        gopts[#gopts + 1] = { value = g.id, label = (g.depth > 0 and "   " or "") .. g.name }
+        hasG[g.id] = true
+      end
+    end
+  end
+  local ropts, hasR = { { value = "all", label = "Any rarity" } }, { all = true }
+  for q = 0, 5 do
+    if rar[q] then
+      ropts[#ropts + 1] = { value = tostring(q), label = "|cff" .. RARITY[q][2] .. RARITY[q][1] .. "|r" }
+      hasR[tostring(q)] = true
+    end
+  end
+  return gopts, ropts, hasG, hasR
 end
 
 local function getHeader(i)
@@ -503,10 +620,11 @@ local function show(rec, key)
   end
   if key == "t" then return dim(date((rec.month and "%B %Y") or (rec.day and "%b %d") or "%b %d %H:%M", v)) end
   if key == "char" then return charName(v) end
+  if rec.byItem and v == nil then return dim("-") end   -- (By item: never bought, or never sold)
   if key == "qty" or key == "bought" or key == "sold" then return v and tostring(v) or dim(rec.day and "" or "?") end
   if key == "each" or key == "avgBuy" or key == "avgSell" then return v and ns.Money(math.floor(v + 0.5)) or dim(rec.day and "" or "?") end
   if key == "total" then return (rec.day or rec.other) and ("|cff" .. (v >= 0 and "7fd39c" or "ee8597") .. money(v) .. "|r") or ns.Money(v) end
-  if key == "amount" or key == "profit" then
+  if key == "amount" or key == "profit" or key == "avgProfit" then
     return "|cff" .. (v >= 0 and "7fd39c+" or "ee8597-") .. ns.Money(math.floor(math.abs(v) + 0.5)) .. "|r"
   end
   if key == "who" then return v or dim("-") end
@@ -572,6 +690,25 @@ local function rowTooltip(r)
   if rec.id then GameTooltip:SetItemByID(rec.id); ns:TooltipAddLine(" ")
   else ns:TooltipAddLine(rec.item ~= "" and rec.item or (rec.kind or "?"), 1, 1, 1) end
   local function line(a, b) if b then ns:TooltipAddDoubleLine(a, b, 0.7, 0.7, 0.7, 1, 1, 1) end end
+  if rec.byItem then
+    -- By item: the totals, and where (auction house or vendor) each side was.
+    local function split(side)
+      local a, v = rec.where[side .. "Auction"], rec.where[side .. "Vendor"]
+      if a and v then return (" (%d auction, %d vendor)"):format(a, v) end
+      return v and " (vendor)" or " (auction)"
+    end
+    if rec.bought then line("Bought", ("%d for %s%s"):format(rec.bought, ns.Money(math.floor(rec.boughtTotal + 0.5)), split("bought"))) end
+    if rec.sold then line("Sold", ("%d for %s%s"):format(rec.sold, ns.Money(math.floor(rec.soldTotal + 0.5)), split("sold"))) end
+    if rec.profit then
+      line("Profit each", show(rec, "avgProfit"))
+      line(("Profit on %d resold"):format(math.min(rec.bought, rec.sold)), show(rec, "profit"))
+    end
+    line("First and last", date("%b %d", rec.first or 0) .. " - " .. date("%b %d", rec.last or 0))
+    if rec.where.soldAuction then ns:TooltipAddLine("Auction sales count what you got after the cut.", 0.5, 0.5, 0.5, true) end
+    ns:TooltipAddLine("Double-click to see each trade of it. Click, Shift-click or drag to total items.", 0.5, 0.5, 0.5, true)
+    GameTooltip:Show()
+    return
+  end
   line("When", date((rec.month and "%B %Y, month total") or (rec.day and "%b %d, day total") or "%b %d %H:%M", rec.t or 0))
   line("Type", rec.kind)
   if rec.qty and rec.each then line("Quantity", ("%d x %s"):format(rec.qty, ns.Money(math.floor(rec.each + 0.5)))) end
@@ -606,6 +743,17 @@ local function getRow(i)
     local rec = shown[self.index]
     if not rec then return end
     if button == "RightButton" then clearSelection(); paint(); return end
+    -- By item: a double-click shows every trade of that item, with its time, in All.
+    local now = GetTime()
+    if rec.byItem and lastClick.index == self.index and now - lastClick.t < 0.4 then
+      lastClick.index = nil
+      settings().tab = "all"
+      clearSelection()
+      f.search:SetText('"' .. rec.item .. '"')
+      ns:RefreshLedger()
+      return
+    end
+    lastClick.index, lastClick.t = self.index, now
     local key = recKey(rec)
     if IsShiftKeyDown() and anchor then
       wipe(sel)
@@ -651,7 +799,7 @@ local EMPTY = {
   all = "Nothing recorded for these filters yet. Auction sales are logged when you take the money from the mailbox; purchases, vendor trades and other money as they happen.",
   sales = "No sales for these filters yet. Auction sales are logged when you take the money from the mailbox; vendor sales as you sell.",
   purchases = "No purchases for these filters yet. Auction and vendor purchases are logged as you buy.",
-  resale = "No items both bought and sold for these filters yet. Once you've bought and sold the same item, its profit shows here.",
+  resale = "Nothing bought or sold for these filters yet. Each item you buy or sell gets one line here: how many, the average prices, and the profit once you've both bought and sold it.",
   other = "No other money for these filters yet: repairs, mail, trades, loot, quests, training and flights show here, each with its time (older than 30 days, by day).",
   sessions = "No sessions for these filters yet. Start one with /fl session start, or Ctrl-click the minimap button; it's listed here when you stop it.",
 }
@@ -679,7 +827,37 @@ function ns:RefreshLedger()
   for _, r in ipairs(RANGES) do if r.key == s.range and r.secs then from = time() - r.secs end end
   -- All: this ruleset and faction (Dashboard.lua CharacterOptions).
   local function charOK(c) return ns:CharChoiceHas(s.char, c) end
-  local list = records(s.tab, from, charOK, (f.search:GetText() or ""):lower())
+  local match = (f.search:GetText() or ""):lower()
+  local itemTab = s.tab == "sales" or s.tab == "purchases" or s.tab == "resale"
+  f.group:SetShown(itemTab)
+  f.rarity:SetShown(itemTab)
+  local list
+  if itemTab then
+    local function itemOK(id)
+      return (s.group == "all" or groupSet(id)[s.group] ~= nil)
+        and (s.rarity == "all" or ns.ItemQuality and ns.ItemQuality(id) == tonumber(s.rarity))
+    end
+    local function run()
+      local seen = {}
+      local filtered = s.group ~= "all" or s.rarity ~= "all"
+      return records(s.tab, from, charOK, match, { seen = seen, itemOK = filtered and itemOK or nil }), seen
+    end
+    local seen
+    list, seen = run()
+    local gopts, ropts, hasG, hasR = itemChoices(seen)
+    -- A choice none of these items has any more (another range or character): Any.
+    if not hasG[s.group] or not hasR[s.rarity] then
+      if not hasG[s.group] then s.group = "all" end
+      if not hasR[s.rarity] then s.rarity = "all" end
+      list = run()
+    end
+    f.group:SetOptions(gopts)
+    f.group:SetValue(s.group)
+    f.rarity:SetOptions(ropts)
+    f.rarity:SetValue(s.rarity)
+  else
+    list = records(s.tab, from, charOK, match)
+  end
   f.list = list
 
   local cols = COLUMNS[s.tab]
@@ -750,7 +928,8 @@ function ns:RefreshLedger()
     r:Show()
   end
   for i = n + 1, #rows do rows[i]:Hide() end
-  f.empty:SetText(EMPTY[s.tab] or EMPTY.all)
+  local narrowed = itemTab and (s.group ~= "all" or s.rarity ~= "all")
+  f.empty:SetText((EMPTY[s.tab] or EMPTY.all) .. (narrowed and "\n\nThe Group or Rarity choice is hiding some: choose Any group and Any rarity to see them." or ""))
   f.empty:SetShown(#list == 0)
   f.content:SetHeight(math.max(n * ROW_HEIGHT, 30))
   f.sf.UpdateScrollBar()
