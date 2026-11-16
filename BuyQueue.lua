@@ -623,6 +623,47 @@ local function cantAfford(e)
   if cheapest and cheapest > cash then return cheapest end
 end
 
+-- How many the queue would buy now and what they'd cost (the Buy and Total columns):
+-- from the saved listings, cheapest first, at or under the limit, no more than a list still
+-- wants and what your gold covers, as a purchase works it out (planCommodity). Frank,
+-- November 15: Cheap counted what was listed under the price, rarely what you bought.
+-- Also returns how many were listed at or under the limit.
+local function buyNow(e)
+  if e.waiting then return 0, 0, 0 end
+  local cash = spendable()
+  local want = e.reason == "list" and e.want or nil
+  local limit = e.limit or math.huge
+  local n, cost, listed = 0, 0, 0
+  local function take(p, k)
+    listed = listed + k
+    if want then k = math.min(k, want - n) end
+    k = math.min(k, math.floor((cash - cost) / p))
+    if k > 0 then n, cost = n + k, cost + k * p end
+    return k
+  end
+  local rec = (ns.db.prices[ns.MarketKey()] or {})[e.id]
+  if e.gear or not (rec and rec.l) then
+    -- Gear (one stat version's listings aren't in the ladder) or no ladder: the count the
+    -- row came with, at its price each.
+    local each = e.cost or (limit < math.huge and limit) or (rec and rec.m)
+    if each and each > 0 then take(each, e.n or 1) end
+    return n, cost, listed
+  end
+  if rec.none then return 0, 0, 0 end
+  local prev, short = 0, false
+  for p, c in rec.l:gmatch("(%d+):(%d+)") do
+    p, c = tonumber(p), tonumber(c)
+    if p > limit then break end
+    local avail = c - prev
+    prev = c
+    if p > 0 and avail > 0 then
+      if short then listed = listed + avail elseif take(p, avail) < avail then short = true end
+    end
+  end
+  return n, cost, listed
+end
+Q.buyNow = buyNow   -- (for the tests)
+
 -- A lookup found listings under the limit but none you can pay for: keep it, move on.
 local function tooPoor(price)
   local e = Q.cur
@@ -1662,7 +1703,9 @@ end
 
 -- Column places, from each row's right edge (the header's are 10 further right: the rows
 -- end left of the scroll bar). Why is a short tag (FLIP, WATCH) or the shopping list's name.
-local COL = { profit = -4, cheap = -92, limit = -136, why = -262, whyW = 70 }
+-- Buy and Total (Frank, November 15): how many the queue would buy now and what they'd
+-- cost, instead of Cheap (how many were listed under your price).
+local COL = { profit = -4, total = -82, cheap = -168, limit = -200, why = -346, whyW = 66 }
 local WHY = { flip = "FLIP", watch = "WATCH" }
 
 -- The star's look: the auction house's own favorite star where the game has it.
@@ -1724,8 +1767,9 @@ local function laneRow(L, i)
   -- Columns from the right edge: the numbers keep their place and are never cut off, the
   -- name gets the room that's left and is the one shortened (owner, November 15: "if any
   -- of these sections is cutoff it should be the WHY section", then the name).
-  r.limit, r.n, r.profit = T:Text(r, 11), T:Text(r, 11), T:Text(r, 11)
+  r.limit, r.n, r.profit, r.total = T:Text(r, 11), T:Text(r, 11), T:Text(r, 11), T:Text(r, 11)
   r.profit:SetPoint("RIGHT", r, "RIGHT", COL.profit, 0)
+  r.total:SetPoint("RIGHT", r, "RIGHT", COL.total, 0)
   r.n:SetPoint("RIGHT", r, "RIGHT", COL.cheap, 0)
   r.limit:SetPoint("RIGHT", r, "RIGHT", COL.limit, 0)
   r.why = T:Text(r, 10, T.dim)
@@ -1759,6 +1803,20 @@ local function laneRow(L, i)
     if self.entry.stale then
       GameTooltip:AddLine(("Last seen %d minutes ago, so it may be gone. Buying it (or Live watch) checks it again."):format(
         math.floor(self.entry.age / 60)), 0.8, 0.8, 0.8, true)
+    end
+    local e = self.entry
+    -- What Buy and Total mean for this row, and what holds it back.
+    if e.buyN and not e.waiting then
+      local rec = (ns.db.prices[ns.MarketKey()] or {})[e.id]
+      local when = rec and rec.t and (" (" .. ns.Age(rec.t) .. ")") or ""
+      local held = ""
+      if e.listedN and e.buyN < e.listedN then
+        if e.reason == "list" and e.want and e.buyN >= e.want then held = (" The list wants %d more."):format(e.want)
+        else held = (" That's what %s%s covers."):format(money(spendable()), spendable() < GetMoney() and " left to spend" or "") end
+      end
+      GameTooltip:AddLine(("Buy %d for %s. %d listed at or under %s at the last look%s.%s"):format(
+        e.buyN, money(e.buyCost or 0), e.listedN or 0, limitText(e), when, held), 1, 1, 1, true)
+      GameTooltip:AddLine("The auction house is checked again when you buy, so the count can change.", 0.7, 0.7, 0.7, true)
     end
     local e = self.entry
     if e.reason == "flip" and e.affordN and e.n and e.affordN < e.n and e.affordN > 0 then
@@ -1893,7 +1951,7 @@ local function buildLane(v, d)
   header:SetHeight(14)
   -- The same places as the rows' columns (COL), from the right; rows end 10 short of it.
   for _, c in ipairs({ { "Item", 34, "LEFT" }, { d.key == "lists" and "List" or "Why", COL.why - 10, "WHY" },
-                       { "Up to", COL.limit - 10 }, { "Cheap", COL.cheap - 10 },
+                       { "Up to", COL.limit - 10 }, { "Buy", COL.cheap - 10 }, { "Total", COL.total - 10 },
                        { d.key == "lists" and "Now" or "Profit", COL.profit - 10 } }) do
     local fs = T:Text(header, 10, T.dim)
     if c[3] == "LEFT" then fs:SetPoint("LEFT", c[2], 0)
@@ -2221,7 +2279,10 @@ local function fillLane(L)
     r.icon:SetDesaturated(grey and true or false)
     r.name:SetText(grey and ("|cff888888" .. ns.ItemName(e.id) .. "|r") or ns.ItemName(e.id))
     r.limit:SetText(e.any and "any" or money(e.limit))
-    r.n:SetText(e.waiting and "0" or (e.n and tostring(e.n) or "?"))
+    local buyN, buyCost, listed = buyNow(e)
+    e.buyN, e.buyCost, e.listedN = buyN, buyCost, listed
+    r.n:SetText(tostring(buyN))
+    r.total:SetText(buyN > 0 and money(buyCost) or "")
     r.why:SetText(d.key == "lists" and (e.list or "") or WHY[e.reason] or "")
     setStar(r.star.tex, ns:IsWatched(e.id))
     if d.key == "lists" then
@@ -2229,15 +2290,14 @@ local function fillLane(L)
       local now = rec and rec.m and not rec.none and ns.MoneyPlain(rec.m) or "none"
       r.profit:SetText(e.waiting and ("|cff888888" .. now .. "|r") or now)
     else
-      -- Profit on what you can afford right now, not the whole lot (Magic, October 3:
+      -- Profit on what you'd buy now (Buy and Total), not the whole lot (Magic, October 3:
       -- "said 48c profit, I only made 21c" with 1s 27c to spend). It follows your gold.
-      local each = (e.worth or 0) - (e.cost or e.limit or 0)
-      local afford = math.min(e.n or 1, math.floor(spendable() / math.max(e.cost or e.limit or 1, 1)))
+      local afford = buyN
       e.affordN = afford
       -- Just what you can make with your gold and limit; the full amount is in the hover
       -- (Magic, October 3: "of 48c" isn't needed at a glance).
       if e.profit and e.profit > 0 and afford < (e.n or 1) and afford > 0 then
-        r.profit:SetText(("|cff7fd39c%s|r"):format(money(each * afford)))
+        r.profit:SetText(("|cff7fd39c%s|r"):format(money((e.worth or 0) * afford - buyCost)))
       elseif e.reason == "watch" and not (e.profit and e.profit > 0) then
         r.profit:SetText("|cffb9a3ffwatched|r")   -- bought at your price, not to vendor
       else

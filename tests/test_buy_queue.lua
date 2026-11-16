@@ -1114,3 +1114,31 @@ T.test("Buy queue: a listing whose bid has reached its buyout isn't tried or sav
 end)
 
 Q.cur, Q.plan, Q.state, Q.lateBuys = nil, nil, "idle", {}
+
+-- Frank, November 15: Cheap counted the listings under your price, rarely what you ended up
+-- buying. Buy and Total are what a purchase would take now.
+T.test("Buy queue: Buy and Total are what a purchase would take now", function()
+  local keep, limit = ns.db.settings.keepGold, ns.db.settings.buyQueue.limit
+  local money = S.money
+  ns.db.settings.keepGold, ns.db.settings.buyQueue.limit = 0, nil
+  local market = ns.db.prices[ns.MarketKey()] or {}
+  ns.db.prices[ns.MarketKey()] = market
+  market[91301] = { m = 10, l = "10:5,12:9,20:30", t = time(), src = "scan" }
+  S.money = 100000
+  -- A list that wants 7: 5 at 10c, 2 at 12c; 9 listed at or under 15c.
+  local n, cost, listed = Q.buyNow({ id = 91301, limit = 15, reason = "list", want = 7 })
+  T.eq(n, 7); T.eq(cost, 74); T.eq(listed, 9)
+  -- A flip with 1s to spend: 5 at 10c, then the 4 at 12c your gold still covers.
+  S.money = 100
+  n, cost, listed = Q.buyNow({ id = 91301, limit = 15, reason = "flip" })
+  T.eq(n, 9); T.eq(cost, 98); T.eq(listed, 9)
+  S.money = 70
+  n, cost, listed = Q.buyNow({ id = 91301, limit = 15, reason = "flip" })
+  T.eq(n, 6, "5 at 10c and one at 12c"); T.eq(cost, 62); T.eq(listed, 9)
+  -- Waiting rows buy nothing.
+  n = Q.buyNow({ id = 91301, limit = 15, reason = "list", want = 3, waiting = true })
+  T.eq(n, 0)
+  market[91301] = nil
+  S.money = money
+  ns.db.settings.keepGold, ns.db.settings.buyQueue.limit = keep, limit
+end)
