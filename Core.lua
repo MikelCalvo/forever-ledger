@@ -1333,10 +1333,12 @@ SlashCmdList.FOREVERLEDGER = function(msg)
     ns:StartGeneralSession()
   elseif msg == "session stop" or msg == "session end" then
     ns:StopGeneralSession()
+  elseif msg == "session pause" or msg == "session resume" then
+    ns:PauseGeneralSession(msg == "session pause")
   elseif msg == "session" then
     -- (Sessions were archived November 13 and are back November 15, without the Dashboard's
     -- button: a player asked for them.)
-    if ns:GeneralSessionRunning() then ns:Print("A session is running: /fl session stop ends it.")
+    if ns:GeneralSessionRunning() then ns:Print("A session is running: /fl session pause (or resume), /fl session stop ends it.")
     else ns:Print("/fl session start begins a session (or Ctrl-click the minimap button).") end
   elseif msg == "money" then
     ns:PrintMoney()
@@ -1384,6 +1386,6 @@ SlashCmdList.FOREVERLEDGER = function(msg)
       ns:Print(("Auction house cut is %g%%. Change it with /fl cut 5"):format(ns.db.settings.ahCut or 5))
     end
   else
-    ns:Print("Commands: /fl (window), /fl scan, /fl scan full, /fl scan materials, /fl stop, /fl watch, /fl quiet, /fl price, /fl queue, /fl lists, /fl pull, /fl export, /fl csv, /fl import, /fl source <auto/own/auctionator>, /fl shuffles, /fl shuffles all, /fl cut <percent>, /fl margin <percent>, /fl seconds <n>, /fl deals, /fl deals settings, /fl minimap, /fl money, /fl session start, /fl session stop, /fl de, /fl pair <name>, /fl sync, /fl tooltip, /fl welcome, /fl new, /fl api, /fl debug")
+    ns:Print("Commands: /fl (window), /fl scan, /fl scan full, /fl scan materials, /fl stop, /fl watch, /fl quiet, /fl price, /fl queue, /fl lists, /fl pull, /fl export, /fl csv, /fl import, /fl source <auto/own/auctionator>, /fl shuffles, /fl shuffles all, /fl cut <percent>, /fl margin <percent>, /fl seconds <n>, /fl deals, /fl deals settings, /fl minimap, /fl money, /fl session start, /fl session pause, /fl session stop, /fl de, /fl pair <name>, /fl sync, /fl tooltip, /fl welcome, /fl new, /fl api, /fl debug")
   end
 end

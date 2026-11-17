@@ -19,6 +19,7 @@ local T = ns.Theme
 local TRACKER_SECONDS = 1   -- the tracker redraws this often, and only while a session runs
 
 local function live() return ns.db and ns.db.liveSession end
+local drawTracker   -- (the tracker, below; the loot event redraws it)
 
 -- Gold an hour, losses in red with a minus (owner's test, October 3: a session that
 -- spent 16s said "0c an hour").
@@ -30,8 +31,32 @@ end
 
 -- What one looted item is worth: ns:LootValue (Values.lua; Settings, Sessions, Count loot at).
 
+-- Gold an hour shows from this far in: before that one kill or purchase swings it wildly
+-- (owner's test, October 3: "-21g 60s an hour" 20 seconds in; 5 minutes since November 17,
+-- as Blackthornes Farmer does).
+local RATE_SECONDS = 300
+ns.SESSION_RATE_SECONDS = RATE_SECONDS
+
+-- Of a session's loot, how many still count as loot: looted, less what was sold during it,
+-- and no more than this character still has (bags, bank, its auctions not yet sold).
+-- Selling looted items counted them twice, as loot and again as the gold they brought (a
+-- player on CurseForge, November 16); disenchanting, using or destroying them likewise
+-- left them counted. What a sale brought is in the gold; what's gone is gone.
+local function stillHeld(s)
+  if s.char ~= ns.CharKey() then return nil end   -- another character's bags say nothing
+  local posted = {}
+  for _, key in ipairs({ s.char, s.char .. " (neutral)" }) do
+    local mine = ns.db.myAuctions and ns.db.myAuctions[key]
+    for _, e in ipairs(mine and mine.list or {}) do
+      if e.id and not e.sold then posted[e.id] = (posted[e.id] or 0) + (e.q or 1) end
+    end
+  end
+  return function(id) return ns.ItemCount(id, true) + (posted[id] or 0) end
+end
+
 -- Totals so far: { secs, gained = net gold change, earned, spent, loot = value of what
--- was looted, items = { { id, n, value } } best first, perHour }.
+-- was looted and is still held, items = { { id, n, value } } best first, unpriced = items
+-- with no price (not counted), perHour }.
 function ns:SessionTotals(s)
   s = s or live()
   if not s then return end
@@ -39,11 +64,20 @@ function ns:SessionTotals(s)
   for _, v in pairs(s.money or {}) do
     if v > 0 then earned = earned + v else spent = spent - v end
   end
-  local loot, items = 0, {}
+  local loot, items, unpriced = 0, {}, 0
+  local held = stillHeld(s)
   for id, n in pairs(s.loot or {}) do
-    local value = ns:LootValue(id) * n
-    loot = loot + value
-    items[#items + 1] = { id = id, n = n, value = value }
+    n = n - ((s.sold or {})[id] or 0)
+    if held then n = math.min(n, held(id)) end
+    if n > 0 then
+      local value = ns:LootValue(id) * n
+      if value > 0 then
+        loot = loot + value
+        items[#items + 1] = { id = id, n = n, value = value }
+      else
+        unpriced = unpriced + n
+      end
+    end
   end
   table.sort(items, function(a, b) return a.value > b.value end)
   -- Time played, not time since it started: a session carried over a logout doesn't
@@ -61,7 +95,35 @@ function ns:SessionTotals(s)
   secs = math.max(1, secs)
   local gained = earned - spent
   return { secs = secs, earned = earned, spent = spent, gained = gained, loot = loot, items = items,
-    perHour = (gained + loot) / secs * 3600 }
+    unpriced = unpriced, perHour = (gained + loot) / secs * 3600 }
+end
+
+-- Gold an hour of a finished session (gold and loot), or nil when it was too short to say.
+function ns.SessionRate(e)
+  local secs = e and (e.secs or ((e.stop or e.t or 0) - (e.t or 0)))
+  if not secs or secs < RATE_SECONDS then return nil end
+  return ((e.earned or 0) - (e.spent or 0) + (e.loot or 0)) / secs * 3600
+end
+
+-- Your usual and best gold an hour, from finished sessions of 10 minutes or more on this
+-- character's realm and faction (the newest 20; usual = their median). nil with fewer than 3.
+local USUAL_MIN_SECONDS, USUAL_COUNT = 600, 20
+function ns:SessionUsual()
+  local rates = {}
+  local list = ns.db.sessions or {}
+  for i = #list, 1, -1 do
+    local e = list[i]
+    if e.kind == "general" and (e.secs or 0) >= USUAL_MIN_SECONDS and (not e.c or not ns.SameMarketChar or ns:SameMarketChar(e.c)) then
+      rates[#rates + 1] = ns.SessionRate(e)
+      if #rates >= USUAL_COUNT then break end
+    end
+  end
+  if #rates < 3 then return nil end
+  local best = math.max(unpack(rates))
+  table.sort(rates)
+  local n = #rates
+  local usual = n % 2 == 1 and rates[(n + 1) / 2] or (rates[n / 2] + rates[n / 2 + 1]) / 2
+  return { usual = usual, best = best, n = n }
 end
 
 local function duration(secs)
@@ -77,8 +139,26 @@ local function signed(c) return (c < 0 and "-" or "+") .. ns.Money(math.abs(c)) 
 -- Every gold change, with where it came from (History.lua onMoney).
 function ns:SessionMoney(source, delta)
   local s = live()
-  if not s or s.char ~= ns.CharKey() then return end
+  if not s or s.char ~= ns.CharKey() or s.paused then return end
   s.money[source] = (s.money[source] or 0) + delta
+end
+
+-- Something sold to a vendor or on the auction house (History.lua, with the gold it
+-- brought): looted this session, it now counts as that gold, not as loot as well. item is
+-- an item ID (vendor) or a name (auction sales name the item). Counted while paused too:
+-- the loot it was is still in the totals.
+function ns:SessionSold(item, qty)
+  local s = live()
+  if not (s and item) or s.char ~= ns.CharKey() then return end
+  local id = type(item) == "number" and item or nil
+  if not id then
+    for lootID in pairs(s.loot or {}) do
+      if ns.ItemName(lootID) == item then id = lootID; break end
+    end
+  end
+  if not (id and s.loot[id]) then return end
+  s.sold = s.sold or {}
+  s.sold[id] = math.min(s.loot[id], (s.sold[id] or 0) + (tonumber(qty) or 1))
 end
 
 -- "You receive loot: [Linen Cloth]x2." in the client's own language, as patterns.
@@ -103,14 +183,18 @@ end
 
 ns:On("CHAT_MSG_LOOT", function(msg)
   local s = live()
-  if not (s and msg) or s.char ~= ns.CharKey() then return end
+  if not (s and msg) or s.char ~= ns.CharKey() or s.paused then return end
   for _, pat in ipairs(patterns()) do
     local link, n = msg:match(pat.p)
     if link then
       local id = ns.ItemIDFromLink(link)
       if id then
-        s.loot[id] = (s.loot[id] or 0) + (tonumber(n) or 1)
+        n = tonumber(n) or 1
+        s.loot[id] = (s.loot[id] or 0) + n
         ns:RememberItem(id)
+        -- The tracker shows what came in for a few seconds ("+2 Linen Cloth").
+        ns.sessionLastLoot = { id = id, n = n, t = GetTime and GetTime() or time() }
+        if drawTracker then drawTracker() end
       end
       return
     end
@@ -121,15 +205,21 @@ end)
 -- The tracker: a small window you can move, while a session runs.
 ---------------------------------------------------------------------------
 local tracker, ticker
-local drawTracker
 
 -- Small and quiet, so it doesn't get in the way of playing (owner's test, October 3:
 -- "make it look a little nicer while keeping it small"): a thin accent line on top, the
 -- time, gold an hour in larger text (the number people watch), gold and loot under it.
--- Right-click folds it to one slim line (settings.sessionSmall).
+-- Right-click folds it to one slim line (settings.sessionSmall). More opens the full view
+-- under it (settings.sessionFull; Frank, November 17: "a mini version... then the full
+-- version that lets people see all the data live"): gold by where it came from, every
+-- item looted with its worth (hover one for its tooltip), and your usual pace.
+local W_MINI, W_SMALL = 224, 210
+local LOOT_NOTE = "Loot counts at the better of the auction house (after the cut) and a vendor (Settings, Sessions: vendor only), and only while you still have it: what you sell during the session counts once, as the gold it brought."
+local function fullView() return ns.db.settings.sessionFull and not ns.db.settings.sessionSmall end
+
 local function layoutTracker(f)
   local small = ns.db.settings.sessionSmall
-  f:SetSize(210, small and 22 or 64)
+  f:SetSize(small and W_SMALL or W_MINI, small and 22 or 64)
   f.title:ClearAllPoints()
   f.title:SetPoint(small and "LEFT" or "TOPLEFT", 8, small and 0 or -8)
   f.time:ClearAllPoints()
@@ -138,7 +228,155 @@ local function layoutTracker(f)
   f.gold:SetShown(not small)
   f.loot:SetShown(not small)
   f.stop:SetShown(not small)
+  f.pause:SetShown(not small)
+  f.more:SetShown(not small)
+  f.more:SetText(fullView() and "Less" or "More")
   f.smallRate:SetShown(small)
+  if f.details then f.details:SetShown(fullView()) end
+end
+
+---------------------------------------------------------------------------
+-- The full view: a panel under the tracker, redrawn with it every second.
+---------------------------------------------------------------------------
+local ROW_H, MAX_LOOT_ROWS, MAX_GOLD_ROWS = 16, 14, 6
+local FLASH_SECONDS = 4
+
+local function buildDetails(f)
+  local d = CreateFrame("Frame", nil, f)
+  d:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 0, 1)
+  d:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 0, 1)
+  d:SetHeight(100)
+  T:Fill(d, { T.bg[1], T.bg[2], T.bg[3], 0.85 })
+  T:Border(d, T.theme.frame and { T.theme.frame[1], T.theme.frame[2], T.theme.frame[3], 0.8 } or { 1, 1, 1, 0.12 })
+  d:EnableMouse(true)   -- (so a click on it doesn't go through to the world)
+  d.lines = {}
+  -- A line: left text, right text, an optional icon; item rows show the item's tooltip.
+  local function line(i)
+    local r = d.lines[i]
+    if r then return r end
+    r = CreateFrame("Frame", nil, d)
+    r:SetHeight(ROW_H)
+    r:SetPoint("TOPLEFT", 6, 0)
+    r:SetPoint("RIGHT", d, "RIGHT", -6, 0)
+    r.hl = T:Fill(r, { 0.5, 0.83, 0.61, 0.18 }, "BACKGROUND")
+    r.icon = r:CreateTexture(nil, "ARTWORK")
+    r.icon:SetSize(14, 14)
+    r.icon:SetPoint("LEFT", 2, 0)
+    r.left = T:Text(r, 11)
+    r.left:SetJustifyH("LEFT")
+    r.left:SetWordWrap(false)
+    r.right = T:Text(r, 11)
+    r.right:SetPoint("RIGHT", -2, 0)
+    r.right:SetJustifyH("RIGHT")
+    r:SetScript("OnEnter", function(self)
+      if not self.itemID then return end
+      GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+      if GameTooltip.SetItemByID then GameTooltip:SetItemByID(self.itemID)
+      else GameTooltip:SetHyperlink("item:" .. self.itemID) end
+      GameTooltip:Show()
+    end)
+    r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    d.lines[i] = r
+    return r
+  end
+  d.line = line
+  return d
+end
+
+-- spec: { { kind = "head" | "row" | "note", left, right, id, flash } }
+local function drawDetails(d, spec)
+  local y, used = 6, 0
+  for _, e in ipairs(spec) do
+    used = used + 1
+    local r = d.line(used)
+    r:ClearAllPoints()
+    r:SetPoint("TOPLEFT", 6, -y)
+    r:SetPoint("RIGHT", d, "RIGHT", -6, 0)
+    r.itemID = e.id
+    r:EnableMouse(e.id ~= nil)
+    r.icon:SetShown(e.id ~= nil)
+    if e.id then r.icon:SetTexture(ns:ItemIcon(e.id)) end
+    r.left:ClearAllPoints()
+    r.left:SetPoint("LEFT", e.id and 20 or (e.kind == "row" and 8 or 0), 0)
+    r.left:SetPoint("RIGHT", r.right, "LEFT", -6, 0)
+    r.hl:SetShown(e.flash and true or false)
+    if e.kind == "head" then
+      T:StyleHeading(r.left, e.left)
+    else
+      T:Font(r.left, e.kind == "note" and 10 or 11, e.kind == "note" and T.dim or T.text)
+      r.left:SetText(e.left or "")
+    end
+    r.right:SetText(e.right or "")
+    if e.kind == "note" then
+      -- (A set width, so the wrapped height is known at once.)
+      r.left:SetWordWrap(true)
+      r.right:SetText("")
+      r.left:ClearAllPoints()
+      r.left:SetPoint("TOPLEFT", r, "TOPLEFT", 0, -1)
+      r.left:SetWidth(W_MINI - 16)
+      local h = math.max(ROW_H, math.ceil(r.left:GetStringHeight() or ROW_H) + 2)
+      r:SetHeight(h)
+      y = y + h
+    else
+      r.left:SetWordWrap(false)
+      r:SetHeight(ROW_H)
+      y = y + ROW_H + (e.kind == "head" and 2 or 0)
+    end
+    if e.gap then y = y + 6 end
+    r:Show()
+  end
+  for i = used + 1, #d.lines do d.lines[i]:Hide() end
+  d:SetHeight(y + 6)
+end
+
+-- The full view's lines, from the totals (tested).
+function ns.SessionDetailLines(st, s, usual, flashID)
+  local spec = {}
+  local function add(e) spec[#spec + 1] = e end
+  add({ kind = "head", left = "Gold", right = ("|cff%s%s|r"):format(st.gained >= 0 and "7fd39c" or "ee8597", signed(st.gained)) })
+  local by = {}
+  for src, v in pairs((s and s.money) or {}) do if v ~= 0 then by[#by + 1] = { src, v } end end
+  table.sort(by, function(a, b) return math.abs(a[2]) > math.abs(b[2]) end)
+  if #by == 0 then add({ kind = "note", left = "No gold in or out yet." }) end
+  for k = 1, math.min(MAX_GOLD_ROWS, #by) do
+    local x = by[k]
+    add({ kind = "row", left = (ns.MONEY_LABELS and ns.MONEY_LABELS[x[1]]) or x[1],
+      right = (x[2] < 0 and "|cffee8597-|r" or "|cff7fd39c+|r") .. ns.Money(math.abs(x[2])) })
+  end
+  if #by > MAX_GOLD_ROWS then
+    local rest = 0
+    for k = MAX_GOLD_ROWS + 1, #by do rest = rest + by[k][2] end
+    add({ kind = "row", left = ("%d more"):format(#by - MAX_GOLD_ROWS), right = signed(rest) })
+  end
+  spec[#spec].gap = true
+  add({ kind = "head", left = "Loot", right = ns.Money(st.loot) })
+  if #st.items == 0 then add({ kind = "note", left = "Nothing looted yet (or it's all sold: that's in Gold)." }) end
+  for k = 1, math.min(MAX_LOOT_ROWS, #st.items) do
+    local it = st.items[k]
+    add({ kind = "row", id = it.id, left = ("%d x %s"):format(it.n, ns.ItemName(it.id) or "?"), right = ns.Money(it.value),
+      flash = flashID == it.id })
+  end
+  if #st.items > MAX_LOOT_ROWS then
+    local rest = 0
+    for k = MAX_LOOT_ROWS + 1, #st.items do rest = rest + st.items[k].value end
+    add({ kind = "row", left = ("%d more items"):format(#st.items - MAX_LOOT_ROWS), right = ns.Money(rest) })
+  end
+  if (st.unpriced or 0) > 0 then
+    add({ kind = "note", left = ("%d with no price yet, not counted."):format(st.unpriced) })
+  end
+  spec[#spec].gap = true
+  if usual then
+    local better = st.secs >= RATE_SECONDS and st.perHour > usual.usual
+    add({ kind = "row", left = "Your usual", right = rateText(usual.usual) .. " an hour" })
+    add({ kind = "row", left = "Your best", right = rateText(usual.best) .. " an hour" })
+    if st.secs >= RATE_SECONDS then
+      add({ kind = "note", left = better and "|cff7fd39cAbove your usual pace.|r" or "Below your usual pace so far." })
+    end
+  else
+    add({ kind = "note", left = "Your usual pace shows after 3 sessions of 10 minutes or more." })
+  end
+  add({ kind = "note", left = LOOT_NOTE })
+  return spec
 end
 
 local function buildTracker()
@@ -187,16 +425,32 @@ local function buildTracker()
   f.loot = T:Text(f, 11)
   f.loot:SetPoint("BOTTOMRIGHT", -8, 7)
   f.loot:SetJustifyH("RIGHT")
+  f.loot:SetWidth(118)   -- (a new item's name, "+2 Linen Cloth", is cut short, not run into Gold)
+  f.loot:SetWordWrap(false)
   f.smallRate = T:Text(f, 11, { 1, 0.82, 0, 1 })
   f.smallRate:SetPoint("RIGHT", -8, 0)
   f.smallRate:SetJustifyH("RIGHT")
   f.stop = T:Button(f, "Stop", 40, function() ns:StopGeneralSession() end, 16)
   f.stop:SetPoint("TOPRIGHT", -5, -6)
   f.stop:GetFontString():SetFont(T.font, 10, "")
+  -- Pause (Blackthornes Farmer has one; Frank, November 17): the clock stops and nothing is
+  -- counted until Go on.
+  f.pause = T:Button(f, "Pause", 44, function() ns:PauseGeneralSession() end, 16)
+  f.pause:SetPoint("RIGHT", f.stop, "LEFT", -4, 0)
+  f.pause:GetFontString():SetFont(T.font, 10, "")
+  f.more = T:Button(f, "More", 36, function()
+    ns.db.settings.sessionFull = not ns.db.settings.sessionFull or nil
+    layoutTracker(f)
+    drawTracker()
+  end, 16)
+  f.more:SetPoint("RIGHT", f.pause, "LEFT", -4, 0)
+  f.more:GetFontString():SetFont(T.font, 10, "")
+  f.details = buildDetails(f)
   layoutTracker(f)
   f:SetScript("OnEnter", function(self)
     local st = ns:SessionTotals()
-    if not st then return end
+    -- (The full view shows all of it already.)
+    if not st or fullView() then return end
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     GameTooltip:AddLine("Session", 1, 1, 1)
     GameTooltip:AddDoubleLine("Gold in", ns.Money(st.earned), 0.8, 0.8, 0.8, 1, 1, 1)
@@ -216,9 +470,10 @@ local function buildTracker()
       local it = st.items[k]
       GameTooltip:AddDoubleLine(("  %d x %s"):format(it.n, ns.ItemName(it.id) or "?"), ns.Money(it.value), 0.7, 0.7, 0.7, 1, 1, 1)
     end
-    GameTooltip:AddLine("Loot counts at the better of the auction house (after the cut) and a vendor; Settings can make it vendor only.", 0.6, 0.6, 0.6, true)
-    GameTooltip:AddLine(ns.db.settings.sessionSmall and "Drag to move. Right-click for the full view; Stop is there."
-      or "Drag to move. Right-click to fold it to one line.", 0.6, 0.6, 0.6, true)
+    if #st.items > 5 then GameTooltip:AddLine(("  and %d more: More shows them all"):format(#st.items - 5), 0.6, 0.6, 0.6) end
+    GameTooltip:AddLine(LOOT_NOTE, 0.6, 0.6, 0.6, true)
+    GameTooltip:AddLine(ns.db.settings.sessionSmall and "Drag to move. Right-click for the bigger view: More, Pause and Stop are there."
+      or "Drag to move. Right-click to fold it to one line. More shows everything as it comes in.", 0.6, 0.6, 0.6, true)
     GameTooltip:Show()
   end)
   f:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -228,14 +483,40 @@ end
 drawTracker = function()
   local st = ns:SessionTotals()
   if not (tracker and st) then return end
-  -- Gold an hour from 2 minutes in: before that one purchase swings it wildly (owner's
-  -- test, October 3: "-21g 60s an hour" 20 seconds in).
-  local rate = st.secs >= 120 and rateText(st.perHour) or "|cff888888...|r"
-  tracker.time:SetText(duration(st.secs))
-  tracker.rate:SetText(st.secs >= 120 and (rate .. " |cffbbbbbban hour|r") or "|cff888888an hour: after 2 min|r")   -- (shorter: the longer text ran past the tracker, October 4)
-  tracker.smallRate:SetText(rate .. " |cffbbbbbb/h|r")
+  local s = live()
+  local rate = st.secs >= RATE_SECONDS and rateText(st.perHour) or "|cff888888...|r"
+  tracker.time:SetText(duration(st.secs) .. (s.paused and " |cffffd100paused|r" or ""))
+  tracker.rate:SetText(st.secs >= RATE_SECONDS and (rate .. " |cffbbbbbban hour|r") or "|cff888888an hour: after 5 min|r")   -- (shorter: the longer text ran past the tracker, October 4)
+  tracker.smallRate:SetText(s.paused and "|cffffd100paused|r" or (rate .. " |cffbbbbbb/h|r"))
+  tracker.pause:SetText(s.paused and "Go on" or "Pause")
   tracker.gold:SetText(("|cff999999Gold|r |cff%s%s|r"):format(st.gained >= 0 and "7fd39c" or "ee8597", signed(st.gained)))
-  tracker.loot:SetText(("|cff999999Loot|r %s"):format(ns.Money(st.loot)))
+  -- What just came in, for a few seconds (as Blackthornes Farmer's "+2").
+  local last = ns.sessionLastLoot
+  local now = GetTime and GetTime() or time()
+  local flashID = last and now - last.t < FLASH_SECONDS and last.id or nil
+  if flashID then
+    tracker.loot:SetText(("|cff7fd39c+%d %s|r"):format(last.n, ns.ItemName(last.id) or "?"))
+  else
+    tracker.loot:SetText(("|cff999999Loot|r %s"):format(ns.Money(st.loot)))
+  end
+  if fullView() then
+    drawDetails(tracker.details, ns.SessionDetailLines(st, s, ns:SessionUsual(), flashID))
+  end
+end
+
+-- Pause or carry on (on = true pauses, false carries on, nil switches). While paused the
+-- clock stops and nothing new is counted; selling what was looted still moves it to gold.
+function ns:PauseGeneralSession(on)
+  local s = live()
+  if not s or s.char ~= ns.CharKey() then ns:Print("No session is running here. /fl session start begins one."); return end
+  if on == nil then on = not s.paused end
+  if on and not s.paused then
+    if s.resume then s.active = (s.active or 0) + (time() - s.resume) end
+    s.resume, s.paused = nil, true
+  elseif not on and s.paused then
+    s.paused, s.resume = nil, time()
+  end
+  if drawTracker then drawTracker() end
 end
 
 local function showTracker()
@@ -290,6 +571,7 @@ function ns:StopGeneralSession(quiet)
     if ns.RefreshUI then ns:RefreshUI() end
     return false
   end
+  local usual = ns:SessionUsual()   -- (before this one joins them)
   local top = {}
   for k = 1, math.min(5, #st.items) do top[k] = { st.items[k].id, st.items[k].n, st.items[k].value } end
   table.insert(ns.db.sessions, { kind = "general", name = "Session", c = s.char, t = s.t, stop = time(), secs = st.secs, earned = st.earned,
@@ -302,6 +584,14 @@ function ns:StopGeneralSession(quiet)
   end
   ns:Print(("Session over after %s: gold %s, looted about %s, so about %s an hour."):format(duration(st.secs),
     signed(st.gained), ns.Money(st.loot), rateText(st.perHour)))
+  -- Against your usual pace, and a cheer for your best yet (as Blackthornes Farmer does).
+  if usual and st.secs >= USUAL_MIN_SECONDS then
+    if st.perHour > usual.best then
+      print(("  |cff7fd39cYour best session yet!|r (best before: %s an hour)"):format(rateText(usual.best)))
+    else
+      print(("  Your usual: %s an hour."):format(rateText(usual.usual)))
+    end
+  end
   -- Gold by where it came from, biggest first.
   local by = {}
   for src, v in pairs(s.money or {}) do if v ~= 0 then by[#by + 1] = { src, v } end end
@@ -332,7 +622,7 @@ end
 ns:On("PLAYER_ENTERING_WORLD", function()
   local s = live()
   -- Carrying on after a logout or reload: count time again from now.
-  if s and s.char == ns.CharKey() and not s.resume then
+  if s and s.char == ns.CharKey() and not s.resume and not s.paused then
     if s.active == nil then s.active = time() - s.t end   -- one started before this was counted
     s.resume = time()
   end
