@@ -1755,7 +1755,9 @@ local function ahledgerPrice(id, snapshot)
   local p = ns.AHledgerInfo(id)
   if not p or (p.snapshot and true or false) ~= snapshot then return end
   local v = tonumber(p.median) or tonumber(p.minBuyout)
-  if v and v > 0 then return math.floor(v + 0.5) end
+  -- With when its prices were seen, so an old packaged copy counts as old (shuffles and
+  -- the sell suggestion skip prices past the age in Settings).
+  if v and v > 0 then return math.floor(v + 0.5), tonumber(p.updated) end
 end
 ns.EXTERNAL = {
   { name = "AHledger", fn = function(id) return ahledgerPrice(id, false) end, noCopy = true },
@@ -1792,8 +1794,8 @@ function ns:GetPrice(id)
   if src ~= "own" then
     for _, e in ipairs(ns.EXTERNAL) do
       if src == "auto" or src == e.name then
-        local v = e.fn(id)
-        if v and v > 0 then return v, e.name, nil, rec end
+        local v, when = e.fn(id)
+        if v and v > 0 then return v, e.name, when, rec end
       end
     end
   end

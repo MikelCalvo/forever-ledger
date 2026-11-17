@@ -1481,11 +1481,13 @@ local function rateSpeed(kind, perDay, listed)
   return (turnover >= steps[1] and "fast") or (turnover >= steps[2] and "steady") or "slow"
 end
 
--- AHledger's units sold a day (its table counts in tenths), for when our own scans
--- can't say yet. Its packaged copy (p.snapshot) isn't used: speeds go stale fast.
+-- AHledger's estimated units sold a day (AHledgerAPI.GetPrice soldPerDay), for when our own scans
+-- can't say yet. Its packaged copy (p.snapshot) only while under a week old: speeds go
+-- stale, and AHledger releases a fresh copy every few days.
 function ns:AHledgerSpeed(id)
   local p = ns.AHledgerInfo and ns.AHledgerInfo(id)
-  local perDay = p and not p.snapshot and tonumber(p.soldPerDay)
+  if p and p.snapshot and not (tonumber(p.updated) and time() - p.updated <= 7 * 86400) then return end
+  local perDay = p and tonumber(p.soldPerDay)
   -- (None at all isn't judged from it: "none bought in 0 hours of scans" says nothing.)
   if not perDay or perDay <= 0 then return end
   local listed = tonumber(p.quantity) or 0

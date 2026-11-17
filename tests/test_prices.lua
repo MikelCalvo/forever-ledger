@@ -136,7 +136,7 @@ end)
 -- scans, before the other addons; its packaged copy only after every other source;
 -- never copied into saved data; its sold a day fills in sell speed.
 T.test("AHledger prices: order, packaged copy, sell speed, never copied", function()
-  local live = { median = 500, minBuyout = 450, quantity = 40, soldPerDay = 30 }
+  local live = { median = 500, minBuyout = 450, quantity = 40, soldPerDay = 30, updated = time() - 600 }
   _G.AHledgerAPI = { GetPrice = function(id) if id == ID then return live end end }
   local s = ns.db.settings
   local oldSrc, oldAge = s.source, s.maxAgeHours
@@ -146,9 +146,11 @@ T.test("AHledger prices: order, packaged copy, sell speed, never copied", functi
   T.eq(v, 120, "fresh own scan first")
   T.eq(src, "scan")
   price({ m = 100, a = 120, q = 5, t = time() - 13 * 3600 })
-  v, src = ns:GetPrice(ID)
+  local when
+  v, src, when = ns:GetPrice(ID)
   T.eq(v, 500, "an old scan: AHledger's median")
   T.eq(src, "AHledger")
+  T.eq(when, time() - 600, "with when AHledger saw it")
   _G.TSM_API = { GetCustomPriceValue = function() return 700 end }
   live.snapshot = true
   v, src = ns:GetPrice(ID)
@@ -166,6 +168,13 @@ T.test("AHledger prices: order, packaged copy, sell speed, never copied", functi
   live.soldPerDay = 0
   ns:ForgetSellSpeeds()
   T.eq(ns:SellSpeed(ID), nil, "none sold isn't judged from it")
+  live.soldPerDay, live.snapshot = 30, true
+  ns:ForgetSellSpeeds()
+  T.ok(ns:SellSpeed(ID), "a packaged copy under a week old: its speed")
+  live.updated = time() - 8 * 86400
+  ns:ForgetSellSpeeds()
+  T.eq(ns:SellSpeed(ID), nil, "over a week old: not used")
+  live.snapshot, live.updated = nil, time() - 600
   -- Never copied by PullExternal.
   local key = ns.MarketKey()
   ns.db.prices[key] = {}
