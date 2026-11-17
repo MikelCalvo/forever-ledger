@@ -100,9 +100,9 @@ T.test("Sessions: gold an hour after 5 minutes, usual and best pace", function()
     { kind = "general", secs = 3600, earned = 1000 },
     { kind = "general", secs = 300, earned = 99999 },   -- under 10 minutes: not counted
     { kind = "general", secs = 3600, earned = 3000 },
-    { kind = "general", secs = 1800, earned = 1000 },   -- 2000 an hour
   }
   T.eq(ns:SessionUsual(), nil, "needs 3 sessions")
+  ns.db.sessions[#ns.db.sessions + 1] = { kind = "general", secs = 1800, earned = 1000 }   -- 2000 an hour
   ns.db.sessions[#ns.db.sessions + 1] = { kind = "general", secs = 3600, earned = 4000 }
   local u = ns:SessionUsual()
   T.eq(u and u.n, 4)
