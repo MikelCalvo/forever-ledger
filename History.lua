@@ -1463,9 +1463,37 @@ function ns:SellSpeed(id)
   local c = speedCache[id]
   if not c then
     c = { sellSpeed(id) }
+    -- Not enough scans of our own yet: AHledger's estimate (every player's scans of
+    -- this market) when it has one, rated the same way and marked from = "AHledger".
+    if not c[1] then
+      local sp = ns.AHledgerSpeed and ns:AHledgerSpeed(id)
+      if sp then c[1] = sp end
+    end
     speedCache[id] = c
   end
   return c[1], c[2]
+end
+
+local function rateSpeed(kind, perDay, listed)
+  if kind ~= "goods" and listed <= 2 and perDay >= 1 then return "rare" end
+  local steps = SPEED_STEPS[kind] or SPEED_STEPS.other
+  local turnover = perDay / math.max(listed, 1)
+  return (turnover >= steps[1] and "fast") or (turnover >= steps[2] and "steady") or "slow"
+end
+
+-- AHledger's units sold a day (its table counts in tenths), for when our own scans
+-- can't say yet. Its packaged copy (p.snapshot) isn't used: speeds go stale fast.
+function ns:AHledgerSpeed(id)
+  local p = ns.AHledgerInfo and ns.AHledgerInfo(id)
+  local perDay = p and not p.snapshot and tonumber(p.soldPerDay)
+  -- (None at all isn't judged from it: "none bought in 0 hours of scans" says nothing.)
+  if not perDay or perDay <= 0 then return end
+  local listed = tonumber(p.quantity) or 0
+  local kind = speedKind(id)
+  local key = rateSpeed(kind, perDay, listed)
+  local s = SPEED[key]
+  return { key = key, label = s.label, color = s.color, perDay = perDay,
+    listed = listed, hours = 0, kind = kind, from = "AHledger" }
 end
 
 -- Fewer sales than this aren't enough to judge by in the first day: one piece of gear
@@ -1500,7 +1528,8 @@ end
 function ns:SellSpeedText(sp)
   local per = sp.perDay >= 1 and ("about %d a day"):format(math.floor(sp.perDay + 0.5))
     or sp.perDay > 0 and "under 1 a day" or "none bought"
-  return ("|cff%s%s|r, %s (%s listed)"):format(sp.color, sp.label, per, math.floor(sp.listed + 0.5))
+  return ("|cff%s%s|r, %s (%s listed)%s"):format(sp.color, sp.label, per, math.floor(sp.listed + 0.5),
+    sp.from and (" |cff999999" .. sp.from .. "|r") or "")
 end
 
 local function median(list)

@@ -131,3 +131,50 @@ T.test("TypicalPrice: a listing over 10 times the cheapest is left out", functio
   T.eq(ns.TypicalPrice({ { 100, 1 }, { 1001, 1 } }), 100, "more than that doesn't")
   T.eq(ns.TypicalPrice({ { 999999990000, 1 } }), 999999990000, "a lone listing is all there is")
 end)
+
+-- AHledger (Prices.lua, November 16): read live through AHledgerAPI, after fresh own
+-- scans, before the other addons; its packaged copy only after every other source;
+-- never copied into saved data; its sold a day fills in sell speed.
+T.test("AHledger prices: order, packaged copy, sell speed, never copied", function()
+  local live = { median = 500, minBuyout = 450, quantity = 40, soldPerDay = 30 }
+  _G.AHledgerAPI = { GetPrice = function(id) if id == ID then return live end end }
+  local s = ns.db.settings
+  local oldSrc, oldAge = s.source, s.maxAgeHours
+  s.source, s.maxAgeHours = "auto", 12
+  price({ m = 100, a = 120, q = 5, t = time() })
+  local v, src = ns:GetPrice(ID)
+  T.eq(v, 120, "fresh own scan first")
+  T.eq(src, "scan")
+  price({ m = 100, a = 120, q = 5, t = time() - 13 * 3600 })
+  v, src = ns:GetPrice(ID)
+  T.eq(v, 500, "an old scan: AHledger's median")
+  T.eq(src, "AHledger")
+  _G.TSM_API = { GetCustomPriceValue = function() return 700 end }
+  live.snapshot = true
+  v, src = ns:GetPrice(ID)
+  T.eq(src, "TSM", "AHledger's packaged copy only after the others")
+  _G.TSM_API = nil
+  v, src = ns:GetPrice(ID)
+  T.eq(src, "AHledger", "packaged copy before an old scan of ours")
+  live.snapshot = nil
+  -- Sell speed: AHledger's estimate where our own scans can't say yet.
+  ns:ForgetSellSpeeds()
+  local sp = ns:SellSpeed(ID)
+  T.ok(sp and sp.from == "AHledger", "speed from AHledger")
+  T.eq(sp and sp.perDay, 30)
+  T.ok(ns:SellSpeedText(sp):find("AHledger", 1, true), "named in the text")
+  live.soldPerDay = 0
+  ns:ForgetSellSpeeds()
+  T.eq(ns:SellSpeed(ID), nil, "none sold isn't judged from it")
+  -- Never copied by PullExternal.
+  local key = ns.MarketKey()
+  ns.db.prices[key] = {}
+  local oldWatch = ns.WatchList
+  ns.WatchList = function() return { ID } end
+  ns:PullExternal()
+  T.eq(ns.db.prices[key][ID], nil, "AHledger's price isn't saved")
+  ns.WatchList = oldWatch
+  _G.AHledgerAPI = nil
+  ns:ForgetSellSpeeds()
+  s.source, s.maxAgeHours = oldSrc, oldAge
+end)

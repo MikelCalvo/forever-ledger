@@ -637,8 +637,11 @@ local function craftSpec(r, spec)
       bits[#bits + 1] = sp.key == "none" and "no sales seen yet"
         or ("sells: %s, about %d a day"):format(sp.label, math.floor(sp.perDay + 0.5))
     end
+    if sp and sp.from == "AHledger" then bits.credit = true end
   end
   if #bits > 0 then spec[#spec + 1] = { style = "note", left = table.concat(bits, ", ") } end
+  -- AHledger's terms: credit where its figures show (Prices.lua).
+  if bits.credit then spec[#spec + 1] = { style = "note", left = "Sell speed: " .. ns.AHLEDGER_CREDIT } end
   spec[#spec + 1] = { style = "head", left = ("For %d %s"):format(plan.n, plan.n == 1 and "craft" or "crafts") }
   spec[#spec + 1] = { style = "pair", left = "Materials, a craft", right = ns.Money(each) }
   if plan.brings then

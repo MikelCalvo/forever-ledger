@@ -1018,7 +1018,7 @@ function ns:ApiReport()
     "PanelTemplates_TabResize", "PanelTemplates_SelectTab", "PanelTemplates_DeselectTab", "C_Item.GetItemInfoInstant", "C_Item.GetItemQualityByID",
     "C_AuctionHouse.GetItemCommodityStatus", "C_AuctionHouse.GetQuoteDurationRemaining", "C_AuctionHouse.IsThrottledMessageSystemReady", "C_CVar.SetCVar", "SetOverrideBindingClick",
     "Enum.TooltipDataLineType.SellPrice",
-    "Auctionator.API.v1.GetAuctionPriceByItemID", "TSM_API.GetCustomPriceValue", "AucAdvanced.API.GetMarketValue",
+    "AHledgerAPI.GetPrice", "Auctionator.API.v1.GetAuctionPriceByItemID", "TSM_API.GetCustomPriceValue", "AucAdvanced.API.GetMarketValue",
     -- Pets (owner, September 30: planning a pet collection module; Forever's collection
     -- window has no pet tab yet). Modern journal, and Classic's older companion list.
     "C_PetJournal.GetNumPets", "C_PetJournal.GetPetInfoByIndex", "C_PetJournal.GetPetInfoBySpeciesID",
@@ -1349,12 +1349,12 @@ SlashCmdList.FOREVERLEDGER = function(msg)
     ns:Print("Tooltip lines " .. (ns.db.settings.tooltip and "on." or "off."))
   elseif msg:match("^source") then
     local s = msg:match("^source%s+(%S+)")
-    local map = { auto = "auto", own = "own", auctionator = "Auctionator", tsm = "TSM", auctioneer = "Auctioneer" }
+    local map = { auto = "auto", own = "own", ahledger = "AHledger", auctionator = "Auctionator", tsm = "TSM", auctioneer = "Auctioneer" }
     if s and map[s] then
       ns.db.settings.source = map[s]
       ns:Print("Price source set to " .. map[s] .. ".")
     else
-      ns:Print("Use /fl source auto, own, auctionator, tsm or auctioneer.")
+      ns:Print("Use /fl source auto, own, ahledger, auctionator, tsm or auctioneer.")
     end
   elseif msg == "shuffles" or msg == "shuffles all" then
     ns:PrintShuffles(msg == "shuffles all")

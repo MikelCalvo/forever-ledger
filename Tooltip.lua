@@ -255,7 +255,7 @@ local function addLines(tt, id, forceFull, copyPrice)
   -- cheapest, after the cut and a deposit. When the auction house line is under what
   -- today's cheapest would bring, say why.
   local function whyLower(best, options)
-    if not (rec and rec.m and not rec.none and src ~= "Auctionator" and src ~= "TSM" and src ~= "Auctioneer") then return end
+    if not (rec and rec.m and not rec.none and not ns.EXTERNAL_NAMES[src or ""]) then return end
     local o
     for _, x in ipairs(options or {}) do if x.kind == "ah" then o = x; break end end
     if not o then return end
@@ -273,7 +273,7 @@ local function addLines(tt, id, forceFull, copyPrice)
     questsAndCrafts()
     -- Today's cheapest too, so a new scan shows at once (CurseForge comment, October 22).
     local shownCheapest
-    if price and on("tipPrice") and rec and rec.m and not rec.none and src ~= "Auctionator" and src ~= "TSM" and src ~= "Auctioneer" then
+    if price and on("tipPrice") and rec and rec.m and not rec.none and not ns.EXTERNAL_NAMES[src or ""] then
       local age = t and ns.Age(t) or ""
       tt:AddDoubleLine("Auction, cheapest", ns.Money(rec.m) .. (age ~= "" and (" |cff999999" .. age .. "|r") or ""), LR, LG, LB, 1, 1, 1)
       shownCheapest = true
@@ -294,6 +294,8 @@ local function addLines(tt, id, forceFull, copyPrice)
       return
     end
     if withHistory then historyLines(tt, id) end
+    -- AHledger's terms: credit wherever its prices show (Prices.lua).
+    if src == "AHledger" then tt:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5) end
     tt:AddLine((on("tipHistory") and "Hold Shift for Forever Ledger details, Ctrl for price history"
       or "Hold Shift for Forever Ledger details") .. (on("priceWindow") and (", " .. ns:PriceClickName() .. " for a graph") or ""), 0.5, 0.5, 0.5, true)
     return
@@ -305,7 +307,7 @@ local function addLines(tt, id, forceFull, copyPrice)
   if price and on("tipPrice") then
     local age = t and ns.Age(t) or ""
     age = age ~= "" and (" |cff999999" .. age .. "|r") or ""
-    local own = rec and rec.m and src ~= "Auctionator" and src ~= "TSM" and src ~= "Auctioneer"
+    local own = rec and rec.m and not ns.EXTERNAL_NAMES[src or ""]
     if own then
       local listed = rec.q and (" |cff999999" .. rec.q .. " listed|r") or ""
       tt:AddDoubleLine("Auction, cheapest", ns.Money(rec.m) .. listed .. age, LR, LG, LB, 1, 1, 1)
@@ -315,7 +317,13 @@ local function addLines(tt, id, forceFull, copyPrice)
           ns.Money(rec.a), 0.7, 0.7, 0.7, 1, 1, 1)
       end
     else
-      tt:AddDoubleLine("Auction price (" .. (src or "?") .. ")", ns.Money(price) .. age, LR, LG, LB, 1, 1, 1)
+      -- AHledger's own packaged copy (no sync running) can be weeks old: say so.
+      local label = src or "?"
+      if src == "AHledger" then
+        local p = ns.AHledgerInfo(id)
+        if p and p.snapshot then label = "AHledger, packaged copy" end
+      end
+      tt:AddDoubleLine("Auction price (" .. label .. ")", ns.Money(price) .. age, LR, LG, LB, 1, 1, 1)
     end
   elseif rec and rec.none and on("tipPrice") then
     tt:AddDoubleLine("Auction, cheapest", "none listed " .. ns.Age(rec.t), LR, LG, LB, 0.7, 0.7, 0.7)
@@ -325,6 +333,11 @@ local function addLines(tt, id, forceFull, copyPrice)
   if on("tipSpeed") and ns.SellSpeed then
     local ok, sp = pcall(ns.SellSpeed, ns, id)
     if ok and sp then tt:AddDoubleLine("Sells", ns:SellSpeedText(sp), LR, LG, LB, 1, 1, 1) end
+    if (src == "AHledger" and on("tipPrice")) or (ok and sp and sp.from == "AHledger") then
+      tt:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5)
+    end
+  elseif src == "AHledger" and price and on("tipPrice") then
+    tt:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5)
   end
 
   -- Gear with random stats: the price of this exact version ("of the Eagle"). An auction
