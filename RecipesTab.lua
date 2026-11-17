@@ -558,6 +558,12 @@ function ns:BuildRecipes(parent)
   f.cratesHost:SetPoint("BOTTOMRIGHT")
   f.cratesHost:Hide()
   ns:BuildCrates(f.cratesHost)
+  -- Craftsman's Writs beside them (Writs.lua).
+  f.writsHost = CreateFrame("Frame", nil, f)
+  f.writsHost:SetPoint("TOPLEFT", 0, -30)
+  f.writsHost:SetPoint("BOTTOMRIGHT")
+  f.writsHost:Hide()
+  ns:BuildWrits(f.writsHost)
   return f
 end
 
@@ -593,6 +599,7 @@ local function layoutTabs(list, others)
     end
     add("trainers", "Trainers")
     if ns.db.settings.crates then add("crates", "Crates", "Waylaid Crates: the cheapest way to fill each one") end
+    if ns.db.settings.crates then add("writs", "Writs", "Craftsman's Writs: what each order costs per point of reputation") end
     -- Other professions: a dropdown after the tabs.
     if not f.other then
       f.other = T:Dropdown(f, 170, function(v) if v ~= "" then current = v; ns:RefreshRecipes() end end)
@@ -1047,13 +1054,16 @@ function ns:RefreshRecipes()
   f.skill:SetValue(s.skill)
   f.least:SetValue(s.least)
   layoutTabs(professions())   -- (mine, others)
-  local trainers, crates = current == "trainers", current == "crates"
+  local trainers, writs = current == "trainers", current == "writs"
+  local crates = current == "crates" or writs   -- (the same: the list's parts hidden)
   f.second:SetShown(not trainers and not crates)
   f.third:SetShown(not trainers and not crates)
   f.header:SetShown(not crates)
   f.sf:SetShown(not crates)
   f.summary:SetShown(not crates)
-  f.cratesHost:SetShown(crates)
+  f.cratesHost:SetShown(crates and not writs)
+  f.writsHost:SetShown(writs)
+  if writs then ns:RefreshWrits(); return end
   if crates then ns:RefreshCrates(); return end
   local top = trainers and -30 or -84
   f.header:ClearAllPoints()

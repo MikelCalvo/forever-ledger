@@ -173,6 +173,17 @@ local function buildMain()
     GameTooltip:Show()
   end)
   prices:HookScript("OnLeave", function() GameTooltip:Hide() end)
+  -- The Disenchant window (QuickDisenchant.lua), on characters that can disenchant.
+  local de = T:Button(main.bar, "Disenchant", 90, function() ns:ToggleDisenchantList() end, 22)
+  de:SetPoint("RIGHT", prices, "LEFT", -6, 0)
+  de:HookScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:AddLine("Disenchant", 1, 1, 1)
+    GameTooltip:AddLine("What in your bags can be disenchanted: tick items, then one click each. Or hold " .. ns:QuickDisenchantKeyName() .. " and click an item in your bags.", 0.8, 0.8, 0.8, true)
+    GameTooltip:Show()
+  end)
+  de:HookScript("OnLeave", function() GameTooltip:Hide() end)
+  main:HookScript("OnShow", function() de:SetShown(ns:CanDisenchantHere()) end)
 
   -- Tabs
   main.tabs = {}
