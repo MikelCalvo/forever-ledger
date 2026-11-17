@@ -24,3 +24,16 @@ T.test("Freeze watch: slow frames kept, short ones not, Forever Ledger's share",
   ns.db.freezeLog = nil
   T.ok(table.concat(ns.FreezeLines(8), "\n"):find("none seen", 1, true))
 end)
+
+T.test("Freeze watch: the addons with a frame over 100 ms in it", function()
+  local slow = ns.SlowSince({ Bags = 10, UI = 3, Other = 2 }, { Bags = 12, UI = 3, Other = 3, New = 1 })
+  T.eq(#slow, 3)
+  T.eq(slow[1].name, "Bags", "most first")
+  T.eq(slow[1].n, 2)
+  T.eq(#ns.SlowSince({ A = 1 }, { A = 1 }), 0, "none: the game itself")
+  ns.db.freezeLog = { { t = 1, ms = 600, ours = 2, slow = { "Bags" } }, { t = 2, ms = 500, ours = 1, slow = {} } }
+  local text = table.concat(ns.FreezeLines(8), "\n")
+  T.ok(text:find("over 100 ms in it: Bags", 1, true), "named")
+  T.ok(text:find("no addon over 100 ms in it", 1, true), "or none")
+  ns.db.freezeLog = nil
+end)

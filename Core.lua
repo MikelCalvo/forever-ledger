@@ -515,7 +515,8 @@ ns.FREEZE_SECONDS = FREEZE_SECONDS
 local loading, loadingSeq = true, 0   -- (until the first loading screen ends)
 
 -- The addons the game's profiler says took longest in the last frame, "Name 180 ms" each.
-local function profilerTop(metricName, n)
+-- Every loaded addon's value of one profiler metric: { [name] = number }, or nil without one.
+local function profilerAll(metricName)
   local P = C_AddOnProfiler
   local metric = Enum and Enum.AddOnProfilerMetric and Enum.AddOnProfilerMetric[metricName]
   if not (P and P.GetAddOnMetric and metric ~= nil) then return nil end
@@ -523,13 +524,23 @@ local function profilerTop(metricName, n)
   local info = (C_AddOns and C_AddOns.GetAddOnInfo) or GetAddOnInfo
   local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
   if not (count and info and isLoaded) then return nil end
-  local rows = {}
+  local all = {}
   for i = 1, count() do
     local name = info(i)
     if name and isLoaded(name) then
       local ok, v = pcall(P.GetAddOnMetric, name, metric)
-      if ok and type(v) == "number" and v > 0 then rows[#rows + 1] = { name = name, v = v } end
+      if ok and type(v) == "number" then all[name] = v end
     end
+  end
+  return all
+end
+
+local function profilerTop(metricName, n)
+  local all = profilerAll(metricName)
+  if not all then return nil end
+  local rows = {}
+  for name, v in pairs(all) do
+    if v > 0 then rows[#rows + 1] = { name = name, v = v } end
   end
   table.sort(rows, function(a, b) return a.v > b.v end)
   local out = {}
@@ -537,6 +548,17 @@ local function profilerTop(metricName, n)
   return out
 end
 ns.ProfilerTop = profilerTop
+
+-- The addons with a frame over 100 ms between two counts (each { [name] = count }), most first.
+function ns.SlowSince(before, after)
+  local out = {}
+  for name, v in pairs(after or {}) do
+    local d = v - ((before or {})[name] or 0)
+    if d > 0 then out[#out + 1] = { name = name, n = d } end
+  end
+  table.sort(out, function(a, b) if a.n ~= b.n then return a.n > b.n end return a.name < b.name end)
+  return out
+end
 
 function ns.NoteFrame(elapsed, ours, top, topMs, tipItem, others)
   if elapsed < FREEZE_SECONDS or not ns.db then return end
@@ -550,8 +572,10 @@ function ns.NoteFrame(elapsed, ours, top, topMs, tipItem, others)
   end
   log[#log + 1] = e
   while #log > FREEZE_KEEP do table.remove(log, 1) end
+  return e
 end
 
+local overBase, overOld   -- (each addon's count of frames over 100 ms: a second ago at most, and the one before)
 local watch = CreateFrame("Frame")
 watch:SetScript("OnUpdate", function(_, elapsed)
   if elapsed >= FREEZE_SECONDS and not loading then
@@ -560,10 +584,28 @@ watch:SetScript("OnUpdate", function(_, elapsed)
       local ok, _, link = pcall(GameTooltip.GetItem, GameTooltip)
       tip = ok and link and ns.ItemIDFromLink and ns.ItemIDFromLink(link) or nil
     end
-    ns.NoteFrame(elapsed, frameOurs, frameTop, frameTopMs, tip, profilerTop("LastTime", 3))
+    local e = ns.NoteFrame(elapsed, frameOurs, frameTop, frameTopMs, tip, profilerTop("LastTime", 3))
+    -- Which addons had a frame over 100 ms in it: their counts a second later against the
+    -- counts kept every second before it (the per-frame times read now aren't the frozen
+    -- frame's: Frank's AN30, November 17, every addon showed 15 ms or less).
+    -- (The older count: the newer one may have been taken after the frozen frame.)
+    local base = overOld or overBase
+    if e and base then
+      C_Timer.After(1, function()
+        local slow = ns.SlowSince(base, profilerAll("CountTimeOver100Ms"))
+        e.slow = {}
+        for i = 1, math.min(4, #slow) do e.slow[i] = slow[i].name end
+      end)
+    end
   end
   frameOurs, frameTop, frameTopMs = 0, nil, 0
 end)
+-- Every second: each addon's count of frames over 100 ms, for the freeze above.
+if C_AddOnProfiler and C_Timer and C_Timer.NewTicker then
+  C_Timer.NewTicker(1, function()
+    if not loading then overOld, overBase = overBase, profilerAll("CountTimeOver100Ms") end
+  end)
+end
 watch:RegisterEvent("LOADING_SCREEN_ENABLED")
 watch:RegisterEvent("LOADING_SCREEN_DISABLED")
 watch:RegisterEvent("PLAYER_LEAVING_WORLD")
@@ -660,7 +702,12 @@ function ns.FreezeLines(n)
       local ours = e.ours >= e.ms * 0.5 and ("|cffee8597Forever Ledger %d ms|r"):format(e.ours) or ("Forever Ledger %d ms"):format(e.ours)
       local parts = { ("%s: %d ms; %s"):format(date("%b %d %H:%M", e.t), e.ms, ours) }
       if e.what then parts[#parts + 1] = ("(most in %s, %d ms)"):format(e.what, e.whatMs or 0) end
-      if e.addons then parts[#parts + 1] = "; slowest addons: " .. table.concat(e.addons, ", ") end
+      if e.slow then
+        parts[#parts + 1] = #e.slow > 0 and ("; |cffffd100over 100 ms in it: " .. table.concat(e.slow, ", ") .. "|r")
+          or "; no addon over 100 ms in it (the game itself)"
+      elseif e.addons then
+        parts[#parts + 1] = "; slowest addons: " .. table.concat(e.addons, ", ")
+      end
       if e.item then parts[#parts + 1] = "; tooltip on " .. (ns.ItemName(e.item) or ("item " .. e.item)) end
       lines[#lines + 1] = "    " .. table.concat(parts, " ")
     end
