@@ -3,6 +3,14 @@
 Checked November 14, 2026. No addon code, guide prose, account uploads or private
 saved data is copied into the generated catalog. Client facts remain Blizzard's.
 
+## Writs
+
+`build-forever-writs.py` generates the separate, incomplete `WritsData.lua`
+catalog from pinned Wago CSVs. See [FOREVER_WRITS.md](FOREVER_WRITS.md) for the
+150 order/quest IDs, six sealed items, name-matching evidence and the important
+missing quest quantities, tier and reward links. The catalog is not used by
+the Writs screen yet; absent requirements must never default to one.
+
 ## Recipes and item eligibility
 
 `build-forever-crafts.py` joins Wago's **1.60.1.70938** public CSVs. Its source

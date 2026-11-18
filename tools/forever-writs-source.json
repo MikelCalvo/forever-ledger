@@ -1,0 +1,66 @@
+{
+  "build": "1.60.1.70938",
+  "date": "2026-11-18",
+  "source": "https://wago.tools",
+  "tables": {
+    "ItemSparse": {
+      "url": "https://wago.tools/db2/ItemSparse/csv?version=1.60.1.70938",
+      "sha256": "fdc65396e8a1103ea5f552ea59aaebc0e73ba572612a3412c50e636b54c90b41",
+      "bytes": 5345571,
+      "rows": 19325
+    },
+    "QuestV2": {
+      "url": "https://wago.tools/db2/QuestV2/csv?version=1.60.1.70938",
+      "sha256": "90cf939d1231e08257527add9259d4fecd429763d57b3f075a0ec2ff73f5f6dd",
+      "bytes": 82947,
+      "rows": 6626
+    },
+    "QuestPOIBlob": {
+      "url": "https://wago.tools/db2/QuestPOIBlob/csv?version=1.60.1.70938",
+      "sha256": "1528a4982cccac2713fcf9a7fc2ec168f057f893ef92368723f52ea81e0c02d9",
+      "bytes": 2042,
+      "rows": 57
+    },
+    "SkillLine": {
+      "url": "https://wago.tools/db2/SkillLine/csv?version=1.60.1.70938",
+      "sha256": "f3867d43ab42d1f5278e6e5028d0151bc06e4ef8e5cbd790a20df6ee57aa654d",
+      "bytes": 14266,
+      "rows": 154
+    },
+    "SkillLineAbility": {
+      "url": "https://wago.tools/db2/SkillLineAbility/csv?version=1.60.1.70938",
+      "sha256": "6696abd03ef90ad250a12ac23778616c292c46f6a0082130fbe187c96ead0aa0",
+      "bytes": 407525,
+      "rows": 7853
+    },
+    "SpellEffect": {
+      "url": "https://wago.tools/db2/SpellEffect/csv?version=1.60.1.70938",
+      "sha256": "f419db3f95ef93b2cf052d9c3996ec355df60846f1fa24c671822aacfa8f59a3",
+      "bytes": 3925743,
+      "rows": 43519
+    },
+    "ItemXItemEffect": {
+      "url": "https://wago.tools/db2/ItemXItemEffect/csv?version=1.60.1.70938",
+      "sha256": "4a0604e047f72390991e3a7914fe3e309829fb8773c36f5e4aff5628b7913f88",
+      "bytes": 254347,
+      "rows": 12682
+    },
+    "ItemEffect": {
+      "url": "https://wago.tools/db2/ItemEffect/csv?version=1.60.1.70938",
+      "sha256": "886fd2c0b2dc1a12fd2bc873e282ca38c4284ad9b3fbf48ece2e631894d5994d",
+      "bytes": 425417,
+      "rows": 12696
+    }
+  },
+  "coverage": {
+    "orders": 150,
+    "sealed": 6,
+    "nameMatchedItems": 146,
+    "questIDs": 150,
+    "questsPresent": 150,
+    "questPOIs": 0,
+    "knownQuantities": 0,
+    "knownOrderTiers": 0,
+    "knownRewards": 0
+  }
+}

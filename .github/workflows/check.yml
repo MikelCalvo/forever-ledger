@@ -30,6 +30,9 @@ jobs:
       - name: Run the tests
         run: lua5.1 tests/run.lua
 
+      - name: Check the writ data generator
+        run: python3 -m unittest discover -s tools -p test_forever_writs.py
+
       # The Discord scripts: they compile, and the announcement turns the change marks
       # into the server's emojis when their codes are set (and keeps the text mark if not).
       - name: Check the Discord scripts
