@@ -29,7 +29,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Scan once: the Cheapest, Usual and % of usual columns have room for large prices. Groups: the add-an-item box no longer runs under the buttons.
 
 ### Fixed
-- The Crates tab was empty in other languages than English (a German player on CurseForge): crates are now found by their item number, and their bundles read from the tooltip in any language.
+- The Crates tab was empty in other languages than English (a German player on CurseForge): crates are now found by their item number (filled ones too, so a crate's shopping list still counts down), and their bundles read from the tooltip in any language.
 - Sessions: an auction sale counts against this session's loot only when it was posted during the session (collecting an older auction's money took new loot of the same item off), and a sale named with random stats (of Strength) now matches the looted item, so it isn't counted twice.
 - AHledger's credit now shows wherever its prices went into a figure, not only on the item's own price: Worth to you, conversions, crafts and disenchants in tooltips, Recipes, Gold making, Writs and the session tracker.
 - The freeze watch counts a timed step inside another once (it could show Forever Ledger's share as almost twice its time), and names the addons with a slow frame near a freeze as nearby, without blaming the game when none had one.

@@ -28,3 +28,8 @@ T.test("Crates: another language, every dash line with a number", function()
   T.eq(b[2][1].name, "Runenstoffballen"); T.eq(b[2][1].qty, 8)
   T.eq(b[3][1].name, "Eisenbarren"); T.eq(b[3][2].name, "Goldbarren"); T.eq(b[3][2].qty, 2)
 end)
+
+T.test("Crates: the filled crate is known by item number, each quality", function()
+  T.ok(ns.SEALED_CRATE_IDS[248765] and ns.SEALED_CRATE_IDS[248770] and ns.SEALED_CRATE_IDS[248775])
+  T.ok(not ns.SEALED_CRATE_IDS[248682], "an empty crate isn't a filled one")
+end)

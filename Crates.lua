@@ -30,8 +30,13 @@ local function isCrate(id, name)
   if id and CRATE_IDS[id] then return true end
   return name and name:sub(1, #PREFIX) == PREFIX or false
 end
--- A filled crate: "Sealed Apprentice Crate" (English only: its item number isn't known yet).
-local function isSealed(name) return name and name:find("^Sealed") and name:find("Crate", 1, true) and true or false end
+-- A filled crate: "Sealed Apprentice Crate", one item number per quality (wago.tools,
+-- ItemSparse at the pinned build 1.60.1.70938, November 18); the English name as fallback.
+local SEALED_IDS = { [248765] = true, [248770] = true, [248775] = true }
+ns.SEALED_CRATE_IDS = SEALED_IDS
+local function isSealed(id, name)
+  if id and SEALED_IDS[id] then return true end
+  return name and name:find("^Sealed") and name:find("Crate", 1, true) and true or false end
 -- A crate's name without "Waylaid Crate: " (or its translation): "Expert Ingots".
 local function shortName(name)
   name = name or "?"
@@ -358,7 +363,7 @@ local function crateCounts()
       local info = C_Container.GetContainerItemInfo(bag, slot)
       local name = info and info.itemID and ns.ItemName(info.itemID)
       if isCrate(info and info.itemID, name) then counts[name] = (counts[name] or 0) + (info.stackCount or 1)
-      elseif isSealed(name) then sealed = sealed + (info.stackCount or 1) end
+      elseif isSealed(info and info.itemID, name) then sealed = sealed + (info.stackCount or 1) end
     end
   end
   return counts, sealed
