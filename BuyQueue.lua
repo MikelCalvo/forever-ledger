@@ -638,78 +638,44 @@ end
 -- ROI is profit divided by purchase cost. Use the affordable part of the
 -- scanned price ladder, so a cheap first unit is not averaged with unaffordable ones.
 local function flipSortMode()
-  return S().flipSort == "roi" and "roi" or "profit"
+  local mode = S().flipSort
+  if mode == "roi" or mode == "listedProfit" then return mode end
+  return "profit"
+end
+local buyNow
+local function flipReturn(e, qty, cost)
+  local profit = qty * (e.worth or 0) - cost
+  return profit, cost > 0 and profit / cost or nil
 end
 local function flipMetrics(e, cash)
-  local qty, cost = 0, 0
-  local rec = (ns.db.prices[ns.MarketKey()] or {})[e.id]
-  if cash <= 0 or (rec and rec.none) then return 0, 0, 0, nil end
-  local available = math.max(e.n or 1, 0)
-  if rec and rec.l then
-    local previous = 0
-    for price, cumulative in rec.l:gmatch("(%d+):(%d+)") do
-      price, cumulative = tonumber(price), tonumber(cumulative)
-      local count = math.max(cumulative - previous, 0)
-      previous = cumulative
-      if price > (e.limit or 0) then break end
-      if price > 0 then
-        local take = math.min(count, available - qty, math.floor(math.max(cash - cost, 0) / price))
-        if take > 0 then qty, cost = qty + take, cost + take * price end
-        if take < count or qty >= available then break end
-      end
-    end
-  else
-    local price = e.cost or e.limit
-    if price and price > 0 and price <= (e.limit or 0) then
-      qty = math.min(available, math.floor(cash / price))
-      cost = qty * price
-    end
-  end
-  local profit = qty * (e.worth or 0) - cost
-  return qty, cost, profit, cost > 0 and profit / cost or nil
+  local qty, cost = buyNow(e, cash)
+  local profit, roi = flipReturn(e, qty, cost)
+  return qty, cost, profit, roi
 end
-local function sortByPercent()
+sortFlips = function()
   local list = Q.lanes and Q.lanes.flips
-  if not list then return end
+  if not list or #list == 0 then return end
   local cash, mode = spendable(), flipSortMode()
   for _, e in ipairs(list) do
     e.affordN, e.affordCost, e.affordProfit, e.roi = flipMetrics(e, cash)
-    e.sortValue = e.affordProfit
+    if mode == "profit" then
+      -- Keep the upstream average-cost order until the player selects a column.
+      local cost = math.max(e.cost or e.limit or 1, 1)
+      e.sortValue = ((e.worth or 0) - cost) * math.min(e.n or 1, math.floor(cash / cost))
+    else
+      e.sortValue = e.affordProfit
+    end
   end
   -- Watched items at your price first: you asked for them (owner, November 10).
   table.sort(list, function(a, b)
     local wa, wb = a.reason == "watch", b.reason == "watch"
     if wa ~= wb then return wa end
     local aReady, bReady = a.affordN > 0 and a.affordProfit > 0, b.affordN > 0 and b.affordProfit > 0
-    if aReady ~= bReady then return aReady end
+    if mode ~= "profit" and aReady ~= bReady then return aReady end
     if mode == "roi" and (a.roi or -1) ~= (b.roi or -1) then return (a.roi or -1) > (b.roi or -1) end
     if a.sortValue ~= b.sortValue then return a.sortValue > b.sortValue end
-    if (a.profit or 0) ~= (b.profit or 0) then return (a.profit or 0) > (b.profit or 0) end
-    return a.id < b.id
-  end)
-end
--- Flips best first by the profit you can make with what you can spend right now, so
--- buying always goes down the list from the best you can afford (Magic, October 3:
--- after four buys, one said 8c and the next 10c but stayed below it). Re-sorted each
--- time the queue picks its next item.
-sortFlips = function()
-  if flipSortMode() == "roi" then sortByPercent(); return end
-  local list = Q.lanes and Q.lanes.flips
-  if not list or #list < 2 then return end
-  local cash = spendable()
-  for _, e in ipairs(list) do
-    local cost = math.max(e.cost or e.limit or 1, 1)
-    e.sortValue = ((e.worth or 0) - cost) * math.min(e.n or 1, math.floor(cash / cost))
-    local _, _, _, roi = flipMetrics(e, cash)
-    e.roi = roi
-  end
-  -- Watched items at your price first: you asked for them (owner, November 10).
-  table.sort(list, function(a, b)
-    local wa, wb = a.reason == "watch", b.reason == "watch"
-    if wa ~= wb then return wa end
-    if a.sortValue ~= b.sortValue then return a.sortValue > b.sortValue end
-    if (a.roi or -1) ~= (b.roi or -1) then return (a.roi or -1) > (b.roi or -1) end
-    if (a.profit or 0) ~= (b.profit or 0) then return (a.profit or 0) > (b.profit or 0) end
+    if mode ~= "roi" and (a.roi or -1) ~= (b.roi or -1) then return (a.roi or -1) > (b.roi or -1) end
+    if mode == "profit" and (a.profit or 0) ~= (b.profit or 0) then return (a.profit or 0) > (b.profit or 0) end
     return a.id < b.id
   end)
 end
@@ -742,14 +708,16 @@ Q.oneAtATime = oneAtATime   -- (for the tests)
 -- though a click buys the one at 10c).
 -- Also returns how many were listed at or under the limit, and for one-a-click rows
 -- "one" plus whether the price is an estimate.
-local function buyNow(e)
+buyNow = function(e, cash)
   if e.waiting then return 0, 0, 0 end
-  local cash = spendable()
+  cash = cash or spendable()
   local want
   if e.reason == "list" then
     want = e.want or math.huge
     if Q.listLeft and ns.ListStillWanted then want = math.min(want, Q.listLeft(e.id)) end
     want = math.max(want, 0)
+  elseif e.lane == "flips" then
+    want = math.max(e.n or 1, 0)
   end
   local limit = e.limit or math.huge
   local n, cost, listed = 0, 0, 0
@@ -764,9 +732,10 @@ local function buyNow(e)
         or (limit < math.huge and limit) or nil
     end
     listed = e.n or 1
-    if each and each > 0 and each <= cash and (not want or want > 0) then n, cost = 1, each end
+    if each and each > 0 and each <= limit and each <= cash and (not want or want > 0) then n, cost = 1, each end
     return n, cost, listed, "one", estimate
   end
+  if rec and rec.none then return 0, 0, 0 end
   local function take(p, k)
     listed = listed + k
     if want then k = math.min(k, want - n) end
@@ -777,10 +746,9 @@ local function buyNow(e)
   if not (rec and rec.l) then
     -- No ladder: the count the row came with, at its price each.
     local each = e.cost or (limit < math.huge and limit) or (rec and rec.m)
-    if each and each > 0 then take(each, e.n or 1) end
+    if each and each > 0 and each <= limit then take(each, e.n or 1) end
     return n, cost, listed
   end
-  if rec.none then return 0, 0, 0 end
   local prev, short = 0, false
   for p, c in rec.l:gmatch("(%d+):(%d+)") do
     p, c = tonumber(p), tonumber(c)
@@ -2098,13 +2066,13 @@ local function buildLane(v, d)
   local col = d.key == "flips" and FLIP_COL or COL
   local columns = { { "Item", 34, "LEFT" }, { d.key == "lists" and "List" or "Why", col.why - 10, "WHY" },
     { "Up to", col.limit - 10 }, { "Buy", col.cheap - 10 }, { "Total", col.total - 10 },
-    { d.key == "lists" and "Now" or "Profit", col.profit - 10, nil, d.key == "flips" and "profit" or nil } }
+    { d.key == "lists" and "Now" or "Profit", col.profit - 10, nil, d.key == "flips" and "listedProfit" or nil } }
   if d.key == "flips" then columns[#columns + 1] = { "Profit %", col.roi - 10, nil, "roi" } end
   L.sortHeaders = {}
   for _, c in ipairs(columns) do
     if c[4] then
       local mode = c[4]
-      local button = T:Button(header, c[1], mode == "profit" and 80 or 48, function()
+      local button = T:Button(header, c[1], mode == "listedProfit" and 80 or 48, function()
         if flipSortMode() == mode then return end
         S().flipSort = mode
         sortFlips()
@@ -2370,7 +2338,8 @@ end
 local function fillLane(L)
   local d, armed = L.def, Q.armed == L.def.key
   for _, head in ipairs(L.sortHeaders or {}) do
-    head.button:SetSelected(flipSortMode() == head.mode)
+    local mode = flipSortMode()
+    head.button:SetSelected(mode == head.mode or (mode == "profit" and head.mode == "listedProfit"))
   end
   -- Shown in order, but what you can't afford yet goes to the bottom (Magic, October 3).
   local list = {}
@@ -2453,24 +2422,13 @@ local function fillLane(L)
       local rec = (ns.db.prices[ns.MarketKey()] or {})[e.id]
       local now = rec and rec.m and not rec.none and ns.MoneyPlain(rec.m) or "none"
       r.profit:SetText(e.waiting and ("|cff888888" .. now .. "|r") or now)
+    elseif d.key == "flips" then
+      local profit, roi = flipReturn(e, buyN, buyCost)
+      r.profit:SetText(profit > 0 and ("|cff7fd39c" .. money(profit) .. "|r")
+        or e.reason == "watch" and "|cffb9a3ffwatched|r" or "")
+      r.roi:SetText(percentText(roi))
     else
-      -- Profit on what you'd buy now (Buy and Total), not the whole lot (Magic, October 3:
-      -- "said 48c profit, I only made 21c" with 1s 27c to spend). It follows your gold.
-      local afford = buyN
-      e.affordN = afford
-      -- Just what you can make with your gold and limit; the full amount is in the hover
-      -- (Magic, October 3: "of 48c" isn't needed at a glance).
-      if e.profit and e.profit > 0 and afford < (e.n or 1) and afford > 0 then
-        r.profit:SetText(("|cff7fd39c%s|r"):format(money((e.worth or 0) * afford - buyCost)))
-      elseif e.reason == "watch" and not (e.profit and e.profit > 0) then
-        r.profit:SetText("|cffb9a3ffwatched|r")   -- bought at your price, not to vendor
-      else
-        r.profit:SetText(e.profit and e.profit > 0 and ("|cff7fd39c" .. money(e.profit) .. "|r") or "")
-      end
-    end
-    if r.roi then
-      local _, _, _, percent = flipMetrics(e, spendable())
-      r.roi:SetText(percentText(percent))
+      r.profit:SetText(e.profit and e.profit > 0 and ("|cff7fd39c" .. money(e.profit) .. "|r") or "")
     end
     if poor then r.profit:SetText("|cffee8597" .. heldWord(poor) .. "|r")
     elseif e.stale then r.profit:SetText(("|cff888888seen %dm ago|r"):format(math.floor(e.age / 60))) end

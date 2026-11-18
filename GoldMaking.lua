@@ -379,9 +379,12 @@ local function filters(kind)
   return { kind = kind, least = g.least, mine = g.mine, prof = g.prof, search = f and f.search:GetText() or "" }
 end
 
+local workedAHledger   -- (AHledger prices went into the list: its credit in the status line)
 local function work()
+  local before = ns.AHledgerUses and ns.AHledgerUses() or 0
   rows, noPrice = ns:GoldIdeas()
   workedAt = time()
+  workedAHledger = ns.AHledgerUses and ns.AHledgerUses() ~= before
 end
 
 local function sortRows(list)
@@ -572,6 +575,7 @@ local function drawList()
   if noPrice > 0 and not g.mine then
     parts[#parts + 1] = ("%d left out: a material has no price"):format(noPrice)
   end
+  if workedAHledger then parts[#parts + 1] = ns.AHLEDGER_CREDIT end   -- (its terms: credit where its prices show)
   f.status:SetText(table.concat(parts, ". ") .. (#parts > 0 and "." or ""))
   f.empty:SetShown(#shown == 0)
   if #shown == 0 then
@@ -618,7 +622,9 @@ local function craftSpec(r, spec)
   -- list's prices change: scans redraw the tab up to once a second.
   local key = ("%s:%d:%s:%s"):format(r.key, n, tostring(free), tostring(workedAt))
   if f.panel.planKey ~= key then
+    local before = ns.AHledgerUses and ns.AHledgerUses() or 0
     f.panel.planKey, f.panel.planFor = key, ns:GoldPlan(r, n, free)
+    f.panel.planAHledger = ns.AHledgerUses and ns.AHledgerUses() ~= before
   end
   local plan = f.panel.planFor
   f.panel.plan = plan
@@ -637,8 +643,12 @@ local function craftSpec(r, spec)
       bits[#bits + 1] = sp.key == "none" and "no sales seen yet"
         or ("sells: %s, about %d a day"):format(sp.label, math.floor(sp.perDay + 0.5))
     end
+    if sp and sp.from == "AHledger" then bits.credit = true end
   end
   if #bits > 0 then spec[#spec + 1] = { style = "note", left = table.concat(bits, ", ") } end
+  -- AHledger's terms: credit where its figures show (Prices.lua): its sell speed, or its
+  -- prices in the plan (Codex review, November 17).
+  if bits.credit or f.panel.planAHledger then spec[#spec + 1] = { style = "note", left = ns.AHLEDGER_CREDIT } end
   spec[#spec + 1] = { style = "head", left = ("For %d %s"):format(plan.n, plan.n == 1 and "craft" or "crafts") }
   spec[#spec + 1] = { style = "pair", left = "Materials, a craft", right = ns.Money(each) }
   if plan.brings then

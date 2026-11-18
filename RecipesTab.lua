@@ -1046,6 +1046,7 @@ end
 
 function ns:RefreshRecipes()
   if not f or not f:IsShown() then return end
+  local ahlBefore = ns.AHledgerUses and ns.AHledgerUses() or 0
   local s = settings()
   f.show:SetValue(s.view)
   f.custom:SetChecked(s.custom)
@@ -1143,6 +1144,11 @@ function ns:RefreshRecipes()
       current, total, total == 1 and "" or "s", table.concat(why, ", ")))
   else
     f.empty:SetText("No recipes yet. Open this profession's window once to record its recipes.")
+  end
+  -- AHledger's terms: its credit where its prices went into the costs and profits shown
+  -- (Codex review, November 17).
+  if ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore then
+    f.summary:SetText((f.summary:GetText() or "") .. " " .. ns.AHLEDGER_CREDIT .. ".")
   end
   f.content:SetHeight(math.max(n * ROW, 30))
   f.sf.UpdateScrollBar()
