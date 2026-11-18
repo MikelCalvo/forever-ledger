@@ -29,6 +29,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Scan once: the Cheapest, Usual and % of usual columns have room for large prices. Groups: the add-an-item box no longer runs under the buttons.
 
 ### Fixed
+- The sell suggestion on a stack compared the whole stack's vendor price with one item's auction price, so a stack of 5 potions said Sell: Vendor (12s 50c) when the auction house brings nearly three times as much each. It now compares one with one, as Worth to you does.
 - The Crates tab was empty in other languages than English (a German player on CurseForge): crates are now found by their item number (filled ones too, so a crate's shopping list still counts down), and their bundles read from the tooltip in any language.
 - Sessions: an auction sale counts against this session's loot only when it was posted during the session (collecting an older auction's money took new loot of the same item off), and a sale named with random stats (of Strength) now matches the looted item, so it isn't counted twice.
 - AHledger's credit now shows wherever its prices went into a figure, not only on the item's own price: Worth to you, conversions, crafts and disenchants in tooltips, Recipes, Gold making, Writs and the session tracker.
