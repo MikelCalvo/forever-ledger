@@ -111,24 +111,56 @@ T.test("Sessions: gold an hour after 5 minutes, usual and best pace", function()
   ns.db.sessions = saved
 end)
 
-T.test("Sessions: the full view's lines", function()
-  local st = { secs = 900, gained = 300, loot = 500, perHour = 3200, unpriced = 2,
-    items = { { id = A, n = 3, value = 300 }, { id = B, n = 2, value = 200 } } }
-  local s = { money = { vendorSell = 500, repair = -200 } }
-  local spec = ns.SessionDetailLines(st, s, { usual = 2000, best = 5000, n = 3 }, B)
-  T.eq(spec[1].kind, "head")
-  T.eq(spec[1].left, "Gold")
-  local rows, flashed, notes = 0, nil, 0
-  for _, e in ipairs(spec) do
-    if e.id then rows = rows + 1 end
-    if e.flash then flashed = e.id end
-    if e.kind == "note" then notes = notes + 1 end
-  end
-  T.eq(rows, 2, "a row per item")
-  T.eq(flashed, B, "what just came in is lit")
-  T.ok(notes >= 2, "the unpriced note and the loot note")
-  local noUsual = ns.SessionDetailLines(st, s, nil, nil)
-  local said
-  for _, e in ipairs(noUsual) do if e.left and e.left:find("after 3 sessions", 1, true) then said = true end end
-  T.ok(said, "says when the usual pace shows")
+T.test("Session window: pace points every half minute, never while paused, thinned", function()
+  local s = { pace = nil }
+  T.ok(ns.SessionPaceSample(s, { secs = 1, gained = 0, loot = 0 }), "the start")
+  T.eq(ns.SessionPaceSample(s, { secs = 20, gained = 50, loot = 0 }), nil, "too soon")
+  T.ok(ns.SessionPaceSample(s, { secs = 31, gained = 50, loot = 25 }))
+  T.eq(s.pace[2][2], 75, "gold and loot")
+  s.paused = true
+  T.eq(ns.SessionPaceSample(s, { secs = 90, gained = 50, loot = 25 }), nil, "paused")
+  s.paused = nil
+  for i = 3, 241 do ns.SessionPaceSample(s, { secs = i * 30 + 1, gained = i, loot = 0 }) end
+  T.ok(#s.pace <= 240, "kept small")
+  T.eq(s.pace[1][1], 1, "from the start")
+  T.eq(s.pace[#s.pace][1], 241 * 30 + 1, "to now")
+end)
+
+T.test("Session window: the loot table sorts, keeps gray items apart, names the best drop", function()
+  local names = { [A] = "Bolt of Cloth", [B] = "Aqua Gem", [990104] = "Broken Tooth" }
+  local realName = ns.ItemName
+  ns.ItemName = function(id) return names[id] end
+  local items = { { id = A, n = 10, value = 1000 }, { id = B, n = 1, value = 500 }, { id = 990104, n = 4, value = 40 } }
+  local quality = function(id) return id == 990104 and 0 or 2 end
+  local ok, err = pcall(function()
+    local t = ns.SessionLootRows(items, "value", nil, quality)
+    T.eq(#t.rows, 2)
+    T.eq(t.rows[1].id, A, "biggest total first")
+    T.eq(#t.grays, 1)
+    T.eq(t.grayValue, 40)
+    T.eq(t.best.id, B, "the best drop: worth most each (500 against 100)")
+    T.eq(ns.SessionLootRows(items, "name", nil, quality).rows[1].id, B, "A to Z")
+    T.eq(ns.SessionLootRows(items, "name", true, quality).rows[1].id, A, "turned around")
+    T.eq(ns.SessionLootRows(items, "n", nil, quality).rows[1].id, A, "most first")
+    T.eq(ns.SessionLootRows({ { id = 990104, n = 1, value = 5 } }, "value", nil, quality).best.id, 990104, "only gray: still a best drop")
+  end)
+  ns.ItemName = realName
+  if not ok then error(err, 0) end
+end)
+
+T.test("Session window: past sessions, newest first, the best one marked", function()
+  local saved = ns.db.sessions
+  ns.db.sessions = {
+    { kind = "general", t = 100, secs = 3600, earned = 1000 },
+    { kind = "shuffle", t = 150, secs = 3600, earned = 99999 },
+    { kind = "general", t = 200, secs = 3600, earned = 5000 },
+    { kind = "general", t = 300, secs = 120, earned = 10 },
+  }
+  local rows = ns.SessionPastRows(6)
+  ns.db.sessions = saved
+  T.eq(#rows, 3, "general sessions only")
+  T.eq(rows[1].t, 300, "newest first")
+  T.eq(rows[1].rate, nil, "too short for a rate")
+  T.ok(rows[2].best, "the best gold an hour")
+  T.eq(rows[3].best, nil)
 end)

@@ -132,6 +132,7 @@ local function duration(secs)
   return ("%dm %02ds"):format(m, secs % 60)
 end
 local function signed(c) return (c < 0 and "-" or "+") .. ns.Money(math.abs(c)) end
+ns.SessionFormat = { duration = duration, signed = signed, rate = rateText }   -- (SessionWindow.lua)
 
 ---------------------------------------------------------------------------
 -- Counting
@@ -214,8 +215,9 @@ local tracker, ticker
 -- version that lets people see all the data live"): gold by where it came from, every
 -- item looted with its worth (hover one for its tooltip), and your usual pace.
 local W_MINI, W_SMALL = 224, 210
+local FLASH_SECONDS = 4   -- (new loot shows on the tracker and is lit in the window this long)
 local LOOT_NOTE = "Loot counts at the better of the auction house (after the cut) and a vendor (Settings, Sessions: vendor only), and only while you still have it: what you sell during the session counts once, as the gold it brought."
-local function fullView() return ns.db.settings.sessionFull and not ns.db.settings.sessionSmall end
+local function fullView() return ns.SessionWindowShown and ns.SessionWindowShown() end   -- (SessionWindow.lua)
 
 -- A small icon button with its name and what it does on hover; SetIcon changes both (Pause / Carry on).
 local ICONS = "Interface\\AddOns\\ForeverLedger\\media\\icons\\session-"
@@ -258,154 +260,10 @@ local function layoutTracker(f)
   f.pause:SetShown(not small)
   f.more:SetShown(not small)
   f.more:SetIcon(fullView() and "less" or "more", fullView() and "Less" or "More",
-    fullView() and "Back to the small tracker." or "Shows everything as it comes in: gold by where it came from, every item looted and your usual pace.")
+    fullView() and "Closes the session window." or "Opens the session window: a graph of your pace, every item looted (sort by any column), gold by where it came from and your past sessions.")
   f.smallRate:SetShown(small)
-  if f.details then f.details:SetShown(fullView()) end
 end
-
----------------------------------------------------------------------------
--- The full view: a panel under the tracker, redrawn with it every second.
----------------------------------------------------------------------------
-local ROW_H, MAX_LOOT_ROWS, MAX_GOLD_ROWS = 16, 14, 6
-local FLASH_SECONDS = 4
-
-local function buildDetails(f)
-  local d = CreateFrame("Frame", nil, f)
-  d:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 0, 1)
-  d:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 0, 1)
-  d:SetHeight(100)
-  T:Fill(d, { T.bg[1], T.bg[2], T.bg[3], 0.85 })
-  T:Border(d, T.theme.frame and { T.theme.frame[1], T.theme.frame[2], T.theme.frame[3], 0.8 } or { 1, 1, 1, 0.12 })
-  d:EnableMouse(true)   -- (so a click on it doesn't go through to the world)
-  d.lines = {}
-  -- A line: left text, right text, an optional icon; item rows show the item's tooltip.
-  local function line(i)
-    local r = d.lines[i]
-    if r then return r end
-    r = CreateFrame("Frame", nil, d)
-    r:SetHeight(ROW_H)
-    r:SetPoint("TOPLEFT", 6, 0)
-    r:SetPoint("RIGHT", d, "RIGHT", -6, 0)
-    r.hl = T:Fill(r, { 0.5, 0.83, 0.61, 0.18 }, "BACKGROUND")
-    r.icon = r:CreateTexture(nil, "ARTWORK")
-    r.icon:SetSize(14, 14)
-    r.icon:SetPoint("LEFT", 2, 0)
-    r.left = T:Text(r, 11)
-    r.left:SetJustifyH("LEFT")
-    r.left:SetWordWrap(false)
-    r.right = T:Text(r, 11)
-    r.right:SetPoint("RIGHT", -2, 0)
-    r.right:SetJustifyH("RIGHT")
-    r:SetScript("OnEnter", function(self)
-      if not self.itemID then return end
-      GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-      if GameTooltip.SetItemByID then GameTooltip:SetItemByID(self.itemID)
-      else GameTooltip:SetHyperlink("item:" .. self.itemID) end
-      GameTooltip:Show()
-    end)
-    r:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    d.lines[i] = r
-    return r
-  end
-  d.line = line
-  return d
-end
-
--- spec: { { kind = "head" | "row" | "note", left, right, id, flash } }
-local function drawDetails(d, spec)
-  local y, used = 6, 0
-  for _, e in ipairs(spec) do
-    used = used + 1
-    local r = d.line(used)
-    r:ClearAllPoints()
-    r:SetPoint("TOPLEFT", 6, -y)
-    r:SetPoint("RIGHT", d, "RIGHT", -6, 0)
-    r.itemID = e.id
-    r:EnableMouse(e.id ~= nil)
-    r.icon:SetShown(e.id ~= nil)
-    if e.id then r.icon:SetTexture(ns:ItemIcon(e.id)) end
-    r.left:ClearAllPoints()
-    r.left:SetPoint("LEFT", e.id and 20 or (e.kind == "row" and 8 or 0), 0)
-    r.left:SetPoint("RIGHT", r.right, "LEFT", -6, 0)
-    r.hl:SetShown(e.flash and true or false)
-    if e.kind == "head" then
-      T:StyleHeading(r.left, e.left)
-    else
-      T:Font(r.left, e.kind == "note" and 10 or 11, e.kind == "note" and T.dim or T.text)
-      r.left:SetText(e.left or "")
-    end
-    r.right:SetText(e.right or "")
-    if e.kind == "note" then
-      -- (A set width, so the wrapped height is known at once.)
-      r.left:SetWordWrap(true)
-      r.right:SetText("")
-      r.left:ClearAllPoints()
-      r.left:SetPoint("TOPLEFT", r, "TOPLEFT", 0, -1)
-      r.left:SetWidth(W_MINI - 16)
-      local h = math.max(ROW_H, math.ceil(r.left:GetStringHeight() or ROW_H) + 2)
-      r:SetHeight(h)
-      y = y + h
-    else
-      r.left:SetWordWrap(false)
-      r:SetHeight(ROW_H)
-      y = y + ROW_H + (e.kind == "head" and 2 or 0)
-    end
-    if e.gap then y = y + 6 end
-    r:Show()
-  end
-  for i = used + 1, #d.lines do d.lines[i]:Hide() end
-  d:SetHeight(y + 6)
-end
-
--- The full view's lines, from the totals (tested).
-function ns.SessionDetailLines(st, s, usual, flashID)
-  local spec = {}
-  local function add(e) spec[#spec + 1] = e end
-  add({ kind = "head", left = "Gold", right = ("|cff%s%s|r"):format(st.gained >= 0 and "7fd39c" or "ee8597", signed(st.gained)) })
-  local by = {}
-  for src, v in pairs((s and s.money) or {}) do if v ~= 0 then by[#by + 1] = { src, v } end end
-  table.sort(by, function(a, b) return math.abs(a[2]) > math.abs(b[2]) end)
-  if #by == 0 then add({ kind = "note", left = "No gold in or out yet." }) end
-  for k = 1, math.min(MAX_GOLD_ROWS, #by) do
-    local x = by[k]
-    add({ kind = "row", left = (ns.MONEY_LABELS and ns.MONEY_LABELS[x[1]]) or x[1],
-      right = (x[2] < 0 and "|cffee8597-|r" or "|cff7fd39c+|r") .. ns.Money(math.abs(x[2])) })
-  end
-  if #by > MAX_GOLD_ROWS then
-    local rest = 0
-    for k = MAX_GOLD_ROWS + 1, #by do rest = rest + by[k][2] end
-    add({ kind = "row", left = ("%d more"):format(#by - MAX_GOLD_ROWS), right = signed(rest) })
-  end
-  spec[#spec].gap = true
-  add({ kind = "head", left = "Loot", right = ns.Money(st.loot) })
-  if #st.items == 0 then add({ kind = "note", left = "Nothing looted yet (or it's all sold: that's in Gold)." }) end
-  for k = 1, math.min(MAX_LOOT_ROWS, #st.items) do
-    local it = st.items[k]
-    add({ kind = "row", id = it.id, left = ("%d x %s"):format(it.n, ns.ItemName(it.id) or "?"), right = ns.Money(it.value),
-      flash = flashID == it.id })
-  end
-  if #st.items > MAX_LOOT_ROWS then
-    local rest = 0
-    for k = MAX_LOOT_ROWS + 1, #st.items do rest = rest + st.items[k].value end
-    add({ kind = "row", left = ("%d more items"):format(#st.items - MAX_LOOT_ROWS), right = ns.Money(rest) })
-  end
-  if (st.unpriced or 0) > 0 then
-    add({ kind = "note", left = ("%d with no price yet, not counted."):format(st.unpriced) })
-  end
-  spec[#spec].gap = true
-  if usual then
-    local better = st.secs >= RATE_SECONDS and st.perHour > usual.usual
-    add({ kind = "row", left = "Your usual", right = rateText(usual.usual) .. " an hour" })
-    add({ kind = "row", left = "Your best", right = rateText(usual.best) .. " an hour" })
-    if st.secs >= RATE_SECONDS then
-      add({ kind = "note", left = better and "|cff7fd39cAbove your usual pace.|r" or "Below your usual pace so far." })
-    end
-  else
-    add({ kind = "note", left = "Your usual pace shows after 3 sessions of 10 minutes or more." })
-  end
-  add({ kind = "note", left = LOOT_NOTE })
-  return spec
-end
+ns.SessionTrackerLayout = function() if tracker then layoutTracker(tracker) end end
 
 local function buildTracker()
   local f = CreateFrame("Frame", "ForeverLedgerSessionTracker", UIParent)
@@ -466,13 +324,8 @@ local function buildTracker()
   -- counted until Carry on (the play icon).
   f.pause = iconButton(f, "pause", "Pause", "The clock stops and nothing is counted until you carry on.", function() ns:PauseGeneralSession() end)
   f.pause:SetPoint("RIGHT", f.stop, "LEFT", -2, 0)
-  f.more = iconButton(f, "more", "More", "Shows everything as it comes in: gold by where it came from, every item looted and your usual pace.", function()
-    ns.db.settings.sessionFull = not ns.db.settings.sessionFull or nil
-    layoutTracker(f)
-    drawTracker()
-  end)
+  f.more = iconButton(f, "more", "More", "", function() ns:ToggleSessionWindow() end)
   f.more:SetPoint("RIGHT", f.pause, "LEFT", -2, 0)
-  f.details = buildDetails(f)
   layoutTracker(f)
   f:SetScript("OnEnter", function(self)
     local st = ns:SessionTotals()
@@ -527,9 +380,8 @@ drawTracker = function()
   else
     tracker.loot:SetText(("|cff999999Loot|r %s"):format(ns.Money(st.loot)))
   end
-  if fullView() then
-    drawDetails(tracker.details, ns.SessionDetailLines(st, s, ns:SessionUsual(), flashID))
-  end
+  if ns.SessionPaceSample then ns.SessionPaceSample(s, st) end   -- (the window's graph)
+  if ns.DrawSessionWindow then ns:DrawSessionWindow(st, s, flashID) end
 end
 
 -- Pause or carry on (on = true pauses, false carries on, nil switches). While paused the
@@ -551,6 +403,7 @@ local function showTracker()
   if not tracker then tracker = buildTracker() end
   tracker:Show()
   drawTracker()
+  if ns.db.settings.sessionFull and ns.ToggleSessionWindow then ns:ToggleSessionWindow(true) end
   if ticker then ticker:Cancel() end
   ticker = C_Timer.NewTicker(TRACKER_SECONDS, drawTracker)
 end
@@ -558,6 +411,7 @@ end
 local function hideTracker()
   if ticker then ticker:Cancel(); ticker = nil end
   if tracker then tracker:Hide() end
+  if ns.HideSessionWindow then ns.HideSessionWindow() end
 end
 
 ---------------------------------------------------------------------------
