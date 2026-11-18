@@ -496,11 +496,18 @@ function ns:EventKnown(event) return handlers[event] ~= nil and not handlers[eve
 ns.perf, ns.perfSince = {}, GetTime()
 local clock = debugprofilestop or function() return GetTime() * 1000 end
 local frameOurs, frameTop, frameTopMs = 0, nil, 0   -- this frame's time in our code (freeze watch, below)
-local function note(label, ms)
+local framePart, framePartMs, frameTipItem = nil, 0, nil   -- its slowest part (sub), the tooltip item we worked on
+-- sub: a part of a task timed under its own label too (the tooltip's sections): listed in
+-- /fl perf, but not added to the frame's total again.
+local function note(label, ms, sub)
   local p = ns.perf[label]
   if not p then p = { n = 0, ms = 0, max = 0 }; ns.perf[label] = p end
   p.n, p.ms = p.n + 1, p.ms + ms
   if ms > p.max then p.max = ms end
+  if sub then
+    if ms > framePartMs then framePart, framePartMs = label, ms end
+    return
+  end
   frameOurs = frameOurs + ms
   if ms > frameTopMs then frameTop, frameTopMs = label, ms end
 end
@@ -560,12 +567,13 @@ function ns.SlowSince(before, after)
   return out
 end
 
-function ns.NoteFrame(elapsed, ours, top, topMs, tipItem, others)
+function ns.NoteFrame(elapsed, ours, top, topMs, tipItem, others, part, partMs)
   if elapsed < FREEZE_SECONDS or not ns.db then return end
   local log = ns.db.freezeLog or {}
   ns.db.freezeLog = log
   local e = { t = time(), ms = math.floor(elapsed * 1000 + 0.5), ours = math.floor(ours + 0.5), item = tipItem }
   if top and topMs >= 5 then e.what, e.whatMs = top, math.floor(topMs + 0.5) end
+  if e.what and part and (partMs or 0) >= 5 then e.part, e.partMs = part, math.floor(partMs + 0.5) end
   if others and #others > 0 then
     e.addons = {}
     for i, r in ipairs(others) do e.addons[i] = ("%s %.0f ms"):format(r.name, r.v) end
@@ -584,7 +592,7 @@ watch:SetScript("OnUpdate", function(_, elapsed)
       local ok, _, link = pcall(GameTooltip.GetItem, GameTooltip)
       tip = ok and link and ns.ItemIDFromLink and ns.ItemIDFromLink(link) or nil
     end
-    local e = ns.NoteFrame(elapsed, frameOurs, frameTop, frameTopMs, tip, profilerTop("LastTime", 3))
+    local e = ns.NoteFrame(elapsed, frameOurs, frameTop, frameTopMs, tip or frameTipItem, profilerTop("LastTime", 3), framePart, framePartMs)
     -- Which addons had a frame over 100 ms in it: their counts a second later against the
     -- counts kept every second before it (the per-frame times read now aren't the frozen
     -- frame's: Frank's AN30, November 17, every addon showed 15 ms or less).
@@ -599,6 +607,7 @@ watch:SetScript("OnUpdate", function(_, elapsed)
     end
   end
   frameOurs, frameTop, frameTopMs = 0, nil, 0
+  framePart, framePartMs, frameTipItem = nil, 0, nil
 end)
 -- Every second: each addon's count of frames over 100 ms, for the freeze above.
 if C_AddOnProfiler and C_Timer and C_Timer.NewTicker then
@@ -622,6 +631,8 @@ watch:SetScript("OnEvent", function(_, event)
 end)
 
 ns.PerfNote = note
+-- The item our tooltip lines were for this frame (a freeze names it after the tooltip is gone).
+function ns.NoteTipItem(id) frameTipItem = id end
 
 -- Wrap a function so its time is counted under a label.
 function ns.Timed(label, fn)
@@ -701,7 +712,10 @@ function ns.FreezeLines(n)
       local e = log[i]
       local ours = e.ours >= e.ms * 0.5 and ("|cffee8597Forever Ledger %d ms|r"):format(e.ours) or ("Forever Ledger %d ms"):format(e.ours)
       local parts = { ("%s: %d ms; %s"):format(date("%b %d %H:%M", e.t), e.ms, ours) }
-      if e.what then parts[#parts + 1] = ("(most in %s, %d ms)"):format(e.what, e.whatMs or 0) end
+      if e.what then
+        parts[#parts + 1] = e.part and ("(most in %s, %d ms; slowest part %s, %d ms)"):format(e.what, e.whatMs or 0, e.part, e.partMs or 0)
+          or ("(most in %s, %d ms)"):format(e.what, e.whatMs or 0)
+      end
       if e.slow then
         parts[#parts + 1] = #e.slow > 0 and ("; |cffffd100over 100 ms in it: " .. table.concat(e.slow, ", ") .. "|r")
           or "; no addon over 100 ms in it (the game itself)"

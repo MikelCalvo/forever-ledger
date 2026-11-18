@@ -1,6 +1,7 @@
 local _, ns = ...
 
 local LR, LG, LB = 0.73, 0.64, 1.0   -- label colour
+local clock = debugprofilestop or function() return GetTime() * 1000 end
 
 -- What shows is set in Settings (tester feedback: the tooltip grew long): compact mode
 -- shows one line and the rest while Shift is held; each section can be turned off; and
@@ -202,6 +203,15 @@ local shownLists   -- GameTooltip already has the lists (Shift)
 local function addLines(tt, id, forceFull, copyPrice)
   local s = ns.db and ns.db.settings
   if not id or not s or not s.tooltip then return end
+  -- Each section's time, in /fl perf as "Tooltip: ..." (Frank's AN30, November 17: one freeze
+  -- was 468 ms in our tooltip lines); a freeze names the slowest section and the item.
+  if ns.NoteTipItem then ns.NoteTipItem(id) end
+  local lapAt = clock()
+  local function lap(label)
+    local now = clock()
+    if ns.PerfNote then ns.PerfNote("Tooltip: " .. label, now - lapAt, true) end
+    lapAt = now
+  end
   ns:RememberItem(id)
   if tt == GameTooltip then
     copyPrice = copyPrice or (forceFull and shownCopyPrice) or nil   -- (Shift pressed later)
@@ -233,6 +243,7 @@ local function addLines(tt, id, forceFull, copyPrice)
   if tt == GameTooltip then shownID, shownFull, shownHistory = id, full, had or withHistory end
 
   local price, src, t, rec = ns:GetPrice(id)
+  lap("price")
   -- Quests and crafts (summaryLines, listLines above): the lists with Shift held.
   local expanded = forceFull or IsShiftKeyDown()
   local function questsAndCrafts()
@@ -268,9 +279,11 @@ local function addLines(tt, id, forceFull, copyPrice)
   -- The sell suggestion goes first, straight under the game's own lines (Frank, AN4,
   -- November 13: below Worth to you and its ways he didn't see it).
   sellLines()
+  lap("sell suggestion")
 
   if not full then
     questsAndCrafts()
+    lap("quests and crafts")
     -- Today's cheapest too, so a new scan shows at once (CurseForge comment, October 22).
     local shownCheapest
     if price and on("tipPrice") and rec and rec.m and not rec.none and not ns.EXTERNAL_NAMES[src or ""] then
@@ -280,6 +293,7 @@ local function addLines(tt, id, forceFull, copyPrice)
     end
     local best, options = ns:GetValue(id, true)
     best, options = ns:WorthOfCopy(best, options, copyPrice)
+    lap("worth to you")
     if best then
       local how = options and options[1] and options[1].label
       tt:AddDoubleLine("Worth to you" .. (how and (" |cff999999(" .. how .. ")|r") or ""), ns.Money(best), LR, LG, LB, 1, 1, 1)
@@ -339,6 +353,7 @@ local function addLines(tt, id, forceFull, copyPrice)
   elseif src == "AHledger" and price and on("tipPrice") then
     tt:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5)
   end
+  lap("sell speed")
 
   -- Gear with random stats: the price of this exact version ("of the Eagle"). An auction
   -- house group ("Items in this group may vary") has no one version: its link carries a
@@ -380,6 +395,7 @@ local function addLines(tt, id, forceFull, copyPrice)
         "version:", suffix or "none (group)", "scan has:", rec.sx:sub(1, 80))
     end
   end
+  lap("versions")
 
   -- Booty Bay, only when it's clearly better there (owner, October 5: neutral prices
   -- mustn't muddle these; off by default, and never while you're at a neutral one,
@@ -401,9 +417,11 @@ local function addLines(tt, id, forceFull, copyPrice)
     tt:AddDoubleLine("Vendor sells it for", shown .. (buy.lim and " |cff999999limited|r" or "")
       .. (standing and (" |cff999999at " .. standing .. "|r") or ""), LR, LG, LB, 1, 1, 1)
   end
+  lap("Booty Bay and vendor")
 
   local best, options = ns:GetValue(id, true)
   best, options = ns:WorthOfCopy(best, options, copyPrice)
+  lap("worth to you")
   if best and on("tipWorth") then
     tt:AddDoubleLine("Worth to you", ns.Money(best), LR, LG, LB, 1, 1, 1)
     whyLower(best, options)
@@ -421,6 +439,8 @@ local function addLines(tt, id, forceFull, copyPrice)
     end
   end
 
+  lap("worth lines")
+
   -- Green when the auction price is already at or below it.
   local maxBuy = on("tipBuy") and ns:BuyAtOrBelow(id, true)
   if maxBuy then
@@ -431,17 +451,22 @@ local function addLines(tt, id, forceFull, copyPrice)
     end
   end
 
+  lap("buy at or below")
   local crateLine = on("tipCrate") and ns.CrateTooltipLine and ns:CrateTooltipLine(id)
   if crateLine then tt:AddLine(crateLine, LR, LG, LB, true) end
   -- Craftsman's Writs: what the order asks for and costs (Writs.lua; the same setting).
   local writLines = on("tipCrate") and ns.WritTooltipLines and ns:WritTooltipLines(id)
   for _, l in ipairs(writLines or {}) do tt:AddLine(l, LR, LG, LB, true) end
+  lap("crates and writs")
 
   if on("tipBagSlot") then bagLines(tt, id) end
+  lap("bag slots")
 
   if on("tipDisenchant") and ns:AddDisenchantLines(tt, id) then ns.disenchantLinesFor = id end
+  lap("disenchant")
 
   questsAndCrafts()
+  lap("quests and crafts")
   -- The hint says what Shift, Ctrl and the click show (AN12, November 14: Frank held Ctrl,
   -- as only Ctrl was named, and didn't see the craft list Shift gives).
   local hints = {}
@@ -460,6 +485,7 @@ local function addLines(tt, id, forceFull, copyPrice)
   local text = #hints > 0 and ("Hold " .. table.concat(hints, ", ")) or ""
   if click then text = text .. (text ~= "" and ", " or "") .. click end
   if text ~= "" then tt:AddLine(text, 0.5, 0.5, 0.5, true) end
+  lap("hints and history")
 end
 
 if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then

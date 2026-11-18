@@ -37,3 +37,20 @@ T.test("Freeze watch: the addons with a frame over 100 ms in it", function()
   T.ok(text:find("no addon over 100 ms in it", 1, true), "or none")
   ns.db.freezeLog = nil
 end)
+
+T.test("Freeze watch: the slowest part of our share is named", function()
+  ns.db.freezeLog = nil
+  ns.NoteFrame(0.5, 471, "Tooltip lines", 468, 2589, nil, "Tooltip: worth to you", 450.4)
+  local e = ns.db.freezeLog[1]
+  T.eq(e.part, "Tooltip: worth to you")
+  T.eq(e.partMs, 450)
+  T.ok(table.concat(ns.FreezeLines(8), "\n"):find("slowest part Tooltip: worth to you, 450 ms", 1, true), "listed")
+  ns.NoteFrame(0.5, 3, "Tooltip lines", 3, nil, nil, "Tooltip: price", 2)
+  T.eq(ns.db.freezeLog[2].part, nil, "not when our share wasn't named")
+  -- A part is listed in /fl perf without being counted twice in the frame's total.
+  ns.perf["Tooltip: test part"] = nil
+  ns.PerfNote("Tooltip: test part", 7, true)
+  T.eq(ns.perf["Tooltip: test part"].max, 7)
+  ns.perf["Tooltip: test part"] = nil
+  ns.db.freezeLog = nil
+end)
