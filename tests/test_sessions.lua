@@ -50,6 +50,8 @@ T.test("Sessions: auction sales count only what was posted this session, random 
   -- with random stats didn't match the looted item.)
   withValues(function()
     S.items[A] = { name = "Session Test Sword" }
+    local oldName = ns.db.itemNames[A]
+    ns.db.itemNames[A] = "Session Test Sword"   -- (saved names come first; an earlier test named it)
     local s = session({ [A] = 5 })
     S.bags[A] = 5
     ns:SessionSold("Session Test Sword", 5)   -- an auction posted before the session
@@ -66,7 +68,7 @@ T.test("Sessions: auction sales count only what was posted this session, random 
     ns:SessionSold("Session Test Swordfish", 1)
     T.eq(s.sold[A], 2, "another item whose name starts the same")
     T.eq(s.posted[A], 1)
-    S.items[A] = nil
+    S.items[A], ns.db.itemNames[A] = nil, oldName
   end)
 end)
 
