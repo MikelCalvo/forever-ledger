@@ -33,7 +33,8 @@ T.test("Sessions: loot sold during the session counts once, as gold", function()
     local st = ns:SessionTotals()
     T.eq(st.loot, 500, "3 + 2 left as loot")
     T.eq(st.gained, 200, "the 2 sold, as gold")
-    -- An auction sale names the item.
+    -- An auction sale names the item; it counts when posted during the session.
+    ns:SessionPosted(A, 1)
     ns:SessionSold("Session Test Cloth", 1)
     T.eq(s.sold[A], 3)
     -- Never more sold than looted.
@@ -41,6 +42,31 @@ T.test("Sessions: loot sold during the session counts once, as gold", function()
     T.eq(s.sold[A], 5)
     S.bags[A] = 10   -- (bought more: still only what was looted, less what was sold)
     T.eq(ns:SessionTotals().loot, 200, "only B left")
+  end)
+end)
+
+T.test("Sessions: auction sales count only what was posted this session, random stats too", function()
+  -- (Codex review, November 17: an old auction's money took new loot off; a sale named
+  -- with random stats didn't match the looted item.)
+  withValues(function()
+    S.items[A] = { name = "Session Test Sword" }
+    local s = session({ [A] = 5 })
+    S.bags[A] = 5
+    ns:SessionSold("Session Test Sword", 5)   -- an auction posted before the session
+    T.eq(s.sold and s.sold[A], nil, "not posted this session: the new loot stays loot")
+    T.eq(ns:SessionTotals().loot, 500)
+    ns:SessionPosted(A, 2)
+    S.bags[A] = 3
+    ns:SessionSold("Session Test Sword of Strength", 1)
+    T.eq(s.sold[A], 1, "the version with random stats is the looted sword")
+    ns:SessionSold("Session Test Sword of the Bear", 5)
+    T.eq(s.sold[A], 2, "no more than was posted")
+    T.eq(s.posted[A], 0)
+    ns:SessionPosted(A, 1)
+    ns:SessionSold("Session Test Swordfish", 1)
+    T.eq(s.sold[A], 2, "another item whose name starts the same")
+    T.eq(s.posted[A], 1)
+    S.items[A] = nil
   end)
 end)
 

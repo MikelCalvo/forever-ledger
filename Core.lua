@@ -494,12 +494,16 @@ end
 function ns:EventKnown(event) return handlers[event] ~= nil and not handlers[event].unknown end
 -- Timing, for /fl perf: total and slowest single run per event or task.
 ns.perf, ns.perfSince = {}, GetTime()
-local clock = debugprofilestop or function() return GetTime() * 1000 end
+local function clock() return debugprofilestop and debugprofilestop() or GetTime() * 1000 end
 local frameOurs, frameTop, frameTopMs = 0, nil, 0   -- this frame's time in our code (freeze watch, below)
 local framePart, framePartMs, frameTipItem = nil, 0, nil   -- its slowest part (sub), the tooltip item we worked on
 -- sub: a part of a task timed under its own label too (the tooltip's sections): listed in
--- /fl perf, but not added to the frame's total again.
+-- /fl perf, but not added to the frame's total again. Likewise anything timed inside another
+-- timed task or event (depth > 0): only the outermost counts toward the frame (Codex review,
+-- November 17: a 100 ms task with an 80 ms timed step inside showed as 180 ms).
+local depth = 0
 local function note(label, ms, sub)
+  sub = sub or depth > 0
   local p = ns.perf[label]
   if not p then p = { n = 0, ms = 0, max = 0 }; ns.perf[label] = p end
   p.n, p.ms = p.n + 1, p.ms + ms
@@ -615,6 +619,7 @@ watch:SetScript("OnUpdate", function(_, elapsed)
   end
   frameOurs, frameTop, frameTopMs = 0, nil, 0
   framePart, framePartMs, frameTipItem = nil, 0, nil
+  depth = 0   -- (a timed task that stopped with an error left it raised)
 end)
 -- Every second: each addon's count of frames over 100 ms, for the freeze above.
 if C_AddOnProfiler and C_Timer and C_Timer.NewTicker then
@@ -640,12 +645,16 @@ end)
 ns.PerfNote = note
 -- The item our tooltip lines were for this frame (a freeze names it after the tooltip is gone).
 function ns.NoteTipItem(id) frameTipItem = id end
+-- This frame's share so far (tests).
+function ns.FrameShare() return frameOurs end
 
 -- Wrap a function so its time is counted under a label.
 function ns.Timed(label, fn)
   return function(...)
     local t = clock()
+    depth = depth + 1
     local a, b, c, d = fn(...)
+    depth = math.max(0, depth - 1)
     note(label, clock() - t)
     return a, b, c, d
   end
@@ -672,10 +681,12 @@ end
 
 local function dispatch(list, event, ...)
   local t = clock()
+  depth = depth + 1
   for i = 1, #list do
     local ok, err = pcall(list[i], ...)
     if not ok then geterrorhandler()(err) end
   end
+  depth = math.max(0, depth - 1)
   note(event, clock() - t)
 end
 
@@ -724,8 +735,8 @@ function ns.FreezeLines(n)
           or ("(most in %s, %d ms)"):format(e.what, e.whatMs or 0)
       end
       if e.slow then
-        parts[#parts + 1] = #e.slow > 0 and ("; |cffffd100over 100 ms in it: " .. table.concat(e.slow, ", ") .. "|r")
-          or "; no addon over 100 ms in it (the game itself)"
+        parts[#parts + 1] = #e.slow > 0 and ("; |cffffd100addons with a frame over 100 ms within a second or two of it: " .. table.concat(e.slow, ", ") .. "|r")
+          or "; no addon had a frame over 100 ms within a second or two of it"
       elseif e.addons then
         parts[#parts + 1] = "; slowest addons: " .. table.concat(e.addons, ", ")
       end

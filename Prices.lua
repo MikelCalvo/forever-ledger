@@ -1795,7 +1795,11 @@ function ns:GetPrice(id)
     for _, e in ipairs(ns.EXTERNAL) do
       if src == "auto" or src == e.name then
         local v, when = e.fn(id)
-        if v and v > 0 then return v, e.name, when, rec end
+        if v and v > 0 then
+          -- (Counted, so a value worked out from it shows AHledger's credit: Values.lua.)
+          if e.name == "AHledger" then ns.ahledgerUses = (ns.ahledgerUses or 0) + 1 end
+          return v, e.name, when, rec
+        end
       end
     end
   end

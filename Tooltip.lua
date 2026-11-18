@@ -207,6 +207,16 @@ local function addLines(tt, id, forceFull, copyPrice)
   -- was 468 ms in our tooltip lines); a freeze names the slowest section and the item.
   if ns.NoteTipItem then ns.NoteTipItem(id) end
   local lapAt = clock()
+  -- AHledger's credit, once, wherever its prices went into what this tooltip shows (Codex
+  -- review, November 17: Worth to you from an AHledger material price had none).
+  local ahlBefore = ns.AHledgerUses and ns.AHledgerUses() or 0
+  local credited
+  local function credit()
+    if credited then return end
+    credited = true
+    tt:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5)
+  end
+  local function usedAHledger() return ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore end
   local function lap(label)
     local now = clock()
     if ns.PerfNote then ns.PerfNote("Tooltip: " .. label, now - lapAt, true) end
@@ -309,7 +319,7 @@ local function addLines(tt, id, forceFull, copyPrice)
     end
     if withHistory then historyLines(tt, id) end
     -- AHledger's terms: credit wherever its prices show (Prices.lua).
-    if src == "AHledger" then tt:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5) end
+    if src == "AHledger" or usedAHledger() then credit() end
     tt:AddLine((on("tipHistory") and "Hold Shift for Forever Ledger details, Ctrl for price history"
       or "Hold Shift for Forever Ledger details") .. (on("priceWindow") and (", " .. ns:PriceClickName() .. " for a graph") or ""), 0.5, 0.5, 0.5, true)
     return
@@ -348,10 +358,10 @@ local function addLines(tt, id, forceFull, copyPrice)
     local ok, sp = pcall(ns.SellSpeed, ns, id)
     if ok and sp then tt:AddDoubleLine("Sells", ns:SellSpeedText(sp), LR, LG, LB, 1, 1, 1) end
     if (src == "AHledger" and on("tipPrice")) or (ok and sp and sp.from == "AHledger") then
-      tt:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5)
+      credit()
     end
   elseif src == "AHledger" and price and on("tipPrice") then
-    tt:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5)
+    credit()
   end
   lap("sell speed")
 
@@ -467,6 +477,7 @@ local function addLines(tt, id, forceFull, copyPrice)
 
   questsAndCrafts()
   lap("quests and crafts")
+  if usedAHledger() then credit() end
   -- The hint says what Shift, Ctrl and the click show (AN12, November 14: Frank held Ctrl,
   -- as only Ctrl was named, and didn't see the craft list Shift gives).
   local hints = {}

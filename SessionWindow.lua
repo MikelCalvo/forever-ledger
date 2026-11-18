@@ -542,6 +542,8 @@ function ns:DrawSessionWindow(st, s, flashID)
   lastFlash = flashID
   local F = fmt()
   win.time:SetText((F.duration and F.duration(st.secs) or "") .. (s.paused and "  |cffffd100paused|r" or ""))
+  -- AHledger's terms: its credit when its prices valued the loot (Codex review, November 17).
+  win.hint:SetText(st.ahledger and ns.AHLEDGER_CREDIT or "Drag to move")
   local usual = ns:SessionUsual()
   drawTiles(win, st, s, usual)
   drawGraph(win.graph, s, st, usual)
@@ -551,7 +553,11 @@ end
 
 function ns.RedrawSessionWindow()
   local s = ns.db and ns.db.liveSession
-  if s then ns:DrawSessionWindow(ns:SessionTotals(s), s, lastFlash) end
+  if not s then return end
+  local before = ns.AHledgerUses and ns.AHledgerUses() or 0
+  local st = ns:SessionTotals(s)
+  if st then st.ahledger = ns.AHledgerUses and ns.AHledgerUses() ~= before end
+  ns:DrawSessionWindow(st, s, lastFlash)
 end
 
 function ns.SessionWindowShown() return win ~= nil and win:IsShown() end

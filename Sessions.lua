@@ -148,19 +148,59 @@ end
 -- brought): looted this session, it now counts as that gold, not as loot as well. item is
 -- an item ID (vendor) or a name (auction sales name the item). Counted while paused too:
 -- the loot it was is still in the totals.
+-- An auction sale counts only against what was posted during this session (Codex review,
+-- November 17: the money for an auction posted before it took this session's new loot of
+-- the same item off), and its name may carry random stats ("Short Bastard Sword of
+-- Strength" for the looted Short Bastard Sword). Copies are alike, so what's sold during
+-- the session comes off its loot first: never counted twice, at worst a little under.
+local function nameMatches(sale, base)
+  if not (sale and base) then return false end
+  if sale == base then return true end
+  return sale:sub(1, #base + 4) == base .. " of "
+end
 function ns:SessionSold(item, qty)
   local s = live()
   if not (s and item) or s.char ~= ns.CharKey() then return end
+  qty = tonumber(qty) or 1
   local id = type(item) == "number" and item or nil
   if not id then
-    for lootID in pairs(s.loot or {}) do
-      if ns.ItemName(lootID) == item then id = lootID; break end
+    -- The posted item it was: the exact name first, then a version with random stats.
+    local loose
+    for postedID, n in pairs(s.posted or {}) do
+      if n > 0 and s.loot[postedID] then
+        local base = ns.ItemName(postedID)
+        if base == item then id = postedID; break end
+        if not loose and nameMatches(item, base) then loose = postedID end
+      end
     end
+    id = id or loose
+    if not id then return end
+    qty = math.min(qty, s.posted[id])
+    s.posted[id] = s.posted[id] - qty
   end
   if not (id and s.loot[id]) then return end
   s.sold = s.sold or {}
-  s.sold[id] = math.min(s.loot[id], (s.sold[id] or 0) + (tonumber(qty) or 1))
+  s.sold[id] = math.min(s.loot[id], (s.sold[id] or 0) + qty)
 end
+
+-- Posted on the auction house during the session (the hooks below): what its sales can
+-- count against.
+function ns:SessionPosted(id, qty)
+  local s = live()
+  if not (s and id) or s.char ~= ns.CharKey() then return end
+  s.posted = s.posted or {}
+  s.posted[id] = (s.posted[id] or 0) + (tonumber(qty) or 1)
+end
+ns:OnReady(function()
+  local AH = C_AuctionHouse
+  local function onPost(loc, _, qty)
+    if not live() then return end
+    local ok, id = pcall(function() return C_Item and C_Item.GetItemID and C_Item.GetItemID(loc) end)
+    if ok and id then ns:SessionPosted(id, qty) end
+  end
+  if AH and AH.PostItem then hooksecurefunc(AH, "PostItem", onPost) end
+  if AH and AH.PostCommodity then hooksecurefunc(AH, "PostCommodity", onPost) end
+end)
 
 -- "You receive loot: [Linen Cloth]x2." in the client's own language, as patterns.
 local lootPatterns
@@ -328,6 +368,7 @@ local function buildTracker()
   f.more:SetPoint("RIGHT", f.pause, "LEFT", -2, 0)
   layoutTracker(f)
   f:SetScript("OnEnter", function(self)
+    local ahlBefore = ns.AHledgerUses and ns.AHledgerUses() or 0
     local st = ns:SessionTotals()
     -- (The full view shows all of it already.)
     if not st or fullView() then return end
@@ -352,6 +393,7 @@ local function buildTracker()
     end
     if #st.items > 5 then GameTooltip:AddLine(("  and %d more: the arrow (More) shows them all"):format(#st.items - 5), 0.6, 0.6, 0.6) end
     GameTooltip:AddLine(LOOT_NOTE, 0.6, 0.6, 0.6, true)
+    if ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore then GameTooltip:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5) end
     GameTooltip:AddLine(ns.db.settings.sessionSmall and "Drag to move. Right-click for the bigger view, with More (the arrow), Pause and Stop."
       or "Drag to move. Right-click to fold it to one line. The arrow shows everything as it comes in.", 0.6, 0.6, 0.6, true)
     GameTooltip:Show()
@@ -361,7 +403,9 @@ local function buildTracker()
 end
 
 drawTracker = function()
+  local ahlBefore = ns.AHledgerUses and ns.AHledgerUses() or 0
   local st = ns:SessionTotals()
+  if st then st.ahledger = ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore end   -- (loot valued with its prices: its credit)
   if not (tracker and st) then return end
   local s = live()
   local rate = st.secs >= RATE_SECONDS and rateText(st.perHour) or "|cff888888...|r"

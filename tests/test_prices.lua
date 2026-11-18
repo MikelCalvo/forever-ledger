@@ -187,3 +187,33 @@ T.test("AHledger prices: order, packaged copy, sell speed, never copied", functi
   ns:ForgetSellSpeeds()
   s.source, s.maxAgeHours = oldSrc, oldAge
 end)
+
+T.test("AHledger prices: values worked out from them are counted for its credit, from the cache too", function()
+  -- (Codex review, November 17: Worth to you from an AHledger price showed no credit.)
+  local ID2 = 990201
+  local oldAPI = rawget(_G, "AHledgerAPI")
+  _G.AHledgerAPI = { GetPrice = function(id) if id == ID2 then return { median = 400, updated = time() - 60 } end end }
+  local s = ns.db.settings
+  local oldSrc = s.source
+  s.source = "auto"
+  local key = ns.MarketKey()
+  ns.db.prices[key] = ns.db.prices[key] or {}
+  ns.db.prices[key][ID2] = nil
+  ns:InvalidateValues(true)
+  local ok, err = pcall(function()
+    local before = ns.AHledgerUses()
+    ns:GetValue(ID2)
+    T.ok(ns.AHledgerUses() > before, "worked out with an AHledger price")
+    before = ns.AHledgerUses()
+    ns:GetValue(ID2)
+    T.ok(ns.AHledgerUses() > before, "the cached value still counts")
+    _G.AHledgerAPI = nil
+    ns:InvalidateValues(true)
+    before = ns.AHledgerUses()
+    ns:GetValue(ID2)
+    T.eq(ns.AHledgerUses(), before, "without AHledger: nothing to credit")
+  end)
+  _G.AHledgerAPI, s.source = oldAPI, oldSrc
+  ns:InvalidateValues(true)
+  if not ok then error(err, 0) end
+end)

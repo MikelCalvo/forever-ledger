@@ -249,7 +249,9 @@ local costs, costsAt = {}, 0
 function ns:WritCost(e)
   if GetTime() - costsAt > 30 then wipe(costs); costsAt = GetTime() end
   local c = costs[e.item]
+  if c and c.ahl then ns.ahledgerUses = (ns.ahledgerUses or 0) + 1 end   -- (AHledger's credit: Values.lua)
   if c == nil then
+    local ahlBefore = ns.ahledgerUses or 0
     local cache = {}
     local function src(id)
       if not cache[id] then cache[id] = source(id) end
@@ -258,6 +260,7 @@ function ns:WritCost(e)
     local need = { [e.item] = e.qty }
     local total, plan = ns.CraftPlan(need, src)
     c = total and { total = total, plan = plan, need = need, src = src } or false
+    if c and (ns.ahledgerUses or 0) ~= ahlBefore then c.ahl = true end
     costs[e.item] = c
   end
   return c or nil
@@ -271,7 +274,9 @@ local tierAvg, tierBusy = {}, {}
 local clock = debugprofilestop
 function ns.WritTierAverage(key)
   local a = tierAvg[key]
+  if a and a.ahl then ns.ahledgerUses = (ns.ahledgerUses or 0) + 1 end   -- (AHledger's credit)
   if (a and GetTime() - a.t < AVG_KEEP) or tierBusy[key] then return a end
+  local ahlBefore = ns.ahledgerUses or 0
   local list = {}
   for _, w in ipairs(WRITS) do if w.tier == key then list[#list + 1] = w end end
   local i, sum, n = 0, 0, 0
@@ -281,7 +286,7 @@ function ns.WritTierAverage(key)
       i = i + 1
       local w = list[i]
       if not w then
-        tierAvg[key], tierBusy[key] = { avg = n > 0 and sum / n or nil, t = GetTime() }, nil
+        tierAvg[key], tierBusy[key] = { avg = n > 0 and sum / n or nil, t = GetTime(), ahl = (ns.ahledgerUses or 0) ~= ahlBefore or nil }, nil
         return
       end
       local ok, c = pcall(ns.WritCost, ns, w)   -- (an error mustn't leave it busy for good)
@@ -567,6 +572,7 @@ end
 local function bagHas(id) return ns.HaveCount and ns:HaveCount(id) or 0 end
 
 function ns:RefreshWrits()
+  local ahlBefore = ns.ahledgerUses or 0
   if not f or not f:IsShown() then return end
   local s = S()
   f.tier:SetValue(s.tier)
@@ -676,6 +682,8 @@ function ns:RefreshWrits()
   if s.tier == "mine" and #list == 0 and #opened == 0 then
     f.summary:SetText(dim("No Craftsman's Writs in your bags or bank. They drop from mobs and chests, or buy one on the auction house."))
   end
+  -- AHledger's terms: its credit where its prices went into the costs shown (Codex review, November 17).
+  if (ns.ahledgerUses or 0) ~= ahlBefore then f.summary:SetText((f.summary:GetText() or "") .. "   " .. dim(ns.AHLEDGER_CREDIT)) end
 end
 
 ns.RefreshWrits = ns.Timed("Writs tab", ns.RefreshWrits)
