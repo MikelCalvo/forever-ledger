@@ -117,14 +117,14 @@ end
 -- A tile: a small label and a big number, with a line under it.
 local function tile(parent)
   local t = CreateFrame("Frame", nil, parent)
-  t:SetHeight(46)
+  t:SetHeight(50)
   T:Fill(t, { 1, 1, 1, 0.04 })
   t.label = T:Text(t, 10, T.dim)
   t.label:SetPoint("TOPLEFT", 8, -6)
   t.value = T:Text(t, 15, T.text)
-  t.value:SetPoint("TOPLEFT", 8, -19)
+  t.value:SetPoint("TOPLEFT", 8, -18)
   t.note = T:Text(t, 9, T.dim)
-  t.note:SetPoint("BOTTOMRIGHT", -6, 5)
+  t.note:SetPoint("BOTTOMRIGHT", -6, 4)
   t.note:SetJustifyH("RIGHT")
   return t
 end
@@ -211,9 +211,9 @@ local function build()
 
   -- The pace graph: gold and loot so far, over the time played; your usual pace dimmed.
   local g = CreateFrame("Frame", nil, f)
-  g:SetPoint("TOPLEFT", 12, -90)
-  g:SetPoint("TOPRIGHT", -12, -90)
-  g:SetHeight(108)
+  g:SetPoint("TOPLEFT", 12, -92)
+  g:SetPoint("TOPRIGHT", -12, -92)
+  g:SetHeight(106)
   T:Fill(g, { 0, 0, 0, 0.18 })
   g.top = T:Text(g, 9, T.dim)
   g.top:SetPoint("TOPLEFT", 4, -3)
@@ -353,7 +353,7 @@ local function drawGraph(g, s, st, usual)
   if usualEnd then lo, hi = math.min(lo, usualEnd), math.max(hi, usualEnd) end
   local gw, gh = g:GetWidth(), g:GetHeight()
   if not gw or gw <= 0 then gw = W - 24 end
-  if not gh or gh <= 0 then gh = 108 end
+  if not gh or gh <= 0 then gh = 106 end
   local PADT, PADB = 16, 16
   local function x(t) return 2 + (gw - 4) * t / span end
   local function y(v) return PADB + (gh - PADT - PADB) * (v - lo) / (hi - lo) end
