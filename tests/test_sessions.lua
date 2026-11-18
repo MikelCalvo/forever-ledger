@@ -72,6 +72,29 @@ T.test("Sessions: auction sales count only what was posted this session, random 
   end)
 end)
 
+T.test("Sessions: a sale whose mail came before the post isn't this session's loot", function()
+  -- (Codex verification, November 18: loot 5 cloth, post them, then collect an old
+  -- invoice for 20: the 5 still listed went from loot.)
+  withValues(function()
+    S.items[A] = { name = "Session Test Linen" }
+    local oldName = ns.db.itemNames[A]
+    ns.db.itemNames[A] = "Session Test Linen"
+    local s = session({ [A] = 5 })
+    ns:SessionPosted(A, 5)   -- posted now (S.now); bags empty, the 5 listed
+    ns:SessionSold("Session Test Linen", 20, S.now - 7200)   -- an old sale's mail, 2 hours ago
+    T.eq(s.sold and s.sold[A], nil, "the listed loot stays loot")
+    T.eq(s.posted[A], 5, "and its posts are still there for its own sale")
+    ns:SessionSold("Session Test Linen", 3, S.now + 3600)   -- one of them sold, mail an hour later
+    T.eq(s.sold[A], 3)
+    T.eq(s.posted[A], 2)
+    T.eq(#s.postedAt[A], 1, "posts used oldest first")
+    T.eq(s.postedAt[A][1][2], 2)
+    ns:SessionSold("Session Test Linen", 9)   -- no mail time: as before, what's posted
+    T.eq(s.sold[A], 5)
+    S.items[A], ns.db.itemNames[A] = nil, oldName
+  end)
+end)
+
 T.test("Sessions: loot no longer held drops out; posted auctions still count", function()
   withValues(function()
     session({ [A] = 4 })

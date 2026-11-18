@@ -153,12 +153,35 @@ end
 -- the same item off), and its name may carry random stats ("Short Bastard Sword of
 -- Strength" for the looted Short Bastard Sword). Copies are alike, so what's sold during
 -- the session comes off its loot first: never counted twice, at worst a little under.
+-- And the sale's mail must have come after the post (Codex verification, November 18: an
+-- old auction's mail, collected while this session's loot of the same item was still
+-- listed, took that loot off): arrived = when the mail came (History.lua, from its days
+-- left), and only posts made by then count. A little slack for the days-left rounding.
 local function nameMatches(sale, base)
   if not (sale and base) then return false end
   if sale == base then return true end
   return sale:sub(1, #base + 4) == base .. " of "
 end
-function ns:SessionSold(item, qty)
+local MAIL_SLACK = 300
+-- How many of this session's posts of id a sale whose mail came at arrived can be.
+local function postsBefore(s, id, arrived)
+  local n = (s.posted or {})[id] or 0
+  local batches = s.postedAt and s.postedAt[id]
+  if not (arrived and batches) then return n end   -- (no mail time, or posts from before this was kept)
+  local m = 0
+  for _, b in ipairs(batches) do if b[1] <= arrived + MAIL_SLACK then m = m + b[2] end end
+  return math.min(n, m)
+end
+local function usePosts(s, id, qty)
+  s.posted[id] = s.posted[id] - qty
+  local batches = s.postedAt and s.postedAt[id]
+  while batches and qty > 0 and batches[1] do   -- the oldest first
+    local take = math.min(qty, batches[1][2])
+    batches[1][2], qty = batches[1][2] - take, qty - take
+    if batches[1][2] <= 0 then table.remove(batches, 1) end
+  end
+end
+function ns:SessionSold(item, qty, arrived)
   local s = live()
   if not (s and item) or s.char ~= ns.CharKey() then return end
   qty = tonumber(qty) or 1
@@ -166,8 +189,8 @@ function ns:SessionSold(item, qty)
   if not id then
     -- The posted item it was: the exact name first, then a version with random stats.
     local loose
-    for postedID, n in pairs(s.posted or {}) do
-      if n > 0 and s.loot[postedID] then
+    for postedID in pairs(s.posted or {}) do
+      if postsBefore(s, postedID, arrived) > 0 and s.loot[postedID] then
         local base = ns.ItemName(postedID)
         if base == item then id = postedID; break end
         if not loose and nameMatches(item, base) then loose = postedID end
@@ -175,8 +198,8 @@ function ns:SessionSold(item, qty)
     end
     id = id or loose
     if not id then return end
-    qty = math.min(qty, s.posted[id])
-    s.posted[id] = s.posted[id] - qty
+    qty = math.min(qty, postsBefore(s, id, arrived))
+    usePosts(s, id, qty)
   end
   if not (id and s.loot[id]) then return end
   s.sold = s.sold or {}
@@ -188,8 +211,13 @@ end
 function ns:SessionPosted(id, qty)
   local s = live()
   if not (s and id) or s.char ~= ns.CharKey() then return end
+  qty = tonumber(qty) or 1
   s.posted = s.posted or {}
-  s.posted[id] = (s.posted[id] or 0) + (tonumber(qty) or 1)
+  s.posted[id] = (s.posted[id] or 0) + qty
+  -- When, so a sale's mail from before it can't be this post's (postsBefore above).
+  s.postedAt = s.postedAt or {}
+  s.postedAt[id] = s.postedAt[id] or {}
+  table.insert(s.postedAt[id], { time(), qty })
 end
 ns:OnReady(function()
   local AH = C_AuctionHouse
