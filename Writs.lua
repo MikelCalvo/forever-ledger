@@ -249,7 +249,9 @@ local costs, costsAt = {}, 0
 function ns:WritCost(e)
   if GetTime() - costsAt > 30 then wipe(costs); costsAt = GetTime() end
   local c = costs[e.item]
+  if c and c.ahl then ns.ahledgerUses = (ns.ahledgerUses or 0) + 1 end   -- (AHledger's credit: Values.lua)
   if c == nil then
+    local ahlBefore = ns.ahledgerUses or 0
     local cache = {}
     local function src(id)
       if not cache[id] then cache[id] = source(id) end
@@ -258,9 +260,43 @@ function ns:WritCost(e)
     local need = { [e.item] = e.qty }
     local total, plan = ns.CraftPlan(need, src)
     c = total and { total = total, plan = plan, need = need, src = src } or false
+    if c and (ns.ahledgerUses or 0) ~= ahlBefore then c.ahl = true end
     costs[e.item] = c
   end
   return c or nil
+end
+
+-- A tier's average order cost: { avg, t }, or nil until the first is worked out. Done in
+-- the background, about 4 ms a frame, and kept AVG_KEEP seconds (the old one is shown
+-- while a new one is worked out).
+local AVG_KEEP = 600
+local tierAvg, tierBusy = {}, {}
+local clock = debugprofilestop
+function ns.WritTierAverage(key)
+  local a = tierAvg[key]
+  if a and a.ahl then ns.ahledgerUses = (ns.ahledgerUses or 0) + 1 end   -- (AHledger's credit)
+  if (a and GetTime() - a.t < AVG_KEEP) or tierBusy[key] then return a end
+  local ahlBefore = ns.ahledgerUses or 0
+  local list = {}
+  for _, w in ipairs(WRITS) do if w.tier == key then list[#list + 1] = w end end
+  local i, sum, n = 0, 0, 0
+  local function step()
+    local stop = clock and clock() + 4
+    repeat
+      i = i + 1
+      local w = list[i]
+      if not w then
+        tierAvg[key], tierBusy[key] = { avg = n > 0 and sum / n or nil, t = GetTime(), ahl = (ns.ahledgerUses or 0) ~= ahlBefore or nil }, nil
+        return
+      end
+      local ok, c = pcall(ns.WritCost, ns, w)   -- (an error mustn't leave it busy for good)
+      if ok and c then sum, n = sum + c.total, n + 1 end
+    until not stop or clock() > stop
+    if C_Timer and C_Timer.After then C_Timer.After(0, step) else step() end
+  end
+  tierBusy[key] = true
+  step()
+  return tierAvg[key] or a
 end
 
 -- Copper per point of reputation after the pouch (negative: the pouch pays more).
@@ -371,16 +407,12 @@ function ns:WritTooltipLines(id)
     end
     return lines
   elseif tier then
-    -- A sealed writ: the average order of its tier at today's prices.
-    local sum, n = 0, 0
-    for _, w in ipairs(WRITS) do
-      if w.tier == tier.key then
-        local c = ns:WritCost(w)
-        if c then sum, n = sum + c.total, n + 1 end
-      end
-    end
+    -- A sealed writ: the average order of its tier at today's prices. Worked out a few
+    -- orders a frame and kept for 10 minutes (Frank's AN30, November 17: all of a tier's
+    -- orders at once, again every 30 seconds, froze the game for half a second on a hover).
     local line = ("Opens into one %s order (%d reputation)"):format(tier.label, tier.rep)
-    if n > 0 then line = line .. (", which costs about %s to fill on average"):format(ns.Money(math.floor(sum / n + 0.5))) end
+    local a = ns.WritTierAverage(tier.key)
+    if a and a.avg then line = line .. (", which costs about %s to fill on average"):format(ns.Money(math.floor(a.avg + 0.5))) end
     return { line }
   end
 end
@@ -476,25 +508,25 @@ local function rowTooltip(self)
   if not e then return end
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
   GameTooltip:SetItemByID(e.item)
-  GameTooltip:AddLine(" ")
+  ns:TooltipAddLine(" ")
   local t = TIERS[e.tier]
-  GameTooltip:AddDoubleLine("Writ", ("%s, %d reputation"):format(t.label, t.rep), 0.7, 0.7, 0.7, 1, 1, 1)
-  GameTooltip:AddDoubleLine("Deliver to", e.who and (e.who .. (e.zone and (", " .. e.zone) or "")) or (e.zone and ("not known yet (players say " .. e.zone:gsub("%?$", "") .. ")") or "not known yet"),
+  ns:TooltipAddDoubleLine("Writ", ("%s, %d reputation"):format(t.label, t.rep), 0.7, 0.7, 0.7, 1, 1, 1)
+  ns:TooltipAddDoubleLine("Deliver to", e.who and (e.who .. (e.zone and (", " .. e.zone) or "")) or (e.zone and ("not known yet (players say " .. e.zone:gsub("%?$", "") .. ")") or "not known yet"),
     0.7, 0.7, 0.7, 1, 1, 1)
-  GameTooltip:AddDoubleLine("To make it", ("%s, skill %d"):format(e.prof, e.skill or 0), 0.7, 0.7, 0.7, 1, 1, 1)
+  ns:TooltipAddDoubleLine("To make it", ("%s, skill %d"):format(e.prof, e.skill or 0), 0.7, 0.7, 0.7, 1, 1, 1)
   if c and ns.GoldPlanLines then
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("The cheapest way", 1, 0.82, 0)
+    ns:TooltipAddLine(" ")
+    ns:TooltipAddLine("The cheapest way", 1, 0.82, 0)
     local lines = ns.GoldPlanLines(c.need, { e.item }, c.plan, function(id) return c.src(id).recipe end,
       function(v) return ns.Money(math.floor((v or 0) + 0.5)) end)
     for _, l in ipairs(lines) do
-      GameTooltip:AddDoubleLine(("  "):rep(l.depth + 1) .. l.head:format(itemName(l.id) or ns.ItemName(l.id)), l.text, 0.85, 0.85, 0.85, 1, 1, 1)
+      ns:TooltipAddDoubleLine(("  "):rep(l.depth + 1) .. l.head:format(itemName(l.id) or ns.ItemName(l.id)), l.text, 0.85, 0.85, 0.85, 1, 1, 1)
     end
-    GameTooltip:AddDoubleLine("In all", ns.Money(math.floor(c.total + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
+    ns:TooltipAddDoubleLine("In all", ns.Money(math.floor(c.total + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
   elseif not c then
-    GameTooltip:AddLine("No price for it or its materials yet: run a full scan.", 0.6, 0.6, 0.6, true)
+    ns:TooltipAddLine("No price for it or its materials yet: run a full scan.", 0.6, 0.6, 0.6, true)
   end
-  GameTooltip:AddLine("Click to search the auction house for it.", 0.5, 0.5, 0.5, true)
+  ns:TooltipAddLine("Click to search the auction house for it.", 0.5, 0.5, 0.5, true)
   GameTooltip:Show()
 end
 
@@ -521,8 +553,8 @@ local function getRow(i)
   r.add = T:Button(r, "List", 38, function() if r.entry then ns:WritsToShoppingList({ r.entry }) end end, 18)
   r.add:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:AddLine("Add this order to the Writs shopping list", 1, 1, 1)
-    GameTooltip:AddLine("What to buy for it, or its materials when making it is cheaper; what you have is used first.", 0.8, 0.8, 0.8, true)
+    ns:TooltipAddLine("Add this order to the Writs shopping list", 1, 1, 1)
+    ns:TooltipAddLine("What to buy for it, or its materials when making it is cheaper; what you have is used first.", 0.8, 0.8, 0.8, true)
     GameTooltip:Show()
   end)
   r.add:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -540,6 +572,7 @@ end
 local function bagHas(id) return ns.HaveCount and ns:HaveCount(id) or 0 end
 
 function ns:RefreshWrits()
+  local ahlBefore = ns.ahledgerUses or 0
   if not f or not f:IsShown() then return end
   local s = S()
   f.tier:SetValue(s.tier)
@@ -649,6 +682,8 @@ function ns:RefreshWrits()
   if s.tier == "mine" and #list == 0 and #opened == 0 then
     f.summary:SetText(dim("No Craftsman's Writs in your bags or bank. They drop from mobs and chests, or buy one on the auction house."))
   end
+  -- AHledger's terms: its credit where its prices went into the costs shown (Codex review, November 17).
+  if (ns.ahledgerUses or 0) ~= ahlBefore then f.summary:SetText((f.summary:GetText() or "") .. "   " .. dim(ns.AHLEDGER_CREDIT)) end
 end
 
 ns.RefreshWrits = ns.Timed("Writs tab", ns.RefreshWrits)

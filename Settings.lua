@@ -30,8 +30,8 @@ local PAGES = {
         { key = "actionSeconds", label = "Seconds per craft", kind = "number", suffix = "seconds", min = 1, max = 60,
           help = "Used for the rough profit per hour." },
         { key = "source", label = "Auction house prices from", kind = "choice", after = recalc, options = {
-            { "auto", "Auto" }, { "own", "My scans" }, { "Auctionator", "Auctionator" }, { "TSM", "TSM" }, { "Auctioneer", "Auctioneer" } },
-          help = "Auto uses your own scans while they're fresh, then other auction addons." },
+            { "auto", "Auto" }, { "own", "My scans" }, { "AHledger", "AHledger" }, { "Auctionator", "Auctionator" }, { "TSM", "TSM" }, { "Auctioneer", "Auctioneer" } },
+          help = "Auto uses your own scans while they're fresh, then other auction addons: AHledger first (prices from every player's scans, credited as Prices from AHledger, ahledger.com), then Auctionator, TSM and Auctioneer." },
       } },
       { name = "Flips and deals", rules = true, rows = {
         { sub = "Vendor flips" },

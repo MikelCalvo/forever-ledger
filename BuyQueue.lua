@@ -2316,7 +2316,7 @@ local function fillLane(L)
     L.pulsing = nil
     L:SetScript("OnUpdate", nil)
   end
-  L.title:SetText(ns.LocalizeText("%s  |cff888888%d to buy|r%s"):format(d.title, ready,
+  L.title:SetText(ns.LocalizeText("%s  |cff888888%d to buy|r%s"):format(ns.LocalizeText(d.title), ready,
     wheel and ("   |cff" .. (lit and hex(c) or "888888") .. (d.key == "flips" and "scroll anywhere here to buy|r" or "scroll here to buy|r"))
       or "   |cff888888click Buy, or tick Scroll to buy|r"))
   local a, b, label
@@ -3806,8 +3806,9 @@ local function ensureSide()
   side.tabs = {}
   local x = 4
   for _, t in ipairs(TABS) do
-    local b = T:Tab(strip, t[2], function() showTab(t[1]) end)
-    b.key = t[1]
+    local key, label = t[1], t[2]
+    local b = T:Tab(strip, label, function() showTab(key) end)
+    b.key = key
     b:SetPoint("LEFT", x, 0)
     x = x + b:GetWidth()
     side.tabs[#side.tabs + 1] = b

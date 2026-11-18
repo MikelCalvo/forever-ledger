@@ -42,6 +42,7 @@ UI.lua
 Help.lua
 Welcome.lua
 Sessions.lua
+SessionWindow.lua
 Training.lua
 Sync.lua
 Version.lua
