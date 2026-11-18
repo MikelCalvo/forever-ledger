@@ -254,7 +254,7 @@ local tracker, ticker
 -- under it (settings.sessionFull; Frank, November 17: "a mini version... then the full
 -- version that lets people see all the data live"): gold by where it came from, every
 -- item looted with its worth (hover one for its tooltip), and your usual pace.
-local W_MINI, W_SMALL = 224, 210
+local W_MINI, W_SMALL = 244, 210   -- (wider for Reset, November 18: four icons and the time with "paused")
 local FLASH_SECONDS = 4   -- (new loot shows on the tracker and is lit in the window this long)
 local LOOT_NOTE = "Loot counts at the better of the auction house (after the cut) and a vendor (Settings, Sessions: vendor only), and only while you still have it: what you sell during the session counts once, as the gold it brought."
 local function fullView() return ns.SessionWindowShown and ns.SessionWindowShown() end   -- (SessionWindow.lua)
@@ -298,6 +298,7 @@ local function layoutTracker(f)
   f.loot:SetShown(not small)
   f.stop:SetShown(not small)
   f.pause:SetShown(not small)
+  f.reset:SetShown(not small)
   f.more:SetShown(not small)
   f.more:SetIcon(fullView() and "less" or "more", fullView() and "Less" or "More",
     fullView() and "Closes the session window." or "Opens the session window: a graph of your pace, every item looted (sort by any column), gold by where it came from and your past sessions.")
@@ -364,8 +365,10 @@ local function buildTracker()
   -- counted until Carry on (the play icon).
   f.pause = iconButton(f, "pause", "Pause", "The clock stops and nothing is counted until you carry on.", function() ns:PauseGeneralSession() end)
   f.pause:SetPoint("RIGHT", f.stop, "LEFT", -2, 0)
+  f.reset = iconButton(f, "reset", "Reset", "Clears what this session has counted and starts its clock again from zero. Asks first.", function() ns:ResetGeneralSession() end)
+  f.reset:SetPoint("RIGHT", f.pause, "LEFT", -2, 0)
   f.more = iconButton(f, "more", "More", "", function() ns:ToggleSessionWindow() end)
-  f.more:SetPoint("RIGHT", f.pause, "LEFT", -2, 0)
+  f.more:SetPoint("RIGHT", f.reset, "LEFT", -2, 0)
   layoutTracker(f)
   f:SetScript("OnEnter", function(self)
     local ahlBefore = ns.AHledgerUses and ns.AHledgerUses() or 0
@@ -394,7 +397,7 @@ local function buildTracker()
     if #st.items > 5 then GameTooltip:AddLine(("  and %d more: the arrow (More) shows them all"):format(#st.items - 5), 0.6, 0.6, 0.6) end
     GameTooltip:AddLine(LOOT_NOTE, 0.6, 0.6, 0.6, true)
     if ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore then GameTooltip:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5) end
-    GameTooltip:AddLine(ns.db.settings.sessionSmall and "Drag to move. Right-click for the bigger view, with More (the arrow), Pause and Stop."
+    GameTooltip:AddLine(ns.db.settings.sessionSmall and "Drag to move. Right-click for the bigger view, with More (the arrow), Reset, Pause and Stop."
       or "Drag to move. Right-click to fold it to one line. The arrow shows everything as it comes in.", 0.6, 0.6, 0.6, true)
     GameTooltip:Show()
   end)
@@ -440,6 +443,29 @@ function ns:PauseGeneralSession(on)
   elseif not on and s.paused then
     s.paused, s.resume = nil, time()
   end
+  if drawTracker then drawTracker() end
+end
+
+-- Start over (Frank, November 18: a reset button, with a confirm): what this session
+-- counted goes, not kept in your sessions, and the clock starts again from zero. A paused
+-- one carries on. Asks first unless sure is true.
+StaticPopupDialogs["FOREVER_LEDGER_SESSION_RESET"] = {
+  text = "Reset the session?\n\nWhat it has counted so far (%s) is cleared and the clock starts again from zero. It isn't kept in your sessions.",
+  button1 = "Reset", button2 = CANCEL or "Cancel",
+  OnAccept = function() ns:ResetGeneralSession(true) end,
+  timeout = 0, whileDead = true, hideOnEscape = true, showAlert = true,
+}
+function ns:ResetGeneralSession(sure)
+  local s = live()
+  if not s or s.char ~= ns.CharKey() then ns:Print("No session is running here. /fl session start begins one."); return end
+  if not sure then
+    local st = ns:SessionTotals(s)
+    StaticPopup_Show("FOREVER_LEDGER_SESSION_RESET", ("%s, gold %s, loot %s"):format(duration(st.secs), signed(st.gained), ns.Money(st.loot)))
+    return
+  end
+  ns.db.liveSession = { t = time(), resume = time(), active = 0, char = s.char, money = {}, loot = {} }
+  ns.sessionLastLoot = nil
+  ns:Print("Session reset: counting again from now.")
   if drawTracker then drawTracker() end
 end
 

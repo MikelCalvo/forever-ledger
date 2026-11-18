@@ -120,6 +120,31 @@ T.test("Sessions: pause stops the clock and the counting", function()
   end)
 end)
 
+T.test("Sessions: reset asks first, then starts over from zero", function()
+  withValues(function()
+    local s = session({ [A] = 2 })
+    S.bags[A] = 2
+    ns:SessionMoney("loot", 500)
+    ns:PauseGeneralSession(true)
+    local asked
+    local realShow = StaticPopup_Show
+    StaticPopup_Show = function(which) asked = which end
+    ns:ResetGeneralSession()
+    StaticPopup_Show = realShow
+    T.eq(asked, "FOREVER_LEDGER_SESSION_RESET", "asks first")
+    T.eq(ns.db.liveSession, s, "nothing changed yet")
+    local kept = #(ns.db.sessions or {})
+    StaticPopupDialogs.FOREVER_LEDGER_SESSION_RESET.OnAccept()
+    local st = ns:SessionTotals()
+    T.ok(ns.db.liveSession ~= s, "a new one")
+    T.eq(st.gained, 0)
+    T.eq(st.loot, 0)
+    T.eq(st.secs, 1, "the clock from zero")
+    T.eq(ns.db.liveSession.paused, nil, "counting again")
+    T.eq(#(ns.db.sessions or {}), kept, "the old one isn't kept")
+  end)
+end)
+
 T.test("Sessions: gold an hour after 5 minutes, usual and best pace", function()
   T.eq(ns.SessionRate({ secs = 200, earned = 100 }), nil, "too short")
   T.eq(ns.SessionRate({ secs = 3600, earned = 1000, spent = 200, loot = 400 }), 1200, "gold and loot")
