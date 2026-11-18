@@ -217,6 +217,33 @@ local W_MINI, W_SMALL = 224, 210
 local LOOT_NOTE = "Loot counts at the better of the auction house (after the cut) and a vendor (Settings, Sessions: vendor only), and only while you still have it: what you sell during the session counts once, as the gold it brought."
 local function fullView() return ns.db.settings.sessionFull and not ns.db.settings.sessionSmall end
 
+-- A small icon button with its name and what it does on hover; SetIcon changes both (Pause / Carry on).
+local ICONS = "Interface\\AddOns\\ForeverLedger\\media\\icons\\session-"
+local function iconButton(parent, icon, name, what, onClick)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(18, 18)
+  b.tex = b:CreateTexture(nil, "ARTWORK")
+  b.tex:SetSize(12, 12)
+  b.tex:SetPoint("CENTER")
+  local function tint(on) b.tex:SetVertexColor(on and 1 or 0.75, on and 0.85 or 0.75, on and 0.45 or 0.75) end
+  function b:SetIcon(i, n, w)
+    if i ~= b.icon then b.icon = i; b.tex:SetTexture(ICONS .. i) end
+    b.name, b.what = n, w or b.what
+  end
+  b:SetIcon(icon, name, what)
+  tint(false)
+  b:SetScript("OnClick", onClick)
+  b:SetScript("OnEnter", function(self)
+    tint(true)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:AddLine(self.name, 1, 1, 1)
+    if self.what then GameTooltip:AddLine(self.what, 0.7, 0.7, 0.7, true) end
+    GameTooltip:Show()
+  end)
+  b:SetScript("OnLeave", function() tint(false); GameTooltip:Hide() end)
+  return b
+end
+
 local function layoutTracker(f)
   local small = ns.db.settings.sessionSmall
   f:SetSize(small and W_SMALL or W_MINI, small and 22 or 64)
@@ -230,7 +257,8 @@ local function layoutTracker(f)
   f.stop:SetShown(not small)
   f.pause:SetShown(not small)
   f.more:SetShown(not small)
-  f.more:SetText(fullView() and "Less" or "More")
+  f.more:SetIcon(fullView() and "less" or "more", fullView() and "Less" or "More",
+    fullView() and "Back to the small tracker." or "Shows everything as it comes in: gold by where it came from, every item looted and your usual pace.")
   f.smallRate:SetShown(small)
   if f.details then f.details:SetShown(fullView()) end
 end
@@ -430,21 +458,20 @@ local function buildTracker()
   f.smallRate = T:Text(f, 11, { 1, 0.82, 0, 1 })
   f.smallRate:SetPoint("RIGHT", -8, 0)
   f.smallRate:SetJustifyH("RIGHT")
-  f.stop = T:Button(f, "Stop", 40, function() ns:StopGeneralSession() end, 16)
-  f.stop:SetPoint("TOPRIGHT", -5, -6)
-  f.stop:GetFontString():SetFont(T.font, 10, "")
+  -- Small icons, not words (Frank, AN29, November 17: "More Pause Stop" ran over the time;
+  -- media/icons/session-*, drawn by tools/make-icons.ps1). A hover names each one.
+  f.stop = iconButton(f, "stop", "Stop", "Ends the session and puts its summary in chat and the Ledger's Sessions.", function() ns:StopGeneralSession() end)
+  f.stop:SetPoint("TOPRIGHT", -5, -5)
   -- Pause (Blackthornes Farmer has one; Frank, November 17): the clock stops and nothing is
-  -- counted until Go on.
-  f.pause = T:Button(f, "Pause", 44, function() ns:PauseGeneralSession() end, 16)
-  f.pause:SetPoint("RIGHT", f.stop, "LEFT", -4, 0)
-  f.pause:GetFontString():SetFont(T.font, 10, "")
-  f.more = T:Button(f, "More", 36, function()
+  -- counted until Carry on (the play icon).
+  f.pause = iconButton(f, "pause", "Pause", "The clock stops and nothing is counted until you carry on.", function() ns:PauseGeneralSession() end)
+  f.pause:SetPoint("RIGHT", f.stop, "LEFT", -2, 0)
+  f.more = iconButton(f, "more", "More", "Shows everything as it comes in: gold by where it came from, every item looted and your usual pace.", function()
     ns.db.settings.sessionFull = not ns.db.settings.sessionFull or nil
     layoutTracker(f)
     drawTracker()
-  end, 16)
-  f.more:SetPoint("RIGHT", f.pause, "LEFT", -4, 0)
-  f.more:GetFontString():SetFont(T.font, 10, "")
+  end)
+  f.more:SetPoint("RIGHT", f.pause, "LEFT", -2, 0)
   f.details = buildDetails(f)
   layoutTracker(f)
   f:SetScript("OnEnter", function(self)
@@ -470,10 +497,10 @@ local function buildTracker()
       local it = st.items[k]
       GameTooltip:AddDoubleLine(("  %d x %s"):format(it.n, ns.ItemName(it.id) or "?"), ns.Money(it.value), 0.7, 0.7, 0.7, 1, 1, 1)
     end
-    if #st.items > 5 then GameTooltip:AddLine(("  and %d more: More shows them all"):format(#st.items - 5), 0.6, 0.6, 0.6) end
+    if #st.items > 5 then GameTooltip:AddLine(("  and %d more: the arrow (More) shows them all"):format(#st.items - 5), 0.6, 0.6, 0.6) end
     GameTooltip:AddLine(LOOT_NOTE, 0.6, 0.6, 0.6, true)
-    GameTooltip:AddLine(ns.db.settings.sessionSmall and "Drag to move. Right-click for the bigger view: More, Pause and Stop are there."
-      or "Drag to move. Right-click to fold it to one line. More shows everything as it comes in.", 0.6, 0.6, 0.6, true)
+    GameTooltip:AddLine(ns.db.settings.sessionSmall and "Drag to move. Right-click for the bigger view, with More (the arrow), Pause and Stop."
+      or "Drag to move. Right-click to fold it to one line. The arrow shows everything as it comes in.", 0.6, 0.6, 0.6, true)
     GameTooltip:Show()
   end)
   f:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -488,7 +515,8 @@ drawTracker = function()
   tracker.time:SetText(duration(st.secs) .. (s.paused and " |cffffd100paused|r" or ""))
   tracker.rate:SetText(st.secs >= RATE_SECONDS and (rate .. " |cffbbbbbban hour|r") or "|cff888888an hour: after 5 min|r")   -- (shorter: the longer text ran past the tracker, October 4)
   tracker.smallRate:SetText(s.paused and "|cffffd100paused|r" or (rate .. " |cffbbbbbb/h|r"))
-  tracker.pause:SetText(s.paused and "Go on" or "Pause")
+  tracker.pause:SetIcon(s.paused and "play" or "pause", s.paused and "Carry on" or "Pause",
+    s.paused and "The clock runs and counting starts again." or "The clock stops and nothing is counted until you carry on.")
   tracker.gold:SetText(("|cff999999Gold|r |cff%s%s|r"):format(st.gained >= 0 and "7fd39c" or "ee8597", signed(st.gained)))
   -- What just came in, for a few seconds (as Blackthornes Farmer's "+2").
   local last = ns.sessionLastLoot

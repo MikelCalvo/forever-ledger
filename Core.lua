@@ -585,7 +585,14 @@ end
 
 local overBase, overOld   -- (each addon's count of frames over 100 ms: a second ago at most, and the one before)
 local watch = CreateFrame("Frame")
+local lastTick   -- (our own clock at the last OnUpdate)
 watch:SetScript("OnUpdate", function(_, elapsed)
+  -- The time since our last OnUpdate, on the same clock as our share: the game's elapsed is
+  -- the frame before, so a freeze and the work that caused it landed on different lines
+  -- (Frank's AN30, November 17: "463 ms; Forever Ledger 559 ms", then a 1124 ms freeze at 3 ms).
+  local now = clock()
+  if lastTick then elapsed = (now - lastTick) / 1000 end
+  lastTick = now
   if elapsed >= FREEZE_SECONDS and not loading then
     local tip
     if GameTooltip and GameTooltip:IsShown() and GameTooltip.GetItem then
