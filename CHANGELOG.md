@@ -6,7 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
-- **Always undercut by** works on Blizzard's Sell tab too (it only changed the Post tab): with the price helper on, the price box is filled with that much under the cheapest listing once the listings are in, or your own price when the cheapest is yours, and Undercut uses the same amount.
+- **Always undercut by** works on Blizzard's Sell tab too (it only changed the Post tab): with the price helper on, the price box is filled with that much under the cheapest listing once the listings are in, or your own price when the cheapest is yours, and Undercut uses the same amount. Putting the same item in again (another stack) fills it in again.
+- Booty Bay, Gadgetzan and Everlook are recognized in every game language (by the zone's map, not the English town name), so their scans are kept as neutral prices (GitHub #23).
+- Hovering a Waylaid Crate or a writ no longer hitches: a crate's materials are remembered by item number and its line kept for 30 seconds, and a writ's cost is kept until the next full scan (up to 5 minutes).
 
 ## [0.27.0] - 2026-11-19
 

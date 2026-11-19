@@ -1469,7 +1469,8 @@ ns:On("AUCTION_HOUSE_SHOW", function()
   -- Another market and another cut (15% at a neutral one): work values out again.
   if (was and true or false) ~= (ns.neutralAH and true or false) and ns.InvalidateValues then ns:InvalidateValues(true) end
   -- For checking which auction houses are neutral (/fl debug).
-  ns:Debug("Auction house:", GetSubZoneText() or "?", "/", GetZoneText() or "?", "auctioneer faction:",
+  ns:Debug("Auction house:", GetSubZoneText() or "?", "/", GetZoneText() or "?",
+    "map:", tostring(C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")), "auctioneer faction:",
     tostring(UnitFactionGroup("npc")), ns.neutralAH and "neutral" or "faction")
   if ns.neutralAH then
     ns:Print("Neutral auction house: prices seen here are kept separate from your faction's.")

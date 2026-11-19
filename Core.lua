@@ -456,9 +456,18 @@ end
 -- The auctioneer has no faction and stands in a town with a neutral auction house:
 -- Classic's goblin towns (Booty Bay confirmed, October 5). The Waylaid Crate trade posts'
 -- auctioneers were removed in the beta (owner, October 5).
+-- Found by the zone's map number first, so it works in every language (GitHub #23,
+-- November 19: an EU player's Booty Bay scans were saved as their faction's); the town
+-- names are English only. Classic's map numbers (Frank's saved vendors: Stormwind 1453,
+-- Elwynn 1429): Stranglethorn Vale 1434 (Booty Bay), Tanaris 1446 (Gadgetzan), Winterspring
+-- 1452 (Everlook), the only auction houses in those zones.
+local NEUTRAL_MAPS = { [1434] = true, [1446] = true, [1452] = true }
 local NEUTRAL_TOWNS = { ["Booty Bay"] = true, ["Gadgetzan"] = true, ["Everlook"] = true }
+ns.NEUTRAL_MAPS = NEUTRAL_MAPS
 function ns.IsNeutralAuctioneer()
   if not UnitExists("npc") or UnitFactionGroup("npc") then return false end
+  local map = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+  if map and NEUTRAL_MAPS[map] then return true end
   return NEUTRAL_TOWNS[GetSubZoneText() or ""] or NEUTRAL_TOWNS[GetMinimapZoneText and GetMinimapZoneText() or ""] or false
 end
 

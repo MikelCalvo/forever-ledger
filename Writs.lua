@@ -245,9 +245,13 @@ local function source(id)
   return s
 end
 
-local costs, costsAt = {}, 0
+-- Kept 5 minutes, or until the next full scan: worked out every 30 seconds, a writ's hover
+-- hitched again each time (Frank's AN30, November 19).
+local COST_KEEP = 300
+local costs, costsAt, costsScan = {}, -math.huge, nil
 function ns:WritCost(e)
-  if GetTime() - costsAt > 30 then wipe(costs); costsAt = GetTime() end
+  local scan = ns.db and ns.db.lastFullScan
+  if GetTime() - costsAt > COST_KEEP or scan ~= costsScan then wipe(costs); costsAt, costsScan = GetTime(), scan end
   local c = costs[e.item]
   if c and c.ahl then ns.ahledgerUses = (ns.ahledgerUses or 0) + 1 end   -- (AHledger's credit: Values.lua)
   if c == nil then

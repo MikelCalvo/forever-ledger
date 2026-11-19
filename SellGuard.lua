@@ -209,7 +209,9 @@ local function helperUpdate(h)
     if h.why ~= text then h.why = text; ns:Debug("Price helper: " .. text) end
   end
   if ns.db.settings.priceHelper == false then h.box:Hide(); why("hidden, switched off in Settings"); return end
-  if type(id) ~= "number" then h.box:Hide(); why("hidden, no item on the page"); return end
+  -- (The page emptied: the same item put in again is filled in again. Frank's AH8,
+  -- November 19: a stack of two filled, then one Silk Cloth put back in only matched.)
+  if type(id) ~= "number" then h.fillKey = nil; h.box:Hide(); why("hidden, no item on the page"); return end
   local rec = (ns.db.prices[ns.MarketKey()] or {})[id]
   local cheapest = rec and not rec.none and rec.m
   -- Gear: the cheapest of this version ("of the Monkey"), as Your auctions does; the
@@ -225,7 +227,11 @@ local function helperUpdate(h)
   -- The listings the page looked up now beat the last scan's.
   local liveCheapest, mine = liveListings(frame, id, loc)
   if liveCheapest then cheapest = liveCheapest end
-  autoFill(h, frame, id, id .. (link or ""), liveCheapest, mine)
+  -- Keyed by the bag slot as well: another stack of the same item is a new fill.
+  local okSlot, bag, slot = false, nil, nil
+  if loc and loc.GetBagAndSlot then okSlot, bag, slot = pcall(loc.GetBagAndSlot, loc) end
+  local where = okSlot and bag and (":" .. tostring(bag) .. "/" .. tostring(slot)) or ""
+  autoFill(h, frame, id, id .. (link or "") .. where, liveCheapest, mine)
   local stats = ns.PriceStats and ns:PriceStats(id, "month")
   local usual = stats and stats.points >= 3 and math.floor(stats.usual)
   if not (cheapest or usual) then

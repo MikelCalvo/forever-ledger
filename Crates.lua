@@ -119,9 +119,14 @@ end
 -- Prices
 ---------------------------------------------------------------------------
 -- Item names to IDs, from everything priced or named so far.
-local nameIndex, nameIndexTime = {}, 0
+-- Built again only for a name it doesn't know, at most once a minute: building it looks up
+-- every priced item (about 5,000), which made each crate hover hitch for 30 ms (Frank's
+-- AN30, November 19). Names found are saved with the crate as item IDs (CrateReport).
+local nameIndex, nameIndexTime = {}, -math.huge
 local function idForName(name)
-  if GetTime() - nameIndexTime > 30 then
+  if not name then return end
+  if nameIndex[name] then return nameIndex[name] end
+  if GetTime() - nameIndexTime > 60 then
     nameIndex, nameIndexTime = {}, GetTime()
     for id, n in pairs(ns.db.itemNames) do nameIndex[n] = id end
     for id in pairs(ns.db.prices[ns.MarketKey()] or {}) do
@@ -301,7 +306,10 @@ function ns:CrateReport(id)
   for _, parts in ipairs(info.bundles) do
     local b = { parts = {}, cost = 0, have = true }
     for _, p in ipairs(parts) do
-      local pid = idForName(p.name)
+      -- (p is the saved bundle part: its item ID is kept once found, so later looks, and
+      -- any language, don't need the name.)
+      local pid = p.id or idForName(p.name)
+      if pid and not p.id then p.id = pid end
       local cost = pid and ns:CostToBuy(pid, p.qty)
       local bags, bank, alts, byAlt = ns:ItemLocations(pid)
       local owned = bags + bank + alts
@@ -408,9 +416,19 @@ end)
 ---------------------------------------------------------------------------
 -- Tooltip line on crates
 ---------------------------------------------------------------------------
+-- Kept TIP_KEEP seconds per crate: the tooltip asks again on every redraw.
+local TIP_KEEP, tipCache = 30, {}
 function ns:CrateTooltipLine(id)
   if not ns.db.settings.crates then return end
   if not isCrate(id, ns.ItemName(id)) then return end
+  local c = tipCache[id]
+  if c and GetTime() - c.t < TIP_KEEP then return c.line or nil end
+  local line = ns:CrateTooltipText(id)
+  tipCache[id] = { t = GetTime(), line = line or false }
+  return line
+end
+
+function ns:CrateTooltipText(id)
   local r = ns:CrateReport(id)
   if not r or not r.cheapest then return end
   local parts = {}
