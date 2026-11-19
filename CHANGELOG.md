@@ -42,6 +42,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 - Full scans stopped just short of done, every time, when someone listed a piece of gear for over 214,748 gold (GitHub #22; the game can't format a number that big the usual way). Any price is saved now, and one item that can't be saved no longer stops the rest.
+- The sell suggestion on a stack compared the whole stack's vendor price with one item's auction price, so a stack of 5 potions said Sell: Vendor (12s 50c) when the auction house brings nearly three times as much each. It now compares one with one, as Worth to you does.
 - The Crates tab was empty in other languages than English (a German player on CurseForge): crates are now found by their item number (filled ones too, so a crate's shopping list still counts down), and their bundles read from the tooltip in any language.
 - Sessions: an auction sale counts against this session's loot only when it was posted during the session (collecting an older auction's money took new loot of the same item off), and a sale named with random stats (of Strength) now matches the looted item, so it isn't counted twice.
 - Sessions: collecting an old auction's gold no longer takes this session's loot of the same item off while it's still listed. A sale counts against the session's loot only if its mail came after you posted that item.
