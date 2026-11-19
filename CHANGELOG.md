@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-11-19
+
+### Highlights
+- Δ **Gold making**: every way to make gold in one list (crafts that sell, conversions, vendor flips, deals, disenchanting, Booty Bay) with what it costs, brings and how many times you could do it. Click a craft for the cheapest way to get its materials. Replaces the Shuffles and Deals tabs.
+- Δ **Auction house tabs**: Forever Ledger's own Buy, Post and My auctions tabs in the auction house window. Post prices everything in your bags from the listings and your rules (match the cheapest, or always undercut by your amount); Post, Skip, or scroll to post the next one.
+- + **Groups**: built-in groups that sort themselves by item type (cloth, herbs, gear by level...) and your own, each with rules for posting, buying, vendoring and crafting.
+- + **Professions and Writs**: every recipe of your professions, even ones you haven't seen yet, with Trainers, Crates and all 150 Craftsman's Writ orders beside them (the cheapest way to fill each, and the cost per reputation).
+- + **Session window**: a pace graph, every item looted and your past sessions. Pause and Reset on the tracker, and loot you sell during a session counts once.
+- + **AHledger prices**: with the AHledger addon installed, its prices fill in where your own scans are missing or old.
+- ✓ **Full scans finish again**: a piece of gear listed for over 214,748 gold stopped them just short of done (GitHub #22).
+
 ### Added
 - **Reset** on the session tracker (the circle arrow, or `/fl session reset`): clears what the session has counted and starts its clock again from zero, after asking. The old one isn't kept.
 - **Always undercut by** (Settings, Selling, Post tab): the Post tab prices everything that much under the cheapest listing that isn't yours (type 1 for 1 copper), unless the item's group has a post rule of its own. When the cheapest listing is yours, the Post tab matches it instead of undercutting yourself (a player on CurseForge).
