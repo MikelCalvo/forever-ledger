@@ -113,6 +113,10 @@ local PAGES = {
           help = "The Buy queue never takes your gold below this, so there's always enough for repairs, training or a mount. Type 100 for 100g. \"off\": it may spend all of it. (The most to spend each visit is on the Buy queue itself.)" },
       } },
       { name = "Selling", rows = {
+        { sub = "Post tab" },
+        { key = "postUndercut", label = "Always undercut by", kind = "money", plainUnit = "c",
+          after = function() if ns.RefreshPost and AuctionHouseFrame and AuctionHouseFrame:IsShown() then ns:RefreshPost() end end,
+          help = "The Post tab prices everything this much under the cheapest listing that isn't yours, and so does Blizzard's Sell tab while the price helper is on (it fills the price box once the listings are in; you can still change it). Type 1 for 1 copper. \"off\": the same price as the cheapest. When the cheapest is yours, yours is matched, never undercut. A group with its own post rule (Groups tab) keeps its own undercut." },
         { sub = "Sell tab" },
         { key = "priceHelper", label = "Price helper on the Sell tab", kind = "check",
           help = "Under the Create Auction button: the usual price and the cheapest now, and buttons to fill in 1 copper under the cheapest or the usual price. Says when the cheapest is well below usual." },
