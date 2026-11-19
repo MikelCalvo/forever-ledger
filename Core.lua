@@ -511,11 +511,16 @@ local framePart, framePartMs, frameTipItem = nil, 0, nil   -- its slowest part (
 -- timed task or event (depth > 0): only the outermost counts toward the frame (Codex review,
 -- November 17: a 100 ms task with an 80 ms timed step inside showed as 180 ms).
 local depth = 0
-local function note(label, ms, sub)
+-- kb: memory it took meanwhile (leftovers the game clears up later; Frank's AN30, November
+-- 19: 148 MB before clearing against 44 MB in use, and freezes with almost none of our time).
+local function memKB() return collectgarbage("count") end
+ns.MemKB = memKB
+local function note(label, ms, sub, kb)
   sub = sub or depth > 0
   local p = ns.perf[label]
-  if not p then p = { n = 0, ms = 0, max = 0 }; ns.perf[label] = p end
+  if not p then p = { n = 0, ms = 0, max = 0, kb = 0 }; ns.perf[label] = p end
   p.n, p.ms = p.n + 1, p.ms + ms
+  if kb and kb > 0 then p.kb = (p.kb or 0) + kb end
   if ms > p.max then p.max = ms end
   if sub then
     if ms > framePartMs then framePart, framePartMs = label, ms end
@@ -599,6 +604,7 @@ end
 local overBase, overOld   -- (each addon's count of frames over 100 ms: a second ago at most, and the one before)
 local watch = CreateFrame("Frame")
 local lastTick   -- (our own clock at the last OnUpdate)
+local lastMem    -- (all addons' memory then, KB)
 watch:SetScript("OnUpdate", function(_, elapsed)
   -- The time since our last OnUpdate, on the same clock as our share: the game's elapsed is
   -- the frame before, so a freeze and the work that caused it landed on different lines
@@ -606,6 +612,11 @@ watch:SetScript("OnUpdate", function(_, elapsed)
   local now = clock()
   if lastTick then elapsed = (now - lastTick) / 1000 end
   lastTick = now
+  -- Memory cleared in this frame (all addons share one pile): a big drop in a frozen frame
+  -- means the game was clearing up leftovers then (Frank's AN30, November 19).
+  local mem = memKB()
+  local cleared = lastMem and lastMem - mem or 0
+  lastMem = mem
   if elapsed >= FREEZE_SECONDS and not loading then
     local tip
     if GameTooltip and GameTooltip:IsShown() and GameTooltip.GetItem then
@@ -613,6 +624,7 @@ watch:SetScript("OnUpdate", function(_, elapsed)
       tip = ok and link and ns.ItemIDFromLink and ns.ItemIDFromLink(link) or nil
     end
     local e = ns.NoteFrame(elapsed, frameOurs, frameTop, frameTopMs, tip or frameTipItem, profilerTop("LastTime", 3), framePart, framePartMs)
+    if e and cleared >= 1024 then e.clearedMB = math.floor(cleared / 1024 + 0.5) end
     -- Which addons had a frame over 100 ms in it: their counts a second later against the
     -- counts kept every second before it (the per-frame times read now aren't the frozen
     -- frame's: Frank's AN30, November 17, every addon showed 15 ms or less).
@@ -660,11 +672,11 @@ function ns.FrameShare() return frameOurs end
 -- Wrap a function so its time is counted under a label.
 function ns.Timed(label, fn)
   return function(...)
-    local t = clock()
+    local t, m = clock(), memKB()
     depth = depth + 1
     local a, b, c, d = fn(...)
     depth = math.max(0, depth - 1)
-    note(label, clock() - t)
+    note(label, clock() - t, nil, memKB() - m)
     return a, b, c, d
   end
 end
@@ -689,14 +701,14 @@ local function withoutSecrets(...)
 end
 
 local function dispatch(list, event, ...)
-  local t = clock()
+  local t, m = clock(), memKB()
   depth = depth + 1
   for i = 1, #list do
     local ok, err = pcall(list[i], ...)
     if not ok then geterrorhandler()(err) end
   end
   depth = math.max(0, depth - 1)
-  note(event, clock() - t)
+  note(event, clock() - t, nil, memKB() - m)
 end
 
 frame:SetScript("OnEvent", function(_, event, ...)
@@ -722,8 +734,22 @@ function ns.PerfLines(n)
   for i = 1, math.min(n, #rows) do
     local r = rows[i]
     lines[i] = ("%s: slowest %.0f ms, %d times, %.0f ms total"):format(r.label, r.p.max, r.p.n, r.p.ms)
+      .. ((r.p.kb or 0) >= 1024 and (", %.1f MB of leftovers"):format(r.p.kb / 1024) or "")
   end
   return lines
+end
+
+-- The tasks that left the most memory behind, most first: "Label 12.3 MB, ...", or nil.
+function ns.LeftoverLine(n)
+  local rows = {}
+  for label, p in pairs(ns.perf) do
+    if (p.kb or 0) >= 1024 then rows[#rows + 1] = { label = label, kb = p.kb } end
+  end
+  if #rows == 0 then return end
+  table.sort(rows, function(a, b) return a.kb > b.kb end)
+  local out = {}
+  for i = 1, math.min(n or 4, #rows) do out[i] = ("%s %.1f MB"):format(rows[i].label, rows[i].kb / 1024) end
+  return "Most leftovers made: " .. table.concat(out, ", ")
 end
 
 -- The freeze watch's report (tested): the newest freezes first, each with Forever Ledger's
@@ -749,6 +775,7 @@ function ns.FreezeLines(n)
       elseif e.addons then
         parts[#parts + 1] = "; slowest addons: " .. table.concat(e.addons, ", ")
       end
+      if e.clearedMB then parts[#parts + 1] = ("; |cffffd100the game cleared %d MB of leftover memory in it|r"):format(e.clearedMB) end
       if e.item then parts[#parts + 1] = "; tooltip on " .. (ns.ItemName(e.item) or ("item " .. e.item)) end
       lines[#lines + 1] = "    " .. table.concat(parts, " ")
     end
@@ -773,6 +800,8 @@ function ns:PrintPerf(reset)
   end
   ns:Print(("Time used by Forever Ledger over the last %d seconds, slowest single moment first:"):format(GetTime() - ns.perfSince))
   for _, line in ipairs(ns.PerfLines(12)) do print("  " .. line) end
+  local left = ns.LeftoverLine(4)
+  if left then print("  " .. left) end
   for _, line in ipairs(ns.FreezeLines(8)) do print(line) end
   -- Memory and loading, to see whether the data files (ClassicItems.lua) cost much.
   local update = (C_AddOns and C_AddOns.UpdateAddOnMemoryUsage) or UpdateAddOnMemoryUsage

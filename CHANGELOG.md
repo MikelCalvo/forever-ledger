@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- Quick disenchant: the item you point at with the keys held shows **DE** in blue in its corner, and its tooltip says to click (also with other bag addons).
+- The price helper says when Always undercut by didn't change the price because a vendor pays more below it.
+- `/fl perf` names the parts of the addon that leave the most memory behind, and says when a freeze was the game clearing leftover memory.
+
 ### Fixed
 - **Always undercut by** works on Blizzard's Sell tab too (it only changed the Post tab): with the price helper on, the price box is filled with that much under the cheapest listing once the listings are in, or your own price when the cheapest is yours, and Undercut uses the same amount. Putting the same item in again (another stack) fills it in again.
 - Booty Bay, Gadgetzan and Everlook are recognized in every game language (by the zone's map, not the English town name), so their scans are kept as neutral prices (GitHub #23).

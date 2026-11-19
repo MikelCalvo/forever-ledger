@@ -69,6 +69,12 @@ end
 -- Hold the key and click in your bags
 ---------------------------------------------------------------------------
 local over   -- the button over a bag slot
+local DE_BLUE = { 0.35, 0.65, 1 }
+local tipBuild, lineIn = 0, nil   -- (the item tooltip's build count, and the build our line is in)
+local function tipLine(tt)
+  tt:AddLine(("Click to disenchant it (%s held)."):format(keyOf().name), DE_BLUE[1], DE_BLUE[2], DE_BLUE[3], true)
+  lineIn = tipBuild
+end
 
 local function overlay()
   if over then return over end
@@ -77,12 +83,19 @@ local function overlay()
   over:Hide()
   local glow = over:CreateTexture(nil, "OVERLAY")
   glow:SetAllPoints()
-  glow:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.25)
+  glow:SetColorTexture(DE_BLUE[1], DE_BLUE[2], DE_BLUE[3], 0.22)
+  -- "DE" in blue in the slot's bottom left (Frank's AN26, November 19: with EllesmereUI's
+  -- bags he couldn't see the light, nor the tooltip line).
+  over.label = over:CreateFontString(nil, "OVERLAY")
+  over.label:SetFont(T.font or STANDARD_TEXT_FONT, 12, "OUTLINE")
+  over.label:SetPoint("BOTTOMLEFT", 2, 2)
+  over.label:SetTextColor(DE_BLUE[1], DE_BLUE[2], DE_BLUE[3])
+  over.label:SetText("DE")
   over:SetScript("OnEnter", function(self)
     if not self.bag then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetBagItem(self.bag, self.slot)
-    GameTooltip:AddLine(("Click to disenchant it (%s held)."):format(keyOf().name), T.accent[1], T.accent[2], T.accent[3], true)
+    tipLine(GameTooltip)
     GameTooltip:Show()
   end)
   over:SetScript("OnLeave", function(self)
@@ -111,7 +124,7 @@ local function bagSlotOf(owner)
 end
 
 -- Pointing at a bag item with the key held: cover the slot with the disenchant button.
-local function tryArm()
+local function tryArm(fromTooltip)
   local s = S()
   if not s.quickDE or InCombatLockdown() or not keyOf().test() then return end
   if not GameTooltip:IsShown() then return end
@@ -127,10 +140,16 @@ local function tryArm()
   b.bag, b.slot = bag, slot
   b:SetAttribute("macrotext", macro(bag, slot))
   b:Show()
+  -- The line on the tooltip already showing (once per tooltip: the key pressed after the
+  -- tooltip came up adds it with Show, which resizes it).
+  if lineIn ~= tipBuild then
+    tipLine(GameTooltip)
+    if not fromTooltip then GameTooltip:Show() end
+  end
 end
 
 local function onItemTooltip(tt)
-  if tt == GameTooltip then tryArm() end
+  if tt == GameTooltip then tipBuild = tipBuild + 1; tryArm(true) end
 end
 if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
   TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, onItemTooltip)

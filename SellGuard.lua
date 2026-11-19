@@ -181,16 +181,19 @@ end
 local FILL_SECONDS, FILL_WAIT = 3, 10
 local function autoFill(h, frame, id, key, cheapest, mine)
   local by = ns.db.settings.postUndercut
-  if not (type(by) == "number" and by > 0) then h.fillKey = nil; return end
+  if not (type(by) == "number" and by > 0) then h.fillKey, h.fillNote = nil, nil; return end
   local now = GetTime()
-  if h.fillKey ~= key then h.fillKey, h.fillSeen, h.fillUntil = key, now, nil end
+  if h.fillKey ~= key then h.fillKey, h.fillSeen, h.fillUntil, h.fillNote = key, now, nil, nil end
   if not (cheapest or mine) then return end   -- the listings aren't in yet
+  local p = ns.PostPrice({ undercut = by }, nil, cheapest, ns.PostVendorFloor and ns:PostVendorFloor(id), mine)
+  -- Why the box wasn't changed, on the helper (Frank's AH8, November 19: Curiously Tasty
+  -- Omelet, 1s 50c from a vendor and 1s 50c the cheapest, looked like the setting failing).
+  h.fillNote = p.skip and p.floor and ("Not undercut: under %s a vendor pays more."):format(ns.Money(p.floor)) or nil
   if not h.fillUntil then
     if now - h.fillSeen > FILL_WAIT then return end
     h.fillUntil = now + FILL_SECONDS
   end
   if now > h.fillUntil then return end
-  local p = ns.PostPrice({ undercut = by }, nil, cheapest, ns.PostVendorFloor and ns:PostVendorFloor(id), mine)
   if not p.price or p.skip then return end
   local current = call(frame, "GetUnitPrice") or call(frame.PriceInput, "GetAmount")
   if current ~= p.price then
@@ -250,7 +253,9 @@ local function helperUpdate(h)
   if usual then parts[#parts + 1] = "Usual " .. ns.Money(usual) end
   if cheapest then parts[#parts + 1] = "cheapest now " .. ns.Money(cheapest) end
   local dumped = usual and cheapest and cheapest < usual * DUMP
-  h.text:SetText(table.concat(parts, "   ") .. (dumped and "\n|cffffd100Well below usual: you may do better waiting.|r" or ""))
+  -- (Two lines at most: the reason it wasn't undercut wins.)
+  local second = h.fillNote or (dumped and "Well below usual: you may do better waiting.")
+  h.text:SetText(table.concat(parts, "   ") .. (second and ("\n|cffffd100" .. second .. "|r") or ""))
   h.under_b:SetText(h.under and ("Undercut " .. ns.MoneyPlain(h.under)) or "Undercut")
   h.under_b:SetEnabled(h.under ~= nil)
   h.under_b:SetWidth(h.under_b:GetFontString():GetStringWidth() + 16)

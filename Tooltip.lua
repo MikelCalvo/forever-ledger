@@ -217,10 +217,12 @@ local function addLines(tt, id, forceFull, copyPrice)
     tt:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5)
   end
   local function usedAHledger() return ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore end
+  local lapMem = ns.MemKB and ns.MemKB()
   local function lap(label)
     local now = clock()
-    if ns.PerfNote then ns.PerfNote("Tooltip: " .. label, now - lapAt, true) end
-    lapAt = now
+    local mem = ns.MemKB and ns.MemKB()
+    if ns.PerfNote then ns.PerfNote("Tooltip: " .. label, now - lapAt, true, mem and lapMem and mem - lapMem) end
+    lapAt, lapMem = now, mem
   end
   ns:RememberItem(id)
   if tt == GameTooltip then
