@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **Always undercut by** works on Blizzard's Sell tab too (it only changed the Post tab): with the price helper on, the price box is filled with that much under the cheapest listing once the listings are in, or your own price when the cheapest is yours, and Undercut uses the same amount.
+
 ## [0.27.0] - 2026-11-19
 
 ### Highlights
