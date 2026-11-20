@@ -63,3 +63,58 @@ T.test("Languages: Arcane Salvager and riding by the game's own names", function
   ns.SpellName = real
   if not ok then error(err, 0) end
 end)
+
+T.test("Languages: two entries for one profession merge, keeping every recipe", function()
+  -- (Codex review, November 19: the English entry was kept whole and newer recipes saved
+  -- under the game's name were dropped.)
+  local profs = {
+    Enchanting = { rank = 150, max = 150, updated = 100, recipes = { [771001] = { n = "old" }, [771003] = { n = "old copy" } } },
+    Verzauberkunst = { rank = 160, max = 225, updated = 200, recipes = { [771002] = { n = "new" }, [771003] = { n = "new copy" } } },
+  }
+  T.ok(ns.MoveProfessionKey(profs, "Verzauberkunst", "Enchanting"))
+  local p = profs.Enchanting
+  T.eq(profs.Verzauberkunst, nil)
+  T.ok(p.recipes[771001] and p.recipes[771002], "both entries' recipes kept")
+  T.eq(p.recipes[771003].n, "new copy", "the newer entry's copy of a shared recipe")
+  T.eq(p.rank, 160); T.eq(p.max, 225); T.eq(p.updated, 200)
+end)
+
+T.test("Languages: a partner's professions under a known translated name are moved, unknown ones kept", function()
+  local saved = ns.db.profAliases
+  ns.db.profAliases = { ["Schneiderei"] = "Tailoring" }
+  ns.db.chars["Testpartner Zwei-PvE"] = { profs = { Schneiderei = { rank = 75, updated = 5, recipes = { [5] = {} } }, Unbekannt = { rank = 1, recipes = {} } } }
+  local ok, err = pcall(function()
+    T.ok(ns.NormalizeProfessions(ns.db))
+    local c = ns.db.chars["Testpartner Zwei-PvE"]
+    T.eq(c.profs.Tailoring.rank, 75)
+    T.eq(c.profs.Schneiderei, nil)
+    T.ok(c.profs.Unbekannt, "a name not known yet stays")
+    T.eq(ns.NormalizeProfessions(ns.db), false, "nothing more to move")
+  end)
+  ns.db.chars["Testpartner Zwei-PvE"], ns.db.profAliases = nil, saved
+  if not ok then error(err, 0) end
+end)
+
+T.test("Languages: a channel number learned from chat isn't trusted once the channel changed", function()
+  -- (Codex review, November 19: Trade left and its number reused for a custom channel.)
+  local realChat = C_ChatInfo
+  C_ChatInfo = nil
+  local ok, err = pcall(function()
+    local seen = ns.AdZoneSeen
+    wipe(seen)
+    seen[2] = { zone = 2, name = "Trade - City" }
+    T.eq(ns.AdZoneChannel(2, "Trade - City"), 2, "the same channel")
+    T.eq(ns.AdZoneChannel(2, "Friends"), nil, "another channel by that number")
+    C_ChatInfo = { GetChannelInfoFromIdentifier = function(name) return { zoneChannelID = name == "Friends" and 0 or 2 } end }
+    T.eq(ns.AdZoneChannel(2, "Friends"), 0, "the game's answer first")
+    T.eq(ns.PickAdChannel({ { number = 2, name = "Friends" } }, ns.AdZoneChannel), nil, "no ad to a custom channel")
+    wipe(seen)
+  end)
+  C_ChatInfo = realChat
+  if not ok then error(err, 0) end
+end)
+
+T.test("Languages: the five Blasted Lands deliveries", function()
+  local done = { [2581] = true, [2583] = true, [2585] = true, [2601] = true, [2603] = true }
+  T.eq(ns.QuestDoneByID(ns.QUEST_IDS["Blasted Lands quests (five)"], function(id) return done[id] or false end), true)
+end)

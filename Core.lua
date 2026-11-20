@@ -10,7 +10,8 @@ end
 ns.PREFIX = "|cffb9a2ffForever Ledger:|r"
 
 local DEFAULTS = {
-  schema = 9,
+  schema = 10,
+  profAliases = {}, -- [the game's name for a profession] = English key (Professions.lua, schema 10)
   chars = {},       -- [charKey] = { name, realm, class, level, faction, updated, profs = { [profName] = { rank, max, updated, recipes = {...} } } }
   prices = {},      -- [marketKey][itemID] = { m = cheapest, a = avg of cheapest 20, q = listed, t = time, src = "scan" }
   vendorSell = {},  -- [itemID] = copper the vendor pays you
@@ -996,6 +997,14 @@ ns:On("ADDON_LOADED", function(name)
   if ForeverLedgerDB.schema < 9 then
     ForeverLedgerDB.schema = 9
   end
+  -- Schema 10 (November 19): professions are keyed by their English name on every client.
+  -- profAliases (the game's names, learned as they're seen) starts empty; entries saved
+  -- under a translated name are merged into the English key at every login and after sync
+  -- or import, once that name is known (ns.NormalizeProfessions). Nothing is dropped.
+  if ForeverLedgerDB.schema < 10 then
+    ForeverLedgerDB.profAliases = ForeverLedgerDB.profAliases or {}
+    ForeverLedgerDB.schema = 10
+  end
   -- Settings per character (below): while a character used its own, the shared settings
   -- were also kept under settingsAccount. If the game ever saved the stand-in instead of
   -- the real table, this brings them back.
@@ -1178,6 +1187,8 @@ function ns:MergeData(data, via)
   local nBooks = via and data.books and ns:MergeBooks(data.books, via) or 0
   if nChars > 0 and ns.BuildUsageIndex then ns:BuildUsageIndex() end
   if (nPrices > 0 or nVendor > 0 or nBags > 0) and ns.InvalidateValues then ns:InvalidateValues() end
+  -- A partner's or an import's professions under a translated name (Codex review, November 19).
+  if nChars > 0 and ns.NormalizeProfessions then ns.NormalizeProfessions(db) end
   return nChars, nPrices, nVendor, nBags, nBooks
 end
 

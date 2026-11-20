@@ -19,7 +19,7 @@ Forever Ledger is written in English. Each other language is one file in `Locale
    lua5.1 tools/locale-report.lua new
    ```
 
-   Each line comes out as `language.strings["English"] = ""`: fill in the quotes.
+   Each line comes out as `language.strings["English"] = ""`: fill in the quotes. A line left empty shows the English, the same as leaving it out.
 
 ## After each release
 

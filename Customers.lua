@@ -340,15 +340,21 @@ end
 -- game language; the English names stay as a fallback. Channel numbers seen in chat teach
 -- which of your channels is which (CHAT_MSG_CHANNEL below).
 local TRADE_ZONE_CHANNEL = 2
-local zoneOf = {}      -- [your channel number] = the game's zone channel ID
+local zoneOf = {}      -- [your channel number] = { zone = the game's zone channel ID, name = the channel's name then }
+-- The game's answer now comes first; a number learned from chat counts only while the
+-- channel by that number still has the same name (Codex review, November 19: Trade left
+-- and its number reused for a custom channel would have sent the ad there). Cleared
+-- whenever your channels change.
 local function zoneChannel(number, name)
-  if zoneOf[number] then return zoneOf[number] end
   local get = C_ChatInfo and C_ChatInfo.GetChannelInfoFromIdentifier
   if get and name then
     local ok, info = pcall(get, name)
-    if ok and type(info) == "table" and info.zoneChannelID then return info.zoneChannelID end
+    if ok and type(info) == "table" and type(info.zoneChannelID) == "number" then return info.zoneChannelID end
   end
+  local seen = zoneOf[number]
+  if seen and seen.name == name then return seen.zone end
 end
+ns.AdZoneChannel, ns.AdZoneSeen = zoneChannel, zoneOf
 function ns.PickAdChannel(channels, zoneFor)
   local services
   for _, c in ipairs(channels) do
@@ -800,10 +806,15 @@ function ns:ShowWorkLog()
   refresh()
 end
 
--- The 9th value is the channel's plain name ("Trade", "Services").
--- The 7th is the game's zone channel ID and the 8th your number for it.
+-- Your channels changed (joined, left, renumbered): what chat taught is forgotten.
+for _, ev in ipairs({ "CHANNEL_UI_UPDATE", "CHAT_MSG_CHANNEL_NOTICE" }) do
+  ns:On(ev, function() wipe(zoneOf) end)
+end
+
+-- The 7th is the game's zone channel ID, the 8th your number for it, the 9th the
+-- channel's plain name ("Trade - City").
 ns:On("CHAT_MSG_CHANNEL", function(msg, sender, _, channelName, _, _, zoneID, number, baseName)
-  if type(number) == "number" and type(zoneID) == "number" and zoneID > 0 then zoneOf[number] = zoneID end
+  if type(number) == "number" and type(zoneID) == "number" then zoneOf[number] = { zone = zoneID, name = baseName } end
   onChat(msg, sender, baseName or channelName)
 end)
 ns:On("CHAT_MSG_SAY", function(msg, sender) onChat(msg, sender, "Say") end)

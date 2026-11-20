@@ -115,7 +115,7 @@ local QUEST_IDS = {
   ["Stone Is Better than Cloth"] = { 716 }, ["Water Pouch Bounty"] = { 1707, 1878 }, ["Sweet Amber"] = { 48, 49, 50, 51, 53 },
   ["Caught!"] = { 4449 }, ["Clamlette Surprise"] = { 6610 }, ["A Short Incubation"] = { 3842 },
   ["Another Message to the Wildhammer"] = { 7842 },
-  ["Blasted Lands quests (five)"] = { 2581, 2582, 2583, 2584, 2586, 2601, 2603, all = true },
+  ["Blasted Lands quests (five)"] = { 2581, 2583, 2585, 2601, 2603, all = true },   -- (the five deliveries, not their follow-ups: Codex review)
   ["Un'Goro Soil"] = { 3761, 3764 }, ["Morrowgrain Research"] = { 3781, 3782, 3785, 3786 },
   ["A Donation of Runecloth"] = { 7795, 7800, 7805, 7811, 7818, 7823, 7824, 7836 },
   ["Chasing A-Me 01"] = { 4243, 4244, 4245 }, ["Bungle in the Jungle"] = { 4496 }, ["The Love Potion"] = { 4201 },

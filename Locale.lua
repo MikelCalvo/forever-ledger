@@ -23,6 +23,11 @@ function ns.RegisterLocale(name, value)
   if name == localeName then
     language = value
     strings = value.strings or {}
+    -- An entry left empty ("" from tools/locale-report.lua, not filled in yet) shows the
+    -- English, not a blank (Codex review, November 19).
+    for _, t in ipairs({ strings, value.upper or {}, value.short or {} }) do
+      for k, v in pairs(t) do if v == "" then t[k] = nil end end
+    end
     ns.localeFont = value.font
     patterns, cache, displayCache = nil, newCache(), newCache()
   end

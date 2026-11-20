@@ -330,7 +330,8 @@ function ns:RefreshDisenchantList()
   else
     win.summary:SetText("")
     nb:SetAttribute("macrotext", nil)
-    nb.text:SetText(can and "|cff888888Tick an item to disenchant it|r" or "|cff888888No Enchanting on this character|r")
+    nb.text:SetText(not can and "|cff888888No Enchanting on this character|r"
+      or #items == 0 and "|cff888888Nothing to disenchant|r" or "|cff888888Tick an item to disenchant it|r")
     nb:Disable()
   end
 end
