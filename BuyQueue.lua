@@ -3702,6 +3702,19 @@ local function showTab(tab)
   -- Inside the window, the row starts right of its portrait (owner's screenshot AH9,
   -- November 15: it covered "Buy queue"), unless our tabs hid it (AHTabs.lua).
   local x = (side.inside and not (ns.AHPortraitHidden and ns:AHPortraitHidden())) and 62 or 4
+  -- The tabs fit the row, short of the close button when it shows (Frank's screenshot,
+  -- November 19: Auctions ran under the x): less space around each label when needed.
+  local room = side:GetWidth() - x - (side.close and side.close:IsShown() and 30 or 4)
+  local labels, shown = 0, 0
+  for _, b in ipairs(side.tabs) do
+    local fs = b:GetFontString()
+    if b:IsShown() and fs then labels, shown = labels + fs:GetStringWidth(), shown + 1 end
+  end
+  local pad = shown > 0 and math.max(8, math.min(20, math.floor((room - labels) / shown))) or 20
+  for _, b in ipairs(side.tabs) do
+    local fs = b:GetFontString()
+    if fs then b:SetWidth(fs:GetStringWidth() + pad) end
+  end
   for _, b in ipairs(side.tabs) do
     if b:IsShown() then
       b:ClearAllPoints()

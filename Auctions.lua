@@ -441,7 +441,7 @@ end)
 local ROW = 22
 -- The status gets the rest (it was cut off); Yours and Cheapest apart (they touched on
 -- Gilded, owner's screenshot, October 5).
-local X = { name = 24, q = 178, each = 238, now = 312 }
+local X = { name = 24, q = 170, each = 240, now = 312 }   -- (Frank's screenshot, November 19: "4g 99s 99c" ran over Qty)
 local VIEWS = { { "all", "All" }, { "up", "Up" }, { "undercut", "Undercut" }, { "sold", "Sold" } }
 local view = "all"
 local cancelState     -- nil, "asking" (first click, until asked = time), or "on" (each click cancels one)
@@ -500,7 +500,7 @@ local function getRow(i)
   r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
   r.name = T:Text(r, 11)
   r.name:SetPoint("LEFT", X.name, 0)
-  r.name:SetWidth(X.q - X.name - 34)
+  r.name:SetWidth(X.q - X.name - 26)
   r.name:SetJustifyH("LEFT")
   r.name:SetWordWrap(false)
   r.q, r.each, r.now = T:Text(r, 11), T:Text(r, 11), T:Text(r, 11)
@@ -634,7 +634,7 @@ refresh = function()
       local stale = now and not priceFresh(rec)
       r.now:SetText(now and ((stale and "|cff888888" or by and "|cffee8597" or "|cff7fd39c") .. ns.MoneyPlain(now) .. "|r") or "|cff888888?|r")
       if e.a and pending[e.a] then r.status:SetText("|cff888888canceling...|r")
-      elseif e.a and skipCancel[e.a] then r.status:SetText("|cff888888skipped (middle-click to undo)|r")
+      elseif e.a and skipCancel[e.a] then r.status:SetText("|cff888888skipped (middle-click)|r")
       elseif by then r.status:SetText("|cffee8597undercut|r")
       elseif couldAskMore(e) then r.status:SetText("|cffffd100cheapest: could ask more|r")
       elseif stale then r.status:SetText("|cff888888check prices|r")
@@ -682,8 +682,8 @@ refresh = function()
       #todo, ns.LocalizeText(#todo == 1 and "auction" or "auctions"), ns.LocalizeText(#todo == 1 and "its deposit" or "their deposits")))
   elseif #todo > 0 then
     local e = todo[1]
-    frame.info:SetText(("Next: %s x%d, yours %s, cheapest %s.%s"):format(ns.ItemName(e.id), e.q or 1, ns.MoneyPlain(e.each), ns.MoneyPlain(undercutBy(e) or cheapestNow(e) or e.each),
-      cancelState == "on" and "" or " |cff888888(First click asks, then one click each.)|r"))
+    -- (The "first click asks" hint is in the button's hover: it ran off the panel, November 19.)
+    frame.info:SetText(("Next: %s%s, yours %s, cheapest %s"):format(ns.ItemName(e.id), (e.q or 1) > 1 and (" x" .. e.q) or "", ns.MoneyPlain(e.each), ns.MoneyPlain(undercutBy(e) or cheapestNow(e) or e.each)))
   elseif counts.up > 0 then
     frame.info:SetText(("%d up, none undercut at the last check%s."):format(counts.up, m and m.t and (" (" .. ns.Age(m.t) .. ")") or ""))
   else

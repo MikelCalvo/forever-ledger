@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 - Writs tab: room for every column. The Tier column went (the filter at the top and the hover show it), Deliver to names the customer (the zone is in the hover), prices are rounded to the silver (exact in the hover) and the text at the top is shorter.
+- Auctions tab (beside the auction house): prices no longer run into the Qty column, the Next line fits (the first-click note is in the button's hover), and the tabs along the top stay clear of the close button.
 - The Disenchant window's button names the item it does next, with how many are ticked and their worth above it (the long line ran past the button), and says when there is nothing to disenchant.
 - Quick disenchant: the item you point at with the keys held shows **DE** in blue in its corner, and its tooltip says to click (also with other bag addons).
 - The price helper says when Always undercut by didn't change the price because a vendor pays more below it.
