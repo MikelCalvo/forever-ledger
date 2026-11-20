@@ -4,7 +4,9 @@ local function loadLocale(locale)
   GetLocale = function() return locale end
   local ns = {}
   local ok, err = pcall(function()
-    for _, file in ipairs({ "Locale.lua", "Locales/zhCN.lua" }) do
+    local files = { "Locale.lua" }
+    if locale ~= "enUS" then files[#files + 1] = "Locales/" .. locale .. ".lua" end
+    for _, file in ipairs(files) do
       assert(loadfile(file))("ForeverLedger", ns)
     end
   end)
@@ -21,6 +23,48 @@ T.test("Localization: English clients and command/data syntax pass through", fun
   T.eq(chinese.LocalizeText(12345), 12345)
   for _, input in ipairs({ "/fl source auctionator", "any", "off", "2g 50s", "item_id,name," }) do
     T.eq(chinese.LocalizeText(input), input)
+  end
+end)
+
+T.test("Localization: Russian counted nouns take the form the number needs", function()
+  local ns = loadLocale("ruRU")
+  T.eq(ns.LocalizeText("1 item"), "1 предмет")
+  T.eq(ns.LocalizeText("3 items"), "3 предмета")
+  T.eq(ns.LocalizeText("5 items"), "5 предметов")
+  T.eq(ns.LocalizeText("11 items"), "11 предметов")
+  T.eq(ns.LocalizeText("21 items"), "21 предмет")
+  T.eq(ns.LocalizeText("Only 3 days of your own scans."), "Всего 3 дня ваших проверок.")
+  T.eq(ns.LocalizeText("Used by 2 groups: A, B. A change here reaches all of them."),
+    "Используется в 2 группах: A, B. Изменение здесь затронет всех.")
+  -- Code that formats a counted message before translating it (LocalizeFormatted).
+  T.eq(ns.LocalizeFormatted("Craft them (%d %s)", 3, "crafts"), "Изготовить (3 шт.)")
+  T.eq(ns.LocalizeFormatted("%d watched. Green: at or under Up to right now.", 3),
+    "Наблюдаем: 3 предмета. Зелёное — сейчас по «До» или дешевле.")
+end)
+
+T.test("Localization: every translation keeps the English placeholders in order", function()
+  -- The core fills a translation's placeholders position by position. A translation may
+  -- drop placeholders at the end, but swapping or skipping one in the middle puts the
+  -- wrong value into the wrong slot (a number into %s, or a word into %d).
+  local spec = "%%[%-%+#0]*%d*%.?%d*[cdiouxXeEfgGqs]"
+  local function kinds(text)
+    local list = {}
+    for token in text:gmatch(spec) do list[#list + 1] = token:sub(-1) end
+    return list
+  end
+  for _, locale in ipairs({ "zhCN", "ruRU" }) do
+    local data = loadLocale(locale).GetLocaleData()
+    for source, target in pairs(data.strings) do
+      local sourceKinds = kinds(source)
+      for _, form in ipairs(type(target) == "table" and target or { target }) do
+        local formKinds = kinds(form)
+        local valid = #formKinds <= #sourceKinds
+        for i = 1, #formKinds do
+          if formKinds[i] ~= sourceKinds[i] then valid = false; break end
+        end
+        T.ok(valid, locale .. ": " .. source .. " -> " .. form)
+      end
+    end
   end
 end)
 
