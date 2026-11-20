@@ -256,3 +256,10 @@ T.test("Finder buttons use shown rows and the selected target; left click still 
   CreateFrame, ns.Theme, ns.SearchAuctionHouse = savedFrame, savedTheme, savedSearch
   assert(ok, err)
 end)
+
+T.test("Arcane Salvager: its buff found by spell ID or the game's own name, in any language", function()
+  T.ok(ns.IsSalvagerBuff("Тайный утилизатор", 1263999, 1263999, nil, nil), "by spell ID")
+  T.ok(ns.IsSalvagerBuff("Тайный утилизатор", 5, nil, "Тайный утилизатор", nil), "by the item's name in the game's language")
+  T.ok(ns.IsSalvagerBuff("Arcane Salvager", nil, nil, nil, nil), "English fallback")
+  T.ok(not ns.IsSalvagerBuff("Ледяной доспех", 7, 9, "Тайный утилизатор", "Тайный утилизатор"), "another buff")
+end)

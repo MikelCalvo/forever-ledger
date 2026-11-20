@@ -6,6 +6,35 @@ local PROFESSIONS = {
   Cooking = true, Fishing = true, ["First Aid"] = true,
 }
 
+-- Professions are saved under their English name, found from the game's skill line ID,
+-- so a German or Russian client keys them the same as the recipe data ("Enchanting", not
+-- "Verzauberkunst"). The game's own name for each is remembered for showing.
+local SKILL_LINES = {
+  [171] = "Alchemy", [164] = "Blacksmithing", [333] = "Enchanting", [202] = "Engineering",
+  [182] = "Herbalism", [165] = "Leatherworking", [186] = "Mining", [393] = "Skinning",
+  [197] = "Tailoring", [185] = "Cooking", [356] = "Fishing", [129] = "First Aid",
+}
+ns.PROFESSION_SKILL_LINES = SKILL_LINES
+local localNames = {}   -- [the game's name] = English key, learned this session
+function ns.ProfessionKey(name, skillLine)
+  local en = skillLine and SKILL_LINES[skillLine]
+  if en then
+    if type(name) == "string" and name ~= en and not localNames[name] then
+      localNames[name] = en
+      if ns.AddLocaleText then ns.AddLocaleText(en, name) end
+    end
+    return en
+  end
+  if name and localNames[name] then return localNames[name] end
+  return name
+end
+-- An old entry saved under the game's own name moves to the English key.
+function ns.MoveProfessionKey(profs, name, key)
+  if not profs or not name or name == key or not profs[name] then return end
+  if not profs[key] then profs[key] = profs[name] end
+  profs[name] = nil
+end
+
 local function safe(fn, ...)
   if not fn then return nil end
   local ok, a, b, c, d = pcall(fn, ...)
@@ -38,8 +67,12 @@ function ns:ScanSkillLines()
     local p1, p2, arch, fish, cook, aid = GetProfessions()
     for _, idx in ipairs({ p1 or false, p2 or false, arch or false, fish or false, cook or false, aid or false }) do
       if idx then
-        local name, _, rank, maxRank = GetProfessionInfo(idx)
-        if name then found[name] = { rank, maxRank } end
+        local name, _, rank, maxRank, _, _, skillLine = GetProfessionInfo(idx)
+        if name then
+          local key = ns.ProfessionKey(name, skillLine)
+          ns.MoveProfessionKey(c.profs, name, key)
+          found[key] = { rank, maxRank }
+        end
       end
     end
   end
@@ -47,7 +80,8 @@ function ns:ScanSkillLines()
   if not next(found) and GetNumSkillLines and GetSkillLineInfo then
     for i = 1, GetNumSkillLines() do
       local name, isHeader, _, rank, _, _, maxRank = GetSkillLineInfo(i)
-      if name and not isHeader and PROFESSIONS[name] then found[name] = { rank, maxRank } end
+      local key = name and ns.ProfessionKey(name)
+      if key and not isHeader and PROFESSIONS[key] then found[key] = { rank, maxRank } end
     end
   end
 
@@ -116,10 +150,14 @@ function ns:CaptureTradeSkill()
   local base = safe(T.GetBaseProfessionInfo)
   if type(base) == "table" and base.professionName then
     profName, rank, maxRank = base.professionName, base.skillLevel, base.maxSkillLevel
+    local line = SKILL_LINES[base.professionID or 0] and base.professionID or base.parentProfessionID
+    local key = ns.ProfessionKey(profName, line)
+    if key ~= profName then ns.MoveProfessionKey(ns:GetChar().profs, profName, key) end
+    profName = key
   end
   if not profName then
     local _, name, r, m = safe(T.GetTradeSkillLine)
-    profName, rank, maxRank = name, r, m
+    profName, rank, maxRank = name and ns.ProfessionKey(name), r, m
   end
   if not profName then ns:Debug("Couldn't read which profession is open."); return end
 

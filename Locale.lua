@@ -28,6 +28,14 @@ function ns.RegisterLocale(name, value)
   end
 end
 function ns.HasLocale() return language ~= nil end
+-- A name the game itself gives in the player's language (a profession, a spell): used
+-- for showing the English key when the language file has no entry of its own.
+function ns.AddLocaleText(english, translated)
+  if not language or type(english) ~= "string" or type(translated) ~= "string" then return end
+  if strings[english] ~= nil or english == translated then return end
+  strings[english] = translated
+  cache, displayCache = newCache(), newCache()
+end
 function ns.GetLocaleData() return language end
 function ns.InvalidateLocale() patterns, cache, displayCache = nil, newCache(), newCache() end
 local function escapePattern(text)

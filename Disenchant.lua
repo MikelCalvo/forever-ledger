@@ -39,35 +39,67 @@ end
 local SALVAGER_TIME = 15 * 60
 local salvagerPlaced = 0
 
--- Names of the player's buffs.
-local function buffNames()
-  local names = {}
+-- Names and spell IDs of the player's buffs.
+local function buffs()
+  local names, ids = {}, {}
   for i = 1, 40 do
-    local name
+    local name, id
     if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
       local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, "player", i, "HELPFUL")
-      name = ok and aura and aura.name
+      name, id = ok and aura and aura.name, ok and aura and aura.spellId
     elseif UnitBuff then
-      name = UnitBuff("player", i)
+      local _
+      name, _, _, _, _, _, _, _, _, id = UnitBuff("player", i)
     end
     if not name then break end
-    names[#names + 1] = name
+    names[#names + 1], ids[#ids + 1] = name, id or false
   end
-  return names
+  return names, ids
+end
+local function buffNames() return (buffs()) end
+
+-- Found by its item (279985), not its English name, so any game language works: the
+-- game gives the item's use spell and its name in the player's language.
+local SALVAGER_ITEM = 279985
+local function salvagerSpell()
+  local get = (C_Item and C_Item.GetItemSpell) or GetItemSpell
+  if not get then return end
+  local ok, name, id = pcall(get, SALVAGER_ITEM)
+  if ok then return id, name end
+end
+local function salvagerName()
+  return ns.GetItemInfo and ns.GetItemInfo(SALVAGER_ITEM) or nil
+end
+ns.SalvagerSpell, ns.SalvagerName = salvagerSpell, salvagerName
+
+-- Whether a buff (name, spell ID) is the Salvager's.
+function ns.IsSalvagerBuff(name, id, spellID, itemName, spellName)
+  if id and spellID and id == spellID then return true end
+  if type(name) ~= "string" then return false end
+  if itemName and name:find(itemName, 1, true) then return true end
+  if spellName and name == spellName then return true end
+  return name:find("Salvager", 1, true) and true or false
 end
 
 -- "buff" if a Salvager buff is on you, "placed" if you placed one in the last 15
 -- minutes (you may have walked away), nil otherwise.
 local function salvagerState()
-  for _, name in ipairs(buffNames()) do
-    if name:find("Salvager", 1, true) then return "buff" end
+  local names, ids = buffs()
+  local spellID, spellName = salvagerSpell()
+  local itemName = salvagerName()
+  for i, name in ipairs(names) do
+    if ns.IsSalvagerBuff(name, ids[i], spellID, itemName, spellName) then return "buff" end
   end
   if GetTime() - salvagerPlaced < SALVAGER_TIME then return "placed" end
 end
 
 ns:On("UNIT_SPELLCAST_SUCCEEDED", function(unit, _, spellID)
-  local name = unit == "player" and ns.SpellName and ns.SpellName(spellID)
-  if name and name:find("Arcane Salvager", 1, true) then
+  if unit ~= "player" then return end
+  local salvID, salvName = salvagerSpell()
+  local name = ns.SpellName and ns.SpellName(spellID)
+  local isSalv = (salvID and spellID == salvID) or (name and ((salvName and name == salvName)
+    or (salvagerName() and name:find(salvagerName(), 1, true)) or name:find("Arcane Salvager", 1, true)))
+  if isSalv then
     salvagerPlaced = GetTime()
     -- Which buff it gives isn't known yet: show them once, for checking (/fl debug).
     C_Timer.After(2, function() ns:Debug("Arcane Salvager placed. Your buffs now:", table.concat(buffNames(), ", ")) end)

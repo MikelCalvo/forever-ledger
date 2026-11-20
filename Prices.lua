@@ -373,7 +373,11 @@ function ns:LearnVersionName(id, suffix, link)
   local base = (ns.db.itemNames or {})[id] or getItemInfo(id)
   if not (shown and base and shown:sub(1, #base + 1) == base .. " ") then return end
   local vname = shown:sub(#base + 2)
-  if not vname:match("^of .") then return end
+  -- English names say "of the Bear"; other languages word it their own way, so there
+  -- anything after the item's own name counts.
+  local english = (GetLocale and GetLocale() or "enUS"):sub(1, 2) == "en"
+  if english and not vname:match("^of .") then return end
+  if vname:gsub("%s", "") == "" then return end
   if ns.db.suffixNames[vname] == nil then
     ns.db.suffixNames[vname] = suffix
     ns:ForgetVersionNames()
