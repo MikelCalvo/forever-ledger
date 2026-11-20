@@ -245,6 +245,24 @@ T.test("Disenchanting: a spike in a material's price doesn't raise what a disenc
   ns:InvalidateValues(true)
 end)
 
+T.test("Disenchanting: two days of history still catch a material listed far above them", function()
+  S.items[60017] = { name = "Green Gloves", quality = 2, ilvl = 12, classID = 4, equipLoc = "INVTYPE_HAND" }
+  me({ Enchanting = { rank = 50 } })
+  price(DUST, 1000)
+  price(LESSER_MAGIC, 9000)
+  local key, d = ns.MarketKey(), ns.LocalDay()
+  ns.db.history = ns.db.history or {}
+  ns.db.history[key] = ns.db.history[key] or {}
+  ns.db.history[key][LESSER_MAGIC] = ("%d:1900:2000|%d:1900:2000"):format(d - 1, d - 2)
+  ns:InvalidateValues(true)
+  near((ns:GetValue(60017)), 1.20 * 950 + 0.30 * 1900, "more than three times the usual 20s: the usual price")
+  price(LESSER_MAGIC, 5000)
+  ns:InvalidateValues(true)
+  near((ns:GetValue(60017)), 1.20 * 950 + 0.30 * 4750, "a rise to 50s counts")
+  ns.db.history[key][LESSER_MAGIC] = nil
+  ns:InvalidateValues(true)
+end)
+
 T.test("Essences: splitting a greater one into 3 lesser", function()
   price(LESSER_MAGIC, 5000)
   price(GREATER_MAGIC, 10000)
