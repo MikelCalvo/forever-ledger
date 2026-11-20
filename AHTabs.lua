@@ -7,9 +7,12 @@ local _, ns = ...
 -- How: tabs made from the game's own auction house tab template sit after Browse, Sell
 -- and Auctions. Picking one empties Blizzard's content area (SetDisplayMode with an
 -- empty mode) and shows ours in its place; a hook on SetDisplayMode hides ours again
--- when a Blizzard tab is picked. When Auctionator or TradeSkillMaster are loaded they
--- bring the shared LibAHTab library, and our tabs go through it so all of them line up
--- in one row.
+-- when a Blizzard tab is picked. Our tabs go through the shared LibAHTab library (plusmouse,
+-- MIT, in Libs\; also brought by Auctionator and TradeSkillMaster), so every addon's tabs
+-- line up in one row and picking one hides the others' views. It ships with Forever Ledger
+-- since November 20 (Frank's screenshot: Cheap Upgrades made its own tab row too, both
+-- after Blizzard's last tab, so its tab sat on our Buy tab and neither view closed when
+-- the other's tab was picked). Our own row below is only the fallback if it's missing.
 --
 -- For now the tabs hold the existing panel (BuyQueue.lua): Buy = the Buy queue with
 -- Shopping lists and the Disenchant finder; My auctions = your auctions. Post follows in

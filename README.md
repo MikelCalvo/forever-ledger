@@ -162,6 +162,7 @@ Join the **[Forever Ledger Discord](https://discord.gg/WKsCtvupeC)** for updates
 |---|---|
 | `*.lua`, `ForeverLedger.toc` | The addon itself |
 | `media/` | Pictures the addon uses |
+| `Libs/` | Shared libraries: LibStub (public domain) and LibAHTab by plusmouse (MIT, `Libs/LibAHTab/LICENSE`), so other addons' auction house tabs line up with ours |
 | `CHANGELOG.md` | What changed in each version |
 | `docs/` | The guide, and notes on testing, developing and releasing |
 | `tools/` | The web version of the flip calculator, and the scripts that build the Classic and Forever recipe data (sources in `tools/FOREVER_DATA_SOURCES.md`) |
