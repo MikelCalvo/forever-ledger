@@ -118,28 +118,39 @@ end
 ---------------------------------------------------------------------------
 -- Prices
 ---------------------------------------------------------------------------
--- Item names to IDs, from everything priced or named so far.
--- Built again only for a name it doesn't know, at most once a minute: building it looks up
--- every priced item (about 5,000), which made each crate hover hitch for 30 ms (Frank's
--- AN30, November 19). Names found are saved with the crate as item IDs (CrateReport).
+-- Item names to IDs, from names saved or already loaded by the game.
+-- Built again only for a name it doesn't know, at most every 10 minutes. It never asks
+-- the game for items it hasn't loaded: asking for every priced item (about 6,000) made the
+-- game load them all, 6,304 item loads in 14 seconds and a 650 ms freeze on a crate hover
+-- (Frank's AN30, November 19). Names found are saved with the crate as item IDs (CrateReport).
+local NAME_INDEX_KEEP = 600
 local nameIndex, nameIndexTime = {}, -math.huge
+local function loadedName(id)
+  local cached = C_Item and C_Item.IsItemDataCachedByID
+  if not cached then return end
+  local ok, yes = pcall(cached, id)
+  if ok and yes then return (ns.GetItemInfo(id)) end
+end
 local function idForName(name)
   if not name then return end
   if nameIndex[name] then return nameIndex[name] end
-  if GetTime() - nameIndexTime > 60 then
+  if GetTime() - nameIndexTime > NAME_INDEX_KEEP then
     nameIndex, nameIndexTime = {}, GetTime()
+    for id, n in pairs(ns.FOREVER_ITEM_NAMES or {}) do nameIndex[n] = id end
     for id, n in pairs(ns.db.itemNames) do nameIndex[n] = id end
-    for id in pairs(ns.db.prices[ns.MarketKey()] or {}) do
-      local n = ns.GetItemInfo(id)
-      if n then nameIndex[n] = id end
-    end
-    for id in pairs(ns.db.vendorBuy) do
-      local n = ns.GetItemInfo(id)
-      if n then nameIndex[n] = id end
+    for _, list in ipairs({ ns.db.prices[ns.MarketKey()] or {}, ns.db.vendorBuy }) do
+      for id in pairs(list) do
+        if not ns.db.itemNames[id] then
+          local n = loadedName(id)
+          if n then nameIndex[n] = id end
+        end
+      end
     end
   end
   return nameIndex[name]
 end
+ns.CrateIdForName = idForName
+function ns.CrateNamesReset() nameIndexTime = -math.huge end   -- (tests)
 
 -- What buying qty of an item costs: from a vendor, or across the cheapest auction
 -- listings (the price ladder saved by scans). nil if unknown or not enough listed.
