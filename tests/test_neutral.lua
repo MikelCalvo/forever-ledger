@@ -36,6 +36,30 @@ T.test("Nothing to compare without both prices", function()
   T.eq(ns:NeutralCompare(ID), nil)
 end)
 
+T.test("A neutral auctioneer is found by the zone's map number, in any language", function()
+  -- (GitHub #23, November 19: an EU player's Booty Bay scans were saved as their faction's.)
+  local oldExists, oldFaction, oldMap, oldSub, oldMini = UnitExists, UnitFactionGroup, C_Map, GetSubZoneText, GetMinimapZoneText
+  local npcFaction, map = nil, 1434
+  UnitExists = function(u) return u == "npc" end
+  UnitFactionGroup = function(u) if u == "npc" then return npcFaction end return "Alliance" end
+  C_Map = { GetBestMapForUnit = function() return map end }
+  GetSubZoneText = function() return "Baie-du-Butin" end
+  GetMinimapZoneText = function() return "Baie-du-Butin" end
+  local ok, err = pcall(function()
+    T.eq(ns.IsNeutralAuctioneer(), true, "Booty Bay in French, by Stranglethorn's map")
+    map = 1446; T.eq(ns.IsNeutralAuctioneer(), true, "Gadgetzan")
+    map = 1452; T.eq(ns.IsNeutralAuctioneer(), true, "Everlook")
+    map = 1453; T.eq(ns.IsNeutralAuctioneer(), false, "Stormwind")
+    npcFaction, map = "Alliance", 1434
+    T.eq(ns.IsNeutralAuctioneer(), false, "an auctioneer with a faction never is")
+    npcFaction, C_Map = nil, nil
+    GetSubZoneText = function() return "Booty Bay" end
+    T.eq(ns.IsNeutralAuctioneer(), true, "without a map, the English town name")
+  end)
+  UnitExists, UnitFactionGroup, C_Map, GetSubZoneText, GetMinimapZoneText = oldExists, oldFaction, oldMap, oldSub, oldMini
+  assert(ok, err)
+end)
+
 T.test("Away from Booty Bay your prices are your faction's", function()
   prices(1000, 5000)
   T.eq(ns.MarketKey(), HOME)

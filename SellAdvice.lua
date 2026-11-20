@@ -88,7 +88,7 @@ function ns:SellKeepReason(id)
   if ns.IsWatched and ns:IsWatched(id) then return "you watch it" end
   for _, l in ipairs(ns.db.shopping and ns.db.shopping.lists or {}) do
     for _, e in ipairs(l.items or {}) do
-      if e.id == id and not e.done then return ("it's on your list %s"):format(l.name or "") end
+      if e.id == id and not e.done then return ns.LocalizeText("it's on your list %s"):format(l.name or "") end
     end
   end
   local users = ns.usage and ns.usage[id]
@@ -98,7 +98,7 @@ function ns:SellKeepReason(id)
       if not first or k < first then first = k end
     end
     local who, prof = (first or ""):match("^(.-)|(.*)$")
-    if who then return ("%s's %s uses it"):format(who, prof) end
+    if who then return ns.LocalizeText("%s's %s uses it"):format(who, prof) end
   end
 end
 
@@ -161,7 +161,12 @@ function ns:SellFacts(id, bound, usable, copyPrice)
   local f = { keep = ns:SellKeepReason(id), bound = bound, usable = usable ~= false }
   f.gear = ns.IsGearItem and ns:IsGearItem(id) or false
   f.quality = select(3, ns.GetItemInfo(id))
-  f.vendor = copyPrice or ns:GetSellPrice(id)
+  -- The game's Sell Price is for the whole stack, and everything else here is for one, so
+  -- the copy's price only counts when it's less than one's (damaged gear), as in Worth to
+  -- you (ns:WorthOfCopy). Owner's screenshots, November 18: a stack of 5 Superior Healing
+  -- Potions said Sell: Vendor 12s 50c against 7s 11c on the auction house for one.
+  local one = ns:GetSellPrice(id)
+  f.vendor = (copyPrice and (not one or copyPrice < one)) and copyPrice or one
   local fresh = recentPrice(id)
   for _, o in ipairs(ns:Options(id) or {}) do
     if o.kind == "ah" and not f.ah and fresh then f.ah = o.value end
@@ -196,26 +201,26 @@ function ns:AddSellLines(tt, id, bound, usable, copyPrice)
   if not v then return end
   local c = COLOR[v.kind]
   if v.kind == "keep" then
-    tt:AddLine("Keep: " .. v.reason, c[1], c[2], c[3], true)
+    ns:AddTooltipLine(tt, ns.LocalizeText("Keep: ") .. ns.LocalizeText(v.reason), c[1], c[2], c[3], true)
     return
   end
-  local reason = v.reason and (" |cff999999(" .. v.reason .. ")|r") or ""
+  local reason = v.reason and (" |cff999999(" .. ns.LocalizeText(v.reason) .. ")|r") or ""
   -- Gear this character can wear: the suggestion is for if it won't wear it.
-  local lead = v.ifUnused and "If you won't wear it: " or ""
+  local lead = v.ifUnused and ns.LocalizeText("If you won't wear it: ") or ""
   if v.ifUnused then reason = "" end
   local function deLine(text)
     local d = COLOR.de
-    tt:AddDoubleLine(text .. (v.deWho and (" |cff999999(" .. v.deWho .. ")|r") or ""),
-      "about " .. ns.Money(v.de), d[1], d[2], d[3], 1, 1, 1)
+    ns:AddTooltipDoubleLine(tt, text .. (v.deWho and (" |cff999999(" .. v.deWho .. ")|r") or ""),
+      ns.LocalizeText("about ") .. ns.Money(v.de), d[1], d[2], d[3], 1, 1, 1)
   end
   if v.deFirst then
-    deLine(lead .. (v.ifUnused and "disenchant" or "Disenchant"))
-    tt:AddDoubleLine("  " .. (ALT[v.kind] or "or sell") .. reason, ns.Money(v.value), c[1], c[2], c[3], 1, 1, 1)
+    deLine(lead .. ns.LocalizeText(v.ifUnused and "disenchant" or "Disenchant"))
+    ns:AddTooltipDoubleLine(tt, "  " .. ns.LocalizeText(ALT[v.kind] or "or sell") .. reason, ns.Money(v.value), c[1], c[2], c[3], 1, 1, 1)
     return
   end
   if v.kind ~= "de" then
-    local what = v.ifUnused and (UNUSED[v.kind] or "sell it") or ("Sell: " .. (LABEL[v.kind] or ns.SELL_MIDDLE))
-    tt:AddDoubleLine(lead .. what .. reason, ns.Money(v.value), c[1], c[2], c[3], 1, 1, 1)
+    local what = v.ifUnused and ns.LocalizeText(UNUSED[v.kind] or "sell it") or (ns.LocalizeText("Sell: ") .. ns.LocalizeText(LABEL[v.kind] or ns.SELL_MIDDLE))
+    ns:AddTooltipDoubleLine(tt, lead .. what .. reason, ns.Money(v.value), c[1], c[2], c[3], 1, 1, 1)
   end
-  if v.de then deLine(v.kind == "de" and (lead .. (v.ifUnused and "disenchant" or "Disenchant")) or "  or disenchant") end
+  if v.de then deLine(v.kind == "de" and (lead .. ns.LocalizeText(v.ifUnused and "disenchant" or "Disenchant")) or "  or disenchant") end
 end

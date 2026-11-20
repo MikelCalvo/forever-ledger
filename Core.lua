@@ -10,7 +10,8 @@ end
 ns.PREFIX = "|cffb9a2ffForever Ledger:|r"
 
 local DEFAULTS = {
-  schema = 9,
+  schema = 10,
+  profAliases = {}, -- [the game's name for a profession] = English key (Professions.lua, schema 10)
   chars = {},       -- [charKey] = { name, realm, class, level, faction, updated, profs = { [profName] = { rank, max, updated, recipes = {...} } } }
   prices = {},      -- [marketKey][itemID] = { m = cheapest, a = avg of cheapest 20, q = listed, t = time, src = "scan" }
   vendorSell = {},  -- [itemID] = copper the vendor pays you
@@ -52,7 +53,7 @@ local DEFAULTS = {
   shopping = { lists = {} }, -- shopping lists: { lists = { { name, on, items = { { id, max, qty } } } }, current } (ShoppingLists.lua)
   watchItems = {},   -- [itemID] = { max = copper or nil for the vendor price, t = added }: watched items (Watched.lua)
   groups = { user = {}, added = {}, removed = {}, rules = {}, saved = {}, nextId = 1 }, -- groups and rules, account-wide (Groups.lua: shapes there)
-  settings = { source = "auto", maxAgeHours = 12, tooltip = true, debug = false, watch = {}, ahCut = 5, margin = 10, actionSeconds = 3, skipChars = {}, minimap = true, minimapAngle = 200, dealSound = true, dealScreen = true, dealChat = true, sellGuard = true, watchResume = true, stackTwoClicks = false, sessionValue = "best", saleSound = true, deRolls = true, keepGold = 0, vendorItemsAH = false, undercutAlerts = true, undercutSound = true, updateNotice = true, priceHelper = true, soldSummary = true,
+  settings = { source = "auto", maxAgeHours = 12, tooltip = true, debug = false, watch = {}, ahCut = 5, margin = 10, actionSeconds = 3, skipChars = {}, minimap = true, minimapAngle = 200, dealSound = true, dealScreen = true, dealChat = true, sellGuard = true, watchResume = true, stackTwoClicks = false, sessionValue = "best", saleSound = true, deRolls = true, keepGold = 0, postUndercut = 0, vendorItemsAH = false, undercutAlerts = true, undercutSound = true, updateNotice = true, priceHelper = true, soldSummary = true,
     dealUsualPct = 20, dealWindow = "all", dealVendorPct = 10, dealVendorMin = 0, dealHistory = "auto", dealUsualMin = 1000, dealShowThin = false, dealsSort = {}, window = {}, ahHighlight = true, ahTabs = true, dashboard = {}, ledger = {}, goldMaking = {}, writs = {}, quickDE = true, quickDEKey = "ctrlalt", deFinder = {}, crates = true, recipes = {}, openFlips = true, customers = true, customerSound = true, customerWindow = true, customerChat = false,
     svcCrafting = true, svcFood = true, svcPortal = true, svcSummon = true, svcLockpick = true,
     -- Buy queue (BuyQueue.lua): what goes in it, scroll anywhere to buy, the side panel's tab.
@@ -105,6 +106,21 @@ function ns.Money(copper)
   if s > 0 then out[#out + 1] = s .. "s" end
   if c > 0 or #out == 0 then out[#out + 1] = c .. "c" end
   return table.concat(out, " ")
+end
+
+-- Money rounded for a narrow column: no copper from 1 gold, no silver from 100 gold
+-- (Frank's AH9, November 19: the Writs tab ran out of room). The exact amount goes in
+-- the hover.
+function ns.MoneyRound(copper)
+  if not copper then return nil end
+  copper = math.floor(copper + 0.5)
+  if copper >= 1000000 then copper = math.floor(copper / 10000 + 0.5) * 10000
+  elseif copper >= 10000 then copper = math.floor(copper / 100 + 0.5) * 100 end
+  return copper
+end
+function ns.MoneyShort(copper)
+  if not copper then return "?" end
+  return ns.Money(ns.MoneyRound(copper))
 end
 
 function ns.Age(t)
@@ -456,9 +472,18 @@ end
 -- The auctioneer has no faction and stands in a town with a neutral auction house:
 -- Classic's goblin towns (Booty Bay confirmed, October 5). The Waylaid Crate trade posts'
 -- auctioneers were removed in the beta (owner, October 5).
+-- Found by the zone's map number first, so it works in every language (GitHub #23,
+-- November 19: an EU player's Booty Bay scans were saved as their faction's); the town
+-- names are English only. Classic's map numbers (Frank's saved vendors: Stormwind 1453,
+-- Elwynn 1429): Stranglethorn Vale 1434 (Booty Bay), Tanaris 1446 (Gadgetzan), Winterspring
+-- 1452 (Everlook), the only auction houses in those zones.
+local NEUTRAL_MAPS = { [1434] = true, [1446] = true, [1452] = true }
 local NEUTRAL_TOWNS = { ["Booty Bay"] = true, ["Gadgetzan"] = true, ["Everlook"] = true }
+ns.NEUTRAL_MAPS = NEUTRAL_MAPS
 function ns.IsNeutralAuctioneer()
   if not UnitExists("npc") or UnitFactionGroup("npc") then return false end
+  local map = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+  if map and NEUTRAL_MAPS[map] then return true end
   return NEUTRAL_TOWNS[GetSubZoneText() or ""] or NEUTRAL_TOWNS[GetMinimapZoneText and GetMinimapZoneText() or ""] or false
 end
 
@@ -494,22 +519,180 @@ end
 function ns:EventKnown(event) return handlers[event] ~= nil and not handlers[event].unknown end
 -- Timing, for /fl perf: total and slowest single run per event or task.
 ns.perf, ns.perfSince = {}, GetTime()
-local clock = debugprofilestop or function() return GetTime() * 1000 end
-local function note(label, ms)
+local function clock() return debugprofilestop and debugprofilestop() or GetTime() * 1000 end
+local frameOurs, frameTop, frameTopMs = 0, nil, 0   -- this frame's time in our code (freeze watch, below)
+local framePart, framePartMs, frameTipItem = nil, 0, nil   -- its slowest part (sub), the tooltip item we worked on
+-- sub: a part of a task timed under its own label too (the tooltip's sections): listed in
+-- /fl perf, but not added to the frame's total again. Likewise anything timed inside another
+-- timed task or event (depth > 0): only the outermost counts toward the frame (Codex review,
+-- November 17: a 100 ms task with an 80 ms timed step inside showed as 180 ms).
+local depth = 0
+-- kb: memory it took meanwhile (leftovers the game clears up later; Frank's AN30, November
+-- 19: 148 MB before clearing against 44 MB in use, and freezes with almost none of our time).
+local function memKB() return collectgarbage("count") end
+ns.MemKB = memKB
+local function note(label, ms, sub, kb)
+  sub = sub or depth > 0
   local p = ns.perf[label]
-  if not p then p = { n = 0, ms = 0, max = 0 }; ns.perf[label] = p end
+  if not p then p = { n = 0, ms = 0, max = 0, kb = 0 }; ns.perf[label] = p end
   p.n, p.ms = p.n + 1, p.ms + ms
+  if kb and kb > 0 then p.kb = (p.kb or 0) + kb end
   if ms > p.max then p.max = ms end
+  if sub then
+    if ms > framePartMs then framePart, framePartMs = label, ms end
+    return
+  end
+  frameOurs = frameOurs + ms
+  if ms > frameTopMs then frameTop, frameTopMs = label, ms end
 end
 
+-- Freeze watch (Frank, November 17: "often when im hovering over tooltips my game freezes"):
+-- a frame that took FREEZE_SECONDS or more is noted with how much of it was Forever Ledger's
+-- own code (and what), the item a tooltip was showing, and, where the game's addon profiler
+-- exists (C_AddOnProfiler), which addons took longest. Loading screens don't count. The last
+-- 20 are kept in the saved data (freezeLog) for /fl perf, after a reload too.
+local FREEZE_SECONDS, FREEZE_KEEP = 0.25, 20
+ns.FREEZE_SECONDS = FREEZE_SECONDS
+local loading, loadingSeq = true, 0   -- (until the first loading screen ends)
+
+-- The addons the game's profiler says took longest in the last frame, "Name 180 ms" each.
+-- Every loaded addon's value of one profiler metric: { [name] = number }, or nil without one.
+local function profilerAll(metricName)
+  local P = C_AddOnProfiler
+  local metric = Enum and Enum.AddOnProfilerMetric and Enum.AddOnProfilerMetric[metricName]
+  if not (P and P.GetAddOnMetric and metric ~= nil) then return nil end
+  local count = (C_AddOns and C_AddOns.GetNumAddOns) or GetNumAddOns
+  local info = (C_AddOns and C_AddOns.GetAddOnInfo) or GetAddOnInfo
+  local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+  if not (count and info and isLoaded) then return nil end
+  local all = {}
+  for i = 1, count() do
+    local name = info(i)
+    if name and isLoaded(name) then
+      local ok, v = pcall(P.GetAddOnMetric, name, metric)
+      if ok and type(v) == "number" then all[name] = v end
+    end
+  end
+  return all
+end
+
+local function profilerTop(metricName, n)
+  local all = profilerAll(metricName)
+  if not all then return nil end
+  local rows = {}
+  for name, v in pairs(all) do
+    if v > 0 then rows[#rows + 1] = { name = name, v = v } end
+  end
+  table.sort(rows, function(a, b) return a.v > b.v end)
+  local out = {}
+  for i = 1, math.min(n or 3, #rows) do out[i] = rows[i] end
+  return out
+end
+ns.ProfilerTop = profilerTop
+
+-- The addons with a frame over 100 ms between two counts (each { [name] = count }), most first.
+function ns.SlowSince(before, after)
+  local out = {}
+  for name, v in pairs(after or {}) do
+    local d = v - ((before or {})[name] or 0)
+    if d > 0 then out[#out + 1] = { name = name, n = d } end
+  end
+  table.sort(out, function(a, b) if a.n ~= b.n then return a.n > b.n end return a.name < b.name end)
+  return out
+end
+
+function ns.NoteFrame(elapsed, ours, top, topMs, tipItem, others, part, partMs)
+  if elapsed < FREEZE_SECONDS or not ns.db then return end
+  local log = ns.db.freezeLog or {}
+  ns.db.freezeLog = log
+  local e = { t = time(), ms = math.floor(elapsed * 1000 + 0.5), ours = math.floor(ours + 0.5), item = tipItem }
+  if top and topMs >= 5 then e.what, e.whatMs = top, math.floor(topMs + 0.5) end
+  if e.what and part and (partMs or 0) >= 5 then e.part, e.partMs = part, math.floor(partMs + 0.5) end
+  if others and #others > 0 then
+    e.addons = {}
+    for i, r in ipairs(others) do e.addons[i] = ("%s %.0f ms"):format(r.name, r.v) end
+  end
+  log[#log + 1] = e
+  while #log > FREEZE_KEEP do table.remove(log, 1) end
+  return e
+end
+
+local overBase, overOld   -- (each addon's count of frames over 100 ms: a second ago at most, and the one before)
+local watch = CreateFrame("Frame")
+local lastTick   -- (our own clock at the last OnUpdate)
+local lastMem    -- (all addons' memory then, KB)
+watch:SetScript("OnUpdate", function(_, elapsed)
+  -- The time since our last OnUpdate, on the same clock as our share: the game's elapsed is
+  -- the frame before, so a freeze and the work that caused it landed on different lines
+  -- (Frank's AN30, November 17: "463 ms; Forever Ledger 559 ms", then a 1124 ms freeze at 3 ms).
+  local now = clock()
+  if lastTick then elapsed = (now - lastTick) / 1000 end
+  lastTick = now
+  -- Memory cleared in this frame (all addons share one pile): a big drop in a frozen frame
+  -- means the game was clearing up leftovers then (Frank's AN30, November 19).
+  local mem = memKB()
+  local cleared = lastMem and lastMem - mem or 0
+  lastMem = mem
+  if elapsed >= FREEZE_SECONDS and not loading then
+    local tip
+    if GameTooltip and GameTooltip:IsShown() and GameTooltip.GetItem then
+      local ok, _, link = pcall(GameTooltip.GetItem, GameTooltip)
+      tip = ok and link and ns.ItemIDFromLink and ns.ItemIDFromLink(link) or nil
+    end
+    local e = ns.NoteFrame(elapsed, frameOurs, frameTop, frameTopMs, tip or frameTipItem, profilerTop("LastTime", 3), framePart, framePartMs)
+    if e and cleared >= 1024 then e.clearedMB = math.floor(cleared / 1024 + 0.5) end
+    -- Which addons had a frame over 100 ms in it: their counts a second later against the
+    -- counts kept every second before it (the per-frame times read now aren't the frozen
+    -- frame's: Frank's AN30, November 17, every addon showed 15 ms or less).
+    -- (The older count: the newer one may have been taken after the frozen frame.)
+    local base = overOld or overBase
+    if e and base then
+      C_Timer.After(1, function()
+        local slow = ns.SlowSince(base, profilerAll("CountTimeOver100Ms"))
+        e.slow = {}
+        for i = 1, math.min(4, #slow) do e.slow[i] = slow[i].name end
+      end)
+    end
+  end
+  frameOurs, frameTop, frameTopMs = 0, nil, 0
+  framePart, framePartMs, frameTipItem = nil, 0, nil
+  depth = 0   -- (a timed task that stopped with an error left it raised)
+end)
+-- Every second: each addon's count of frames over 100 ms, for the freeze above.
+if C_AddOnProfiler and C_Timer and C_Timer.NewTicker then
+  C_Timer.NewTicker(1, function()
+    if not loading then overOld, overBase = overBase, profilerAll("CountTimeOver100Ms") end
+  end)
+end
+watch:RegisterEvent("LOADING_SCREEN_ENABLED")
+watch:RegisterEvent("LOADING_SCREEN_DISABLED")
+watch:RegisterEvent("PLAYER_LEAVING_WORLD")
+watch:SetScript("OnEvent", function(_, event)
+  loadingSeq = loadingSeq + 1
+  if event == "LOADING_SCREEN_DISABLED" then
+    -- (A few seconds more: the first frames after a loading screen are slow for everyone.
+    -- Not if another loading screen began meanwhile.)
+    local seq = loadingSeq
+    C_Timer.After(5, function() if seq == loadingSeq then loading = false end end)
+  else
+    loading = true
+  end
+end)
+
 ns.PerfNote = note
+-- The item our tooltip lines were for this frame (a freeze names it after the tooltip is gone).
+function ns.NoteTipItem(id) frameTipItem = id end
+-- This frame's share so far (tests).
+function ns.FrameShare() return frameOurs end
 
 -- Wrap a function so its time is counted under a label.
 function ns.Timed(label, fn)
   return function(...)
-    local t = clock()
+    local t, m = clock(), memKB()
+    depth = depth + 1
     local a, b, c, d = fn(...)
-    note(label, clock() - t)
+    depth = math.max(0, depth - 1)
+    note(label, clock() - t, nil, memKB() - m)
     return a, b, c, d
   end
 end
@@ -534,12 +717,14 @@ local function withoutSecrets(...)
 end
 
 local function dispatch(list, event, ...)
-  local t = clock()
+  local t, m = clock(), memKB()
+  depth = depth + 1
   for i = 1, #list do
     local ok, err = pcall(list[i], ...)
     if not ok then geterrorhandler()(err) end
   end
-  note(event, clock() - t)
+  depth = math.max(0, depth - 1)
+  note(event, clock() - t, nil, memKB() - m)
 end
 
 frame:SetScript("OnEvent", function(_, event, ...)
@@ -565,14 +750,75 @@ function ns.PerfLines(n)
   for i = 1, math.min(n, #rows) do
     local r = rows[i]
     lines[i] = ("%s: slowest %.0f ms, %d times, %.0f ms total"):format(r.label, r.p.max, r.p.n, r.p.ms)
+      .. ((r.p.kb or 0) >= 1024 and (", %.1f MB of leftovers"):format(r.p.kb / 1024) or "")
+  end
+  return lines
+end
+
+-- The tasks that left the most memory behind, most first: "Label 12.3 MB, ...", or nil.
+function ns.LeftoverLine(n)
+  local rows = {}
+  for label, p in pairs(ns.perf) do
+    if (p.kb or 0) >= 1024 then rows[#rows + 1] = { label = label, kb = p.kb } end
+  end
+  if #rows == 0 then return end
+  table.sort(rows, function(a, b) return a.kb > b.kb end)
+  local out = {}
+  for i = 1, math.min(n or 4, #rows) do out[i] = ("%s %.1f MB"):format(rows[i].label, rows[i].kb / 1024) end
+  return "Most leftovers made: " .. table.concat(out, ", ")
+end
+
+-- The freeze watch's report (tested): the newest freezes first, each with Forever Ledger's
+-- share and the other addons the game's profiler named, then which addons had the most
+-- long frames this session.
+function ns.FreezeLines(n)
+  local lines, log = {}, (ns.db and ns.db.freezeLog) or {}
+  if #log == 0 then
+    lines[1] = ("  Freezes: none seen (a frame of %.2f seconds or more) since they were first watched."):format(FREEZE_SECONDS)
+  else
+    lines[1] = ("  Freezes (the newest %d of %d kept):"):format(math.min(n, #log), #log)
+    for i = #log, math.max(1, #log - n + 1), -1 do
+      local e = log[i]
+      local ours = e.ours >= e.ms * 0.5 and ("|cffee8597Forever Ledger %d ms|r"):format(e.ours) or ("Forever Ledger %d ms"):format(e.ours)
+      local parts = { ("%s: %d ms; %s"):format(date("%b %d %H:%M", e.t), e.ms, ours) }
+      if e.what then
+        parts[#parts + 1] = e.part and ("(most in %s, %d ms; slowest part %s, %d ms)"):format(e.what, e.whatMs or 0, e.part, e.partMs or 0)
+          or ("(most in %s, %d ms)"):format(e.what, e.whatMs or 0)
+      end
+      if e.slow then
+        parts[#parts + 1] = #e.slow > 0 and ("; |cffffd100addons with a frame over 100 ms within a second or two of it: " .. table.concat(e.slow, ", ") .. "|r")
+          or "; no addon had a frame over 100 ms within a second or two of it"
+      elseif e.addons then
+        parts[#parts + 1] = "; slowest addons: " .. table.concat(e.addons, ", ")
+      end
+      if e.clearedMB then parts[#parts + 1] = ("; |cffffd100the game cleared %d MB of leftover memory in it|r"):format(e.clearedMB) end
+      if e.item then parts[#parts + 1] = "; tooltip on " .. (ns.ItemName(e.item) or ("item " .. e.item)) end
+      lines[#lines + 1] = "    " .. table.concat(parts, " ")
+    end
+  end
+  local over = profilerTop("CountTimeOver100Ms", 5)
+  if over and #over > 0 then
+    local out = {}
+    for i, r in ipairs(over) do out[i] = ("%s %d"):format(r.name, r.v) end
+    lines[#lines + 1] = "  Addons with the most frames over 100 ms this session: " .. table.concat(out, ", ")
+  elseif not over then
+    lines[#lines + 1] = "  (This game client has no addon profiler, so other addons can't be named; Forever Ledger's share still shows.)"
   end
   return lines
 end
 
 function ns:PrintPerf(reset)
-  if reset then ns.perf, ns.perfSince = {}, GetTime(); ns:Print("Timing reset. Play for a minute, then /fl perf."); return end
-  ns:Print(("Time used by Forever Ledger over the last %d seconds, slowest single moment first:"):format(GetTime() - ns.perfSince))
+  if reset then
+    ns.perf, ns.perfSince = {}, GetTime()
+    if ns.db then ns.db.freezeLog = nil end
+    print(ns.PREFIX, "Timing and freezes reset. Play until it happens again, then /fl perf.")
+    return
+  end
+  print(ns.PREFIX, ("Time used by Forever Ledger over the last %d seconds, slowest single moment first:"):format(GetTime() - ns.perfSince))
   for _, line in ipairs(ns.PerfLines(12)) do print("  " .. line) end
+  local left = ns.LeftoverLine(4)
+  if left then print("  " .. left) end
+  for _, line in ipairs(ns.FreezeLines(8)) do print(line) end
   -- Memory and loading, to see whether the data files (ClassicItems.lua) cost much.
   local update = (C_AddOns and C_AddOns.UpdateAddOnMemoryUsage) or UpdateAddOnMemoryUsage
   local usage = (C_AddOns and C_AddOns.GetAddOnMemoryUsage) or GetAddOnMemoryUsage
@@ -750,6 +996,14 @@ ns:On("ADDON_LOADED", function(name)
   -- Schema 9 (November 15): groups and rules (Groups.lua) start empty; nothing moves.
   if ForeverLedgerDB.schema < 9 then
     ForeverLedgerDB.schema = 9
+  end
+  -- Schema 10 (November 19): professions are keyed by their English name on every client.
+  -- profAliases (the game's names, learned as they're seen) starts empty; entries saved
+  -- under a translated name are merged into the English key at every login and after sync
+  -- or import, once that name is known (ns.NormalizeProfessions). Nothing is dropped.
+  if ForeverLedgerDB.schema < 10 then
+    ForeverLedgerDB.profAliases = ForeverLedgerDB.profAliases or {}
+    ForeverLedgerDB.schema = 10
   end
   -- Settings per character (below): while a character used its own, the shared settings
   -- were also kept under settingsAccount. If the game ever saved the stand-in instead of
@@ -933,6 +1187,8 @@ function ns:MergeData(data, via)
   local nBooks = via and data.books and ns:MergeBooks(data.books, via) or 0
   if nChars > 0 and ns.BuildUsageIndex then ns:BuildUsageIndex() end
   if (nPrices > 0 or nVendor > 0 or nBags > 0) and ns.InvalidateValues then ns:InvalidateValues() end
+  -- A partner's or an import's professions under a translated name (Codex review, November 19).
+  if nChars > 0 and ns.NormalizeProfessions then ns.NormalizeProfessions(db) end
   return nChars, nPrices, nVendor, nBags, nBooks
 end
 
@@ -988,11 +1244,11 @@ function ns:ApiReport()
   end
   local checks = {
     "C_TradeSkillUI.GetAllRecipeIDs", "C_TradeSkillUI.GetRecipeInfo", "C_TradeSkillUI.GetRecipeSchematic",
-    "C_TradeSkillUI.GetRecipeNumReagents", "C_TradeSkillUI.GetBaseProfessionInfo", "C_TradeSkillUI.GetTradeSkillLine",
+    "C_TradeSkillUI.GetRecipeNumReagents", "C_TradeSkillUI.GetBaseProfessionInfo", "C_TradeSkillUI.GetProfessionInfoBySkillLineID", "C_TradeSkillUI.GetTradeSkillLine",
     "GetProfessions", "GetNumSkillLines",
     "C_AuctionHouse.SendSearchQuery", "C_AuctionHouse.ReplicateItems", "C_AuctionHouse.GetReplicateItemTimeLeft","C_AuctionHouse.GetCommoditySearchResultInfo",
     "C_AuctionHouse.GetItemSearchResultInfo", "C_MerchantFrame.GetItemInfo", "GetMerchantItemInfo",
-    "TooltipDataProcessor.AddTooltipPostCall", "IsPlayerSpell", "C_Spell.GetSpellName", "C_Item.GetItemInfo", "C_Item.GetItemCount", "GetItemCount",
+    "TooltipDataProcessor.AddTooltipPostCall", "IsPlayerSpell", "C_Spell.GetSpellName", "C_Item.GetItemInfo", "C_Item.IsItemDataCachedByID", "C_Item.GetItemCount", "GetItemCount",
     "GetInboxHeaderInfo", "GetInboxInvoiceInfo", "GetInboxItem", "GetInboxNumItems",
     -- Your auctions (Auctions.lua).
     "C_AuctionHouse.CalculateCommodityDeposit", "C_AuctionHouse.CalculateItemDeposit", "C_AuctionHouse.GetItemKeyInfo",
@@ -1018,7 +1274,7 @@ function ns:ApiReport()
     "PanelTemplates_TabResize", "PanelTemplates_SelectTab", "PanelTemplates_DeselectTab", "C_Item.GetItemInfoInstant", "C_Item.GetItemQualityByID",
     "C_AuctionHouse.GetItemCommodityStatus", "C_AuctionHouse.GetQuoteDurationRemaining", "C_AuctionHouse.IsThrottledMessageSystemReady", "C_CVar.SetCVar", "SetOverrideBindingClick",
     "Enum.TooltipDataLineType.SellPrice",
-    "Auctionator.API.v1.GetAuctionPriceByItemID", "TSM_API.GetCustomPriceValue", "AucAdvanced.API.GetMarketValue",
+    "AHledgerAPI.GetPrice", "C_AddOnProfiler.GetAddOnMetric", "Enum.AddOnProfilerMetric.LastTime", "Auctionator.API.v1.GetAuctionPriceByItemID", "TSM_API.GetCustomPriceValue", "AucAdvanced.API.GetMarketValue",
     -- Pets (owner, September 30: planning a pet collection module; Forever's collection
     -- window has no pet tab yet). Modern journal, and Classic's older companion list.
     "C_PetJournal.GetNumPets", "C_PetJournal.GetPetInfoByIndex", "C_PetJournal.GetPetInfoBySpeciesID",
@@ -1033,7 +1289,7 @@ function ns:ApiReport()
     "GetTrainerServiceLevelReq", "GetTrainerServiceTypeFilter", "GetNumTalentTabs", "GetTalentTabInfo",
     "GetTalentInfo", "IsPlayerSpell", "IsSpellKnown", "GetSkillLineInfo", "C_SpellBook.IsSpellKnown",
   }
-  ns:Print("API check (include this in a bug report if something isn't working):")
+  print(ns.PREFIX, "API check (include this in a bug report if something isn't working):")
   for _, path in ipairs(checks) do
     print(("  %s %s"):format(has(path) and "|cff7fd39cyes|r" or "|cffee8597no|r ", path))
   end
@@ -1333,10 +1589,14 @@ SlashCmdList.FOREVERLEDGER = function(msg)
     ns:StartGeneralSession()
   elseif msg == "session stop" or msg == "session end" then
     ns:StopGeneralSession()
+  elseif msg == "session pause" or msg == "session resume" then
+    ns:PauseGeneralSession(msg == "session pause")
+  elseif msg == "session reset" then
+    ns:ResetGeneralSession()
   elseif msg == "session" then
     -- (Sessions were archived November 13 and are back November 15, without the Dashboard's
     -- button: a player asked for them.)
-    if ns:GeneralSessionRunning() then ns:Print("A session is running: /fl session stop ends it.")
+    if ns:GeneralSessionRunning() then ns:Print("A session is running: /fl session pause (or resume), /fl session reset starts it over, /fl session stop ends it.")
     else ns:Print("/fl session start begins a session (or Ctrl-click the minimap button).") end
   elseif msg == "money" then
     ns:PrintMoney()
@@ -1349,12 +1609,12 @@ SlashCmdList.FOREVERLEDGER = function(msg)
     ns:Print("Tooltip lines " .. (ns.db.settings.tooltip and "on." or "off."))
   elseif msg:match("^source") then
     local s = msg:match("^source%s+(%S+)")
-    local map = { auto = "auto", own = "own", auctionator = "Auctionator", tsm = "TSM", auctioneer = "Auctioneer" }
+    local map = { auto = "auto", own = "own", ahledger = "AHledger", auctionator = "Auctionator", tsm = "TSM", auctioneer = "Auctioneer" }
     if s and map[s] then
       ns.db.settings.source = map[s]
       ns:Print("Price source set to " .. map[s] .. ".")
     else
-      ns:Print("Use /fl source auto, own, auctionator, tsm or auctioneer.")
+      ns:Print("Use /fl source auto, own, ahledger, auctionator, tsm or auctioneer.")
     end
   elseif msg == "shuffles" or msg == "shuffles all" then
     ns:PrintShuffles(msg == "shuffles all")
@@ -1384,6 +1644,6 @@ SlashCmdList.FOREVERLEDGER = function(msg)
       ns:Print(("Auction house cut is %g%%. Change it with /fl cut 5"):format(ns.db.settings.ahCut or 5))
     end
   else
-    ns:Print("Commands: /fl (window), /fl scan, /fl scan full, /fl scan materials, /fl stop, /fl watch, /fl quiet, /fl price, /fl queue, /fl lists, /fl pull, /fl export, /fl csv, /fl import, /fl source <auto/own/auctionator>, /fl shuffles, /fl shuffles all, /fl cut <percent>, /fl margin <percent>, /fl seconds <n>, /fl deals, /fl deals settings, /fl minimap, /fl money, /fl session start, /fl session stop, /fl de, /fl pair <name>, /fl sync, /fl tooltip, /fl welcome, /fl new, /fl api, /fl debug")
+    ns:Print("Commands: /fl (window), /fl scan, /fl scan full, /fl scan materials, /fl stop, /fl watch, /fl quiet, /fl price, /fl queue, /fl lists, /fl pull, /fl export, /fl csv, /fl import, /fl source <auto/own/auctionator>, /fl shuffles, /fl shuffles all, /fl cut <percent>, /fl margin <percent>, /fl seconds <n>, /fl deals, /fl deals settings, /fl minimap, /fl money, /fl session start, /fl session pause, /fl session reset, /fl session stop, /fl de, /fl pair <name>, /fl sync, /fl tooltip, /fl welcome, /fl new, /fl api, /fl debug")
   end
 end

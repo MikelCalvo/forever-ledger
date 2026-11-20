@@ -379,9 +379,12 @@ local function filters(kind)
   return { kind = kind, least = g.least, mine = g.mine, prof = g.prof, search = f and f.search:GetText() or "" }
 end
 
+local workedAHledger   -- (AHledger prices went into the list: its credit in the status line)
 local function work()
+  local before = ns.AHledgerUses and ns.AHledgerUses() or 0
   rows, noPrice = ns:GoldIdeas()
   workedAt = time()
+  workedAHledger = ns.AHledgerUses and ns.AHledgerUses() ~= before
 end
 
 local function sortRows(list)
@@ -399,28 +402,28 @@ local function rowTip(self)
   local r = self.entry
   GameTooltip:SetOwner(self, "ANCHOR_LEFT")
   GameTooltip:SetItemByID(r.id)
-  GameTooltip:AddLine(" ")
+  ns:TooltipAddLine(" ")
   if r.kind == "deal" then
     for _, l in ipairs(ns:DealExplain(r.d)) do
-      if l.head then GameTooltip:AddLine(l.head, 1, 0.82, 0)
+      if l.head then ns:TooltipAddLine(l.head, 1, 0.82, 0)
       elseif l.note then
         local c = l.color or { 0.8, 0.8, 0.8 }
-        GameTooltip:AddLine(l.note, c[1], c[2], c[3], true)
-      else GameTooltip:AddDoubleLine(l[1], l[2], 0.8, 0.8, 0.8, 1, 1, 1) end
+        ns:TooltipAddLine(l.note, c[1], c[2], c[3], true)
+      else ns:TooltipAddDoubleLine(l[1], l[2], 0.8, 0.8, 0.8, 1, 1, 1) end
     end
   elseif r.kind == "bootybay" then
     local c = r.c
-    GameTooltip:AddLine(r.dir == "in" and "Buy at Booty Bay, sell here" or "Buy here, sell at Booty Bay", 1, 0.82, 0)
-    GameTooltip:AddDoubleLine("Booty Bay, cheapest", ("%s (%d listed)"):format(money(c.there), c.listedThere), 0.8, 0.8, 0.8, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Here, cheapest", ("%s (%d listed)"):format(money(c.here), c.listedHere), 0.8, 0.8, 0.8, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Brings where you sell, after the cut", money(r.brings), 0.8, 0.8, 0.8, 1, 1, 1)
-    GameTooltip:AddLine("Each auction house's cut and one unsold listing's deposit are counted. Its prices are from your last scan there (" .. ns.Age(c.t) .. ").", 0.6, 0.6, 0.6, true)
+    ns:TooltipAddLine(r.dir == "in" and "Buy at Booty Bay, sell here" or "Buy here, sell at Booty Bay", 1, 0.82, 0)
+    ns:TooltipAddDoubleLine("Booty Bay, cheapest", ("%s (%d listed)"):format(money(c.there), c.listedThere), 0.8, 0.8, 0.8, 1, 1, 1)
+    ns:TooltipAddDoubleLine("Here, cheapest", ("%s (%d listed)"):format(money(c.here), c.listedHere), 0.8, 0.8, 0.8, 1, 1, 1)
+    ns:TooltipAddDoubleLine("Brings where you sell, after the cut", money(r.brings), 0.8, 0.8, 0.8, 1, 1, 1)
+    ns:TooltipAddLine("Each auction house's cut and one unsold listing's deposit are counted. Its prices are from your last scan there (" .. ns.Age(c.t) .. ").", 0.6, 0.6, 0.6, true)
   else
-    if r.whoLong then GameTooltip:AddLine(r.whoLong, 0.8, 0.8, 0.8, true) end
-    for line in (r.kind == "flip" and flipText(r) or ns:ShuffleDetails(r.s)):gmatch("[^\n]+") do GameTooltip:AddLine(line, 0.85, 0.85, 0.85, true) end
+    if r.whoLong then ns:TooltipAddLine(r.whoLong, 0.8, 0.8, 0.8, true) end
+    for line in (r.kind == "flip" and flipText(r) or ns:ShuffleDetails(r.s)):gmatch("[^\n]+") do ns:TooltipAddLine(line, 0.85, 0.85, 0.85, true) end
   end
-  GameTooltip:AddLine(" ")
-  GameTooltip:AddLine("Click for how it adds up. Right-click for its price window.", 0.6, 0.6, 0.6, true)
+  ns:TooltipAddLine(" ")
+  ns:TooltipAddLine("Click for how it adds up. Right-click for its price window.", 0.6, 0.6, 0.6, true)
   GameTooltip:Show()
 end
 
@@ -572,6 +575,7 @@ local function drawList()
   if noPrice > 0 and not g.mine then
     parts[#parts + 1] = ("%d left out: a material has no price"):format(noPrice)
   end
+  if workedAHledger then parts[#parts + 1] = ns.AHLEDGER_CREDIT end   -- (its terms: credit where its prices show)
   f.status:SetText(table.concat(parts, ". ") .. (#parts > 0 and "." or ""))
   f.empty:SetShown(#shown == 0)
   if #shown == 0 then
@@ -618,7 +622,9 @@ local function craftSpec(r, spec)
   -- list's prices change: scans redraw the tab up to once a second.
   local key = ("%s:%d:%s:%s"):format(r.key, n, tostring(free), tostring(workedAt))
   if f.panel.planKey ~= key then
+    local before = ns.AHledgerUses and ns.AHledgerUses() or 0
     f.panel.planKey, f.panel.planFor = key, ns:GoldPlan(r, n, free)
+    f.panel.planAHledger = ns.AHledgerUses and ns.AHledgerUses() ~= before
   end
   local plan = f.panel.planFor
   f.panel.plan = plan
@@ -637,8 +643,12 @@ local function craftSpec(r, spec)
       bits[#bits + 1] = sp.key == "none" and "no sales seen yet"
         or ("sells: %s, about %d a day"):format(sp.label, math.floor(sp.perDay + 0.5))
     end
+    if sp and sp.from == "AHledger" then bits.credit = true end
   end
   if #bits > 0 then spec[#spec + 1] = { style = "note", left = table.concat(bits, ", ") } end
+  -- AHledger's terms: credit where its figures show (Prices.lua): its sell speed, or its
+  -- prices in the plan (Codex review, November 17).
+  if bits.credit or f.panel.planAHledger then spec[#spec + 1] = { style = "note", left = ns.AHLEDGER_CREDIT } end
   spec[#spec + 1] = { style = "head", left = ("For %d %s"):format(plan.n, plan.n == 1 and "craft" or "crafts") }
   spec[#spec + 1] = { style = "pair", left = "Materials, a craft", right = ns.Money(each) }
   if plan.brings then
@@ -885,8 +895,8 @@ function ns:BuildGoldMaking(parent)
     end, 22)
     b:HookScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-      GameTooltip:AddLine(k.label, 1, 1, 1)
-      GameTooltip:AddLine(KIND_TIP[k.key], nil, nil, nil, true)
+      ns:TooltipAddLine(k.label, 1, 1, 1)
+      ns:TooltipAddLine(KIND_TIP[k.key], nil, nil, nil, true)
       GameTooltip:Show()
     end)
     b:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -909,8 +919,8 @@ function ns:BuildGoldMaking(parent)
   f.mine.label:SetText("Only my recipes")
   f.mine:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("Only my recipes", 1, 1, 1)
-    GameTooltip:AddLine("On: only recipes one of your characters knows. Off: also every profession's crafts that sell to a vendor for more than they cost, from recipes none of your characters know yet (marked learn). Hover one for where its recipe data comes from.", nil, nil, nil, true)
+    ns:TooltipAddLine("Only my recipes", 1, 1, 1)
+    ns:TooltipAddLine("On: only recipes one of your characters knows. Off: also every profession's crafts that sell to a vendor for more than they cost, from recipes none of your characters know yet (marked learn). Hover one for where its recipe data comes from.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   f.mine:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -919,8 +929,8 @@ function ns:BuildGoldMaking(parent)
   f.refreshBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -30)
   f.refreshBtn:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("Work it out again", 1, 1, 1)
-    GameTooltip:AddLine("From the prices you have now. It's worked out by itself when you open this tab, if it's more than 2 minutes old.", nil, nil, nil, true)
+    ns:TooltipAddLine("Work it out again", 1, 1, 1)
+    ns:TooltipAddLine("From the prices you have now. It's worked out by itself when you open this tab, if it's more than 2 minutes old.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   f.refreshBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -951,12 +961,12 @@ function ns:BuildGoldMaking(parent)
       local set = S().sets[i]
       if not set then return end
       GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-      GameTooltip:AddLine(set.name, 1, 1, 1)
+      ns:TooltipAddLine(set.name, 1, 1, 1)
       local kindLabel = "Everything"
       for _, k in ipairs(KINDS) do if k.key == set.kind then kindLabel = k.label end end
-      GameTooltip:AddLine(("%s%s, least profit %s%s%s"):format(kindLabel, (set.prof and set.prof ~= "all") and (", " .. set.prof) or "", (set.least or 0) > 0 and ns.MoneyPlain(set.least) or "any",
+      ns:TooltipAddLine(("%s%s, least profit %s%s%s"):format(kindLabel, (set.prof and set.prof ~= "all") and (", " .. set.prof) or "", (set.least or 0) > 0 and ns.MoneyPlain(set.least) or "any",
         set.mine == false and ", every recipe" or "", (set.search or "") ~= "" and (", \"" .. set.search .. "\"") or ""), nil, nil, nil, true)
-      GameTooltip:AddLine("Click to use. Right-click to delete.", 0.6, 0.6, 0.6)
+      ns:TooltipAddLine("Click to use. Right-click to delete.", 0.6, 0.6, 0.6)
       GameTooltip:Show()
     end)
     b:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1010,9 +1020,9 @@ function ns:BuildGoldMaking(parent)
     end)
     b:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_TOP")
-      GameTooltip:AddLine(h.label, 1, 1, 1)
-      GameTooltip:AddLine(h.tip, nil, nil, nil, true)
-      GameTooltip:AddLine("Click to sort by it, again to reverse.", 0.6, 0.6, 0.6)
+      ns:TooltipAddLine(h.label, 1, 1, 1)
+      ns:TooltipAddLine(h.tip, nil, nil, nil, true)
+      ns:TooltipAddLine("Click to sort by it, again to reverse.", 0.6, 0.6, 0.6)
       GameTooltip:Show()
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1052,8 +1062,8 @@ function ns:BuildGoldMaking(parent)
   countHover:EnableMouse(true)
   countHover:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:AddLine("How many crafts", 1, 1, 1)
-    GameTooltip:AddLine("The materials are worked out for this many crafts, the cheapest way for that many: each one from your bags, the next listing on the auction house, a vendor, or made from its own materials, whichever is cheapest next, and nothing counted twice. It starts at what's listed cheaply enough and, for an auction house craft, about a day's sales.", nil, nil, nil, true)
+    ns:TooltipAddLine("How many crafts", 1, 1, 1)
+    ns:TooltipAddLine("The materials are worked out for this many crafts, the cheapest way for that many: each one from your bags, the next listing on the auction house, a vendor, or made from its own materials, whichever is cheapest next, and nothing counted twice. It starts at what's listed cheaply enough and, for an auction house craft, about a day's sales.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   countHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1068,8 +1078,8 @@ function ns:BuildGoldMaking(parent)
   p.ownedFree.label:SetText("Count my bags as paid for")
   p.ownedFree:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:AddLine("Count my bags as paid for", 1, 1, 1)
-    GameTooltip:AddLine("Off: materials in your bags are used first, at what they'd sell for (they aren't free: you could sell them). On: they cost nothing here.", nil, nil, nil, true)
+    ns:TooltipAddLine("Count my bags as paid for", 1, 1, 1)
+    ns:TooltipAddLine("Off: materials in your bags are used first, at what they'd sell for (they aren't free: you could sell them). On: they cost nothing here.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   p.ownedFree:HookScript("OnLeave", function() GameTooltip:Hide() end)

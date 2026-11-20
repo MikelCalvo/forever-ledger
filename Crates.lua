@@ -18,35 +18,85 @@ local TURN_IN_PAY = 500
 local function dim(t) return "|cff888888" .. t .. "|r" end
 local function money(v) return v and ns.Money(math.floor(v + 0.5)) or dim("?") end
 
-local function isCrate(name) return name and name:sub(1, #PREFIX) == PREFIX end
--- A filled crate: "Sealed Apprentice Crate".
-local function isSealed(name) return name and name:find("^Sealed") and name:find("Crate", 1, true) and true or false end
+-- The Waylaid Crates by item number (Frank's saved crates, November 18), so they're found
+-- in every language: a German player's Crates tab was empty (CurseForge comment, November
+-- 18) because only the English name was checked. 248700 and 248701 aren't crates.
+local CRATE_IDS = {}
+for id = 248682, 248713 do if id ~= 248700 and id ~= 248701 then CRATE_IDS[id] = true end end
+ns.CRATE_IDS = CRATE_IDS
+
+-- id: the item number (any language); name: the English name, for a crate added later.
+local function isCrate(id, name)
+  if id and CRATE_IDS[id] then return true end
+  return name and name:sub(1, #PREFIX) == PREFIX or false
+end
+-- A filled crate: "Sealed Apprentice Crate", one item number per quality (wago.tools,
+-- ItemSparse at the pinned build 1.60.1.70938, November 18); the English name as fallback.
+local SEALED_IDS = { [248765] = true, [248770] = true, [248775] = true }
+ns.SEALED_CRATE_IDS = SEALED_IDS
+local function isSealed(id, name)
+  if id and SEALED_IDS[id] then return true end
+  return name and name:find("^Sealed") and name:find("Crate", 1, true) and true or false end
+-- A crate's name without "Waylaid Crate: " (or its translation): "Expert Ingots".
+local function shortName(name)
+  name = name or "?"
+  return name:match("^[^:]+:%s*(.+)$") or name
+end
 
 ---------------------------------------------------------------------------
 -- Reading a crate's bundles from its tooltip
 ---------------------------------------------------------------------------
+-- One bundle line without its dash: "10 Copper Bar and 5 Tin Bar" -> parts. Any language:
+-- each number starts an item, and the word just before the next number ("and", "und",
+-- "et") or a comma ends it.
+local function parseParts(rest)
+  local parts, starts = {}, {}
+  local pos = 1
+  while true do
+    local s, e = rest:find("%f[%d]%d+%s*x?%s+", pos)
+    if not s then break end
+    -- A number counts only at the start or after a space or comma ("x10" glued on doesn't).
+    if s == 1 or rest:sub(s - 1, s - 1):find("[%s,]") then starts[#starts + 1] = { s = s, e = e } end
+    pos = e + 1
+  end
+  for i, st in ipairs(starts) do
+    local qty = tonumber(rest:match("^(%d+)", st.s))
+    local nextS = starts[i + 1] and starts[i + 1].s
+    local name = rest:sub(st.e + 1, nextS and nextS - 1 or #rest)
+    name = name:gsub("%s+$", "")
+    if nextS then
+      if name:find(",$") then name = name:gsub(",$", "")
+      else name = name:gsub("%s+%S+$", "") end   -- the joining word
+      name = name:gsub("[,%s]+$", "")
+    end
+    name = name:gsub("[%.;]$", "")
+    if qty and name ~= "" then parts[#parts + 1] = { qty = qty, name = name } end
+  end
+  return parts
+end
+
 -- "- 20 Strange Dust" lines -> { { qty = 20, name = "Strange Dust" }, ... } per bundle.
 -- A bundle of several items ("- 10 Copper Bar and 5 Tin Bar") becomes several parts.
+-- English tooltips: only the lines after "any bundle". Other languages (that line is
+-- translated): every "- <number> ..." line.
 local function parseBundles(lines)
-  local bundles, inList = {}, false
+  local all, english, inList = {}, {}, false
   for _, text in ipairs(lines) do
     for line in (text .. "\n"):gmatch("([^\n]*)\n") do
       if line:find("any bundle", 1, true) then inList = true end
-      local rest = line:match("^%s*%-%s*(.+)$")
-      if inList and rest then
-        local parts = {}
-        for piece in (rest .. " and "):gmatch("(.-)%s+and%s+") do
-          for sub in (piece .. ","):gmatch("%s*([^,]+),") do
-            local qty, name = sub:match("^(%d+)%s*x?%s+(.+)$")
-            if qty then parts[#parts + 1] = { qty = tonumber(qty), name = name:gsub("%s+$", "") } end
-          end
+      local rest = line:match("^%s*%-%s*(%d.+)$")
+      if rest then
+        local parts = parseParts(rest)
+        if #parts > 0 then
+          all[#all + 1] = parts
+          if inList then english[#english + 1] = parts end
         end
-        if #parts > 0 then bundles[#bundles + 1] = parts end
       end
     end
   end
-  return bundles
+  return inList and english or all
 end
+ns.CrateBundlesFromLines = parseBundles
 
 -- Bundles for a crate, read once from its tooltip and saved.
 local function crateInfo(id)
@@ -68,23 +118,39 @@ end
 ---------------------------------------------------------------------------
 -- Prices
 ---------------------------------------------------------------------------
--- Item names to IDs, from everything priced or named so far.
-local nameIndex, nameIndexTime = {}, 0
+-- Item names to IDs, from names saved or already loaded by the game.
+-- Built again only for a name it doesn't know, at most every 10 minutes. It never asks
+-- the game for items it hasn't loaded: asking for every priced item (about 6,000) made the
+-- game load them all, 6,304 item loads in 14 seconds and a 650 ms freeze on a crate hover
+-- (Frank's AN30, November 19). Names found are saved with the crate as item IDs (CrateReport).
+local NAME_INDEX_KEEP = 600
+local nameIndex, nameIndexTime = {}, -math.huge
+local function loadedName(id)
+  local cached = C_Item and C_Item.IsItemDataCachedByID
+  if not cached then return end
+  local ok, yes = pcall(cached, id)
+  if ok and yes then return (ns.GetItemInfo(id)) end
+end
 local function idForName(name)
-  if GetTime() - nameIndexTime > 30 then
+  if not name then return end
+  if nameIndex[name] then return nameIndex[name] end
+  if GetTime() - nameIndexTime > NAME_INDEX_KEEP then
     nameIndex, nameIndexTime = {}, GetTime()
+    for id, n in pairs(ns.FOREVER_ITEM_NAMES or {}) do nameIndex[n] = id end
     for id, n in pairs(ns.db.itemNames) do nameIndex[n] = id end
-    for id in pairs(ns.db.prices[ns.MarketKey()] or {}) do
-      local n = ns.GetItemInfo(id)
-      if n then nameIndex[n] = id end
-    end
-    for id in pairs(ns.db.vendorBuy) do
-      local n = ns.GetItemInfo(id)
-      if n then nameIndex[n] = id end
+    for _, list in ipairs({ ns.db.prices[ns.MarketKey()] or {}, ns.db.vendorBuy }) do
+      for id in pairs(list) do
+        if not ns.db.itemNames[id] then
+          local n = loadedName(id)
+          if n then nameIndex[n] = id end
+        end
+      end
     end
   end
   return nameIndex[name]
 end
+ns.CrateIdForName = idForName
+function ns.CrateNamesReset() nameIndexTime = -math.huge end   -- (tests)
 
 -- What buying qty of an item costs: from a vendor, or across the cheapest auction
 -- listings (the price ladder saved by scans). nil if unknown or not enough listed.
@@ -125,7 +191,7 @@ end
 function ns:CrateToShoppingList(r, bundle)
   bundle = bundle or (r and (r.cheapest or r.bundles[1]))
   if not bundle then return end
-  local name = "Crate: " .. (r.name or "?"):gsub("^Waylaid Crate: ", "")
+  local name = "Crate: " .. shortName(r.name)
   local list
   for _, l in ipairs(ns:ShoppingLists()) do if l.name == name then list = l end end
   if not list then
@@ -251,7 +317,10 @@ function ns:CrateReport(id)
   for _, parts in ipairs(info.bundles) do
     local b = { parts = {}, cost = 0, have = true }
     for _, p in ipairs(parts) do
-      local pid = idForName(p.name)
+      -- (p is the saved bundle part: its item ID is kept once found, so later looks, and
+      -- any language, don't need the name.)
+      local pid = p.id or idForName(p.name)
+      if pid and not p.id then p.id = pid end
       local cost = pid and ns:CostToBuy(pid, p.qty)
       local bags, bank, alts, byAlt = ns:ItemLocations(pid)
       local owned = bags + bank + alts
@@ -283,7 +352,7 @@ function ns:KnownCrates()
   local function consider(id)
     if seen[id] then return end
     seen[id] = true
-    if isCrate(ns.ItemName(id)) then ids[#ids + 1] = id end
+    if isCrate(id, ns.ItemName(id)) then ids[#ids + 1] = id end
   end
   for id in pairs(ns.db.prices[ns.MarketKey()] or {}) do consider(id) end
   for id in pairs(ns.db.crates) do consider(id) end
@@ -312,8 +381,8 @@ local function crateCounts()
     for slot = 1, (C_Container.GetContainerNumSlots(bag) or 0) do
       local info = C_Container.GetContainerItemInfo(bag, slot)
       local name = info and info.itemID and ns.ItemName(info.itemID)
-      if isCrate(name) then counts[name] = (counts[name] or 0) + (info.stackCount or 1)
-      elseif isSealed(name) then sealed = sealed + (info.stackCount or 1) end
+      if isCrate(info and info.itemID, name) then counts[name] = (counts[name] or 0) + (info.stackCount or 1)
+      elseif isSealed(info and info.itemID, name) then sealed = sealed + (info.stackCount or 1) end
     end
   end
   return counts, sealed
@@ -358,9 +427,19 @@ end)
 ---------------------------------------------------------------------------
 -- Tooltip line on crates
 ---------------------------------------------------------------------------
+-- Kept TIP_KEEP seconds per crate: the tooltip asks again on every redraw.
+local TIP_KEEP, tipCache = 30, {}
 function ns:CrateTooltipLine(id)
   if not ns.db.settings.crates then return end
-  if not isCrate(ns.ItemName(id)) then return end
+  if not isCrate(id, ns.ItemName(id)) then return end
+  local c = tipCache[id]
+  if c and GetTime() - c.t < TIP_KEEP then return c.line or nil end
+  local line = ns:CrateTooltipText(id)
+  tipCache[id] = { t = GetTime(), line = line or false }
+  return line
+end
+
+function ns:CrateTooltipText(id)
   local r = ns:CrateReport(id)
   if not r or not r.cheapest then return end
   local parts = {}
@@ -500,11 +579,11 @@ local function detailLine(d, j)
     local p = self.part
     if not p then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:AddLine(p.name, 1, 1, 1)
-    GameTooltip:AddDoubleLine("In your bags", tostring(p.bags or 0), 0.85, 0.85, 0.85, 1, 1, 1)
-    GameTooltip:AddDoubleLine("In your bank", tostring(p.bank or 0), 0.85, 0.85, 0.85, 1, 1, 1)
-    for name, n in pairs(p.byAlt or {}) do GameTooltip:AddDoubleLine(name, tostring(n), 0.85, 0.85, 0.85, 1, 1, 1) end
-    GameTooltip:AddLine("Bank and alts as of their last visit. Click to search the auction house.", T.accent[1], T.accent[2], T.accent[3], true)
+    ns:TooltipAddLine(p.name, 1, 1, 1)
+    ns:TooltipAddDoubleLine("In your bags", tostring(p.bags or 0), 0.85, 0.85, 0.85, 1, 1, 1)
+    ns:TooltipAddDoubleLine("In your bank", tostring(p.bank or 0), 0.85, 0.85, 0.85, 1, 1, 1)
+    for name, n in pairs(p.byAlt or {}) do ns:TooltipAddDoubleLine(name, tostring(n), 0.85, 0.85, 0.85, 1, 1, 1) end
+    ns:TooltipAddLine("Bank and alts as of their last visit. Click to search the auction house.", T.accent[1], T.accent[2], T.accent[3], true)
     GameTooltip:Show()
   end)
   b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -557,7 +636,7 @@ function ns:RefreshCrates()
     local parts = {}
     for _, p in ipairs(r.cheapest and r.cheapest.parts or {}) do parts[#parts + 1] = p.qty .. " " .. p.name end
     local values = {
-      name = (r.name or "?"):gsub("^Waylaid Crate: ", "") .. (r.owned and dim("  in bags") or ""),
+      name = shortName(r.name) .. (r.owned and dim("  in bags") or ""),
       level = r.level and tostring(r.level) or "",
       fill = #parts > 0 and table.concat(parts, " + ") .. (r.cheapest.have and dim(" (have)") or "") or dim("no prices yet"),
       fillCost = r.cheapest and money(r.cheapest.cost) or dim("?"),

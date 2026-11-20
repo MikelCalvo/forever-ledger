@@ -1,4 +1,5 @@
 local _, ns = ...
+local print = ns.LocalizedPrint
 
 ---------------------------------------------------------------------------
 -- Trainers and the riding fund (owner, October 5). The training advice built on this (spell
@@ -14,7 +15,24 @@ local _, ns = ...
 ---------------------------------------------------------------------------
 local lastRead   -- the last trainer read: { name, npc, prof, list }
 
-local function isRiding(name) return name and name:find("Riding", 1, true) ~= nil end
+-- Riding services and spells by the game's own names for the riding spells (Apprentice
+-- Riding 33388, Journeyman 33391; Expert and Artisan too), so any language works; the
+-- English word stays as a fallback.
+local RIDING_IDS = { 33388, 33391, 34090, 34091 }
+local function ridingNames()
+  local names = {}
+  for _, id in ipairs(RIDING_IDS) do
+    local n = ns.SpellName and ns.SpellName(id)
+    if type(n) == "string" and n ~= "" then names[n] = id end
+  end
+  return names
+end
+local function isRiding(name)
+  if type(name) ~= "string" then return false end
+  if ridingNames()[name] then return true end
+  return name:find("Riding", 1, true) ~= nil
+end
+ns.IsRidingName = isRiding
 
 function ns:TrainerRead(list, npc, npcID, prof)
   lastRead = { npc = npc, prof = prof, list = list, t = time() }
@@ -70,7 +88,7 @@ function ns:RidingTier()
   if best > 0 then return best end
   -- The spellbook, by name (Forever has no Classic skill list: owner's /fl api, October 5).
   for _, name in ipairs(ns:SpellbookRiding()) do
-    local tier = (name:find("Apprentice", 1, true) and 1) or 2
+    local tier = ((ridingNames()[name] == 33388 or name:find("Apprentice", 1, true)) and 1) or 2
     if tier > best then best = tier end
   end
   if best > 0 then return best end
@@ -189,8 +207,8 @@ end
 -- training (owner's estimate: 10g and 100g; mounts are per character, so each needs
 -- its own). The fund is the two together: 100g, then 1,000g.
 local RIDING_GUESS = {
-  { name = "Apprentice Riding", short = "Riding at 40", level = 40, training = 900000, mount = 100000, match = "Apprentice" },
-  { name = "Journeyman Riding", short = "Epic riding at 60", level = 60, training = 9000000, mount = 1000000, match = "Journeyman" },
+  { name = "Apprentice Riding", short = "Riding at 40", level = 40, training = 900000, mount = 100000, match = "Apprentice", id = 33388 },
+  { name = "Journeyman Riding", short = "Epic riding at 60", level = 60, training = 9000000, mount = 1000000, match = "Journeyman", id = 33391 },
 }
 function ns:RidingFund(goldNow, totals, goldFirst)
   if ns.db.settings.ridingFund == false then return end
@@ -202,8 +220,9 @@ function ns:RidingFund(goldNow, totals, goldFirst)
   local out = { name = want.name, short = want.short, level = want.level, training = want.training,
     mount = want.mount, seen = false }
   -- Seen at a riding trainer: the service whose name says its tier (Apprentice Riding...).
+  local byName = ridingNames()
   for svc, r in pairs(ns.db.riding or {}) do
-    if svc:find(want.match, 1, true) and r.cost then
+    if (byName[svc] == want.id or svc:find(want.match, 1, true)) and r.cost then
       out.training, out.seen, out.name = r.cost, true, svc
       if r.level and r.level > 0 then out.level = r.level end
     end
