@@ -7,6 +7,8 @@
 ## X-Curse-Project-ID: 1720193
 ## X-Wago-ID: qGYBBzNg
 
+Libs\LibStub\LibStub.lua
+Libs\LibAHTab\LibAHTab.lua
 Locale.lua
 Locales\zhCN.lua
 Locales\ruRU.lua

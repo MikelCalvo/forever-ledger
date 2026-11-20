@@ -19,7 +19,7 @@ jobs:
 
       - name: Check every Lua file
         run: |
-          for f in *.lua; do
+          for f in *.lua Libs/*/*.lua; do
             echo "Checking $f"
             luac5.1 -p "$f"
           done

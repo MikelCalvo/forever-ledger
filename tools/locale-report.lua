@@ -28,7 +28,7 @@ local function addonFiles()
   local list = {}
   for line in io.lines("ForeverLedger.toc") do
     line = line:gsub("\r", ""):gsub("\\", "/")
-    if line:match("%.lua$") and not line:match("^Locales/") and not SKIP[line] then list[#list + 1] = line end
+    if line:match("%.lua$") and not line:match("^Locales/") and not line:match("^Libs/") and not SKIP[line] then list[#list + 1] = line end
   end
   return list
 end

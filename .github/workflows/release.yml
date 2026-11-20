@@ -57,7 +57,7 @@ jobs:
           VERSION="${{ steps.ver.outputs.version }}"
           mkdir -p build/ForeverLedger
           cp ForeverLedger.toc *.lua README.md CHANGELOG.md LICENSE build/ForeverLedger/
-          cp -r media Locales build/ForeverLedger/
+          cp -r media Locales Libs build/ForeverLedger/
           # Every file the .toc loads must be in the zip (Locales\ was once left out).
           grep -v '^#' ForeverLedger.toc | tr -d '\r' | sed 's#\\#/#g' | grep -v '^$' | while read -r f; do
             [ -f "build/ForeverLedger/$f" ] || { echo "Missing from the zip: $f"; exit 1; }
