@@ -795,10 +795,10 @@ function ns:PrintPerf(reset)
   if reset then
     ns.perf, ns.perfSince = {}, GetTime()
     if ns.db then ns.db.freezeLog = nil end
-    ns:Print("Timing and freezes reset. Play until it happens again, then /fl perf.")
+    print(ns.PREFIX, "Timing and freezes reset. Play until it happens again, then /fl perf.")
     return
   end
-  ns:Print(("Time used by Forever Ledger over the last %d seconds, slowest single moment first:"):format(GetTime() - ns.perfSince))
+  print(ns.PREFIX, ("Time used by Forever Ledger over the last %d seconds, slowest single moment first:"):format(GetTime() - ns.perfSince))
   for _, line in ipairs(ns.PerfLines(12)) do print("  " .. line) end
   local left = ns.LeftoverLine(4)
   if left then print("  " .. left) end
@@ -1263,7 +1263,7 @@ function ns:ApiReport()
     "GetTrainerServiceLevelReq", "GetTrainerServiceTypeFilter", "GetNumTalentTabs", "GetTalentTabInfo",
     "GetTalentInfo", "IsPlayerSpell", "IsSpellKnown", "GetSkillLineInfo", "C_SpellBook.IsSpellKnown",
   }
-  ns:Print("API check (include this in a bug report if something isn't working):")
+  print(ns.PREFIX, "API check (include this in a bug report if something isn't working):")
   for _, path in ipairs(checks) do
     print(("  %s %s"):format(has(path) and "|cff7fd39cyes|r" or "|cffee8597no|r ", path))
   end

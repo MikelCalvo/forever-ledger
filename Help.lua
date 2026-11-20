@@ -69,6 +69,7 @@ ns.HELP = {
   } },
   { "Buy queue and lists", {
     { sub = "Buy queue" },
+    { "Profit %", "On Vendor flips, click Profit % for the highest return on purchase cost first, or Profit for the usual total-profit order. Percentages use affordable scanned listings. Watched items still come first. Ordinary row refreshes keep the order." },
     { "Buy queue", "Click the Buy tab along the bottom of the auction house window, after Blizzard's Buy, Sell and Auctions (My auctions beside it shows your auctions; with Forever Ledger's tabs in the auction house off in Settings, click Buy queue under the window for a panel beside it). It lines up vendor flips and your shopping lists. Each row says Up to (the most it pays for one), Buy (how many it would buy now: what's listed at or under that, no more than the list wants or your gold covers) and Total (what those cost). It finds the next one by itself, and a click on Buy (or, with Scroll to buy ticked, a tick of the mouse wheel, up or down, anywhere over Vendor flips or over a shopping list's top strip) buys it. A stack of materials is confirmed in the same tick once its final price comes back within your limit (to confirm it yourself, tick Confirm stacks with a second click in Settings, Auction house). Bottom right: what you bought this visit, what it cost and the profit if you vendored it (hover for the numbers). /fl queue. Each row has a star: click it to watch the item (gold while watched; Live watch then looks for it every time it reads the auction house), and a short reason, FLIP or WATCH (or the shopping list's name)." },
     { "Scan once", "The Buy tab's Scan once view is for looking things over instead of sniping. Scan reads the whole auction house list once (with Live watch on, its prices are fresh already), and the list stays as scanned until you scan again. Tick groups on the left (All items, All groups, Materials, Cloth...; a group counts the ones under it, ticked groups add together, + opens a group) and search names at the top right. Each item shows its cheapest price, its usual price, how far under or over that it is (green under 90%, red over 110%), how many are listed, and FLIP, WATCH or DEAL when Live watch would buy it. Best deals first. Click a row for its price window; click the star to watch it." },
     { "Post", "The Post tab in the auction house window: your bags, grouped (Cloth, Herbs, Gear...), each with a price ready and a mark from the sell suggestion (Post, Keep, Vendor, Disenchant; Show: Everything lists all you could post). The price comes from the item's post rule: the same as the cheapest (listings at one price sell in the order they went up; a rule can undercut instead, or Settings, Selling: Always undercut by for every item without a rule of its own; when the cheapest is yours, yours is matched, never undercut), never below 70% of the usual price or what a vendor pays after the cut; under that it isn't posted. Picking an item looks it up on the auction house, as the Sell page does, and the price comes from the listings now (Post waits for that); the table below lists them, price each, how many and the seller, yours marked, with a line where yours would go; click a listing to price yours the same as it, Refresh looks again. Change how many, the price or how long (2h, 8h, 24h) and see the deposit, the total price and what you get after the cut; the line under says where the price came from and which rule. Post posts it and moves to the next; Skip and Previous move along; middle-click a row to skip it this visit. Scroll to post (off each visit, Esc turns it off): each mouse wheel tick over the list posts the highlighted one. One click or tick per post, as the game requires; when the game asks to confirm, the next click or tick confirms." },
@@ -424,7 +425,7 @@ function ns:RefreshHelp()
 
   if q then
     -- Searching: the matching entries and questions of every topic, under its name.
-    local function hit(a, b) return (a or ""):lower():find(q, 1, true) or (b or ""):lower():find(q, 1, true) end
+    local function hit(a, b) return (a or ""):lower():find(q, 1, true) or (b or ""):lower():find(q, 1, true) or ns.LocalizeText(a or ""):lower():find(q, 1, true) or ns.LocalizeText(b or ""):lower():find(q, 1, true) end
     local any = false
     for _, s in ipairs(ns.HELP) do
       local list = {}
@@ -550,7 +551,7 @@ ns:On("PLAYER_ENTERING_WORLD", function()
     if #turnedOff == 0 then return end
     local text = ("%s is installed. So you don't see things twice, Forever Ledger turned off:\n\n%s\n\nEverything else stays on. You can turn these back on any time in Settings."):format(
       table.concat(names, " and "), table.concat(lines, "\n"))
-    local dialog = StaticPopup_Show("FOREVER_LEDGER_OVERLAP", text)
+    local dialog = ns:ShowPopup("FOREVER_LEDGER_OVERLAP", text)
     if dialog then dialog.data = turnedOff end
   end)
 end)

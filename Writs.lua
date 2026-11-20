@@ -512,25 +512,25 @@ local function rowTooltip(self)
   if not e then return end
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
   GameTooltip:SetItemByID(e.item)
-  GameTooltip:AddLine(" ")
+  ns:TooltipAddLine(" ")
   local t = TIERS[e.tier]
-  GameTooltip:AddDoubleLine("Writ", ("%s, %d reputation"):format(t.label, t.rep), 0.7, 0.7, 0.7, 1, 1, 1)
-  GameTooltip:AddDoubleLine("Deliver to", e.who and (e.who .. (e.zone and (", " .. e.zone) or "")) or (e.zone and ("not known yet (players say " .. e.zone:gsub("%?$", "") .. ")") or "not known yet"),
+  ns:TooltipAddDoubleLine("Writ", ("%s, %d reputation"):format(t.label, t.rep), 0.7, 0.7, 0.7, 1, 1, 1)
+  ns:TooltipAddDoubleLine("Deliver to", e.who and (e.who .. (e.zone and (", " .. e.zone) or "")) or (e.zone and ("not known yet (players say " .. e.zone:gsub("%?$", "") .. ")") or "not known yet"),
     0.7, 0.7, 0.7, 1, 1, 1)
-  GameTooltip:AddDoubleLine("To make it", ("%s, skill %d"):format(e.prof, e.skill or 0), 0.7, 0.7, 0.7, 1, 1, 1)
+  ns:TooltipAddDoubleLine("To make it", ("%s, skill %d"):format(e.prof, e.skill or 0), 0.7, 0.7, 0.7, 1, 1, 1)
   if c and ns.GoldPlanLines then
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("The cheapest way", 1, 0.82, 0)
+    ns:TooltipAddLine(" ")
+    ns:TooltipAddLine("The cheapest way", 1, 0.82, 0)
     local lines = ns.GoldPlanLines(c.need, { e.item }, c.plan, function(id) return c.src(id).recipe end,
       function(v) return ns.Money(math.floor((v or 0) + 0.5)) end)
     for _, l in ipairs(lines) do
-      GameTooltip:AddDoubleLine(("  "):rep(l.depth + 1) .. l.head:format(itemName(l.id) or ns.ItemName(l.id)), l.text, 0.85, 0.85, 0.85, 1, 1, 1)
+      ns:TooltipAddDoubleLine(("  "):rep(l.depth + 1) .. l.head:format(itemName(l.id) or ns.ItemName(l.id)), l.text, 0.85, 0.85, 0.85, 1, 1, 1)
     end
-    GameTooltip:AddDoubleLine("In all", ns.Money(math.floor(c.total + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
+    ns:TooltipAddDoubleLine("In all", ns.Money(math.floor(c.total + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
   elseif not c then
-    GameTooltip:AddLine("No price for it or its materials yet: run a full scan.", 0.6, 0.6, 0.6, true)
+    ns:TooltipAddLine("No price for it or its materials yet: run a full scan.", 0.6, 0.6, 0.6, true)
   end
-  GameTooltip:AddLine("Click to search the auction house for it.", 0.5, 0.5, 0.5, true)
+  ns:TooltipAddLine("Click to search the auction house for it.", 0.5, 0.5, 0.5, true)
   GameTooltip:Show()
 end
 
@@ -557,8 +557,8 @@ local function getRow(i)
   r.add = T:Button(r, "List", 38, function() if r.entry then ns:WritsToShoppingList({ r.entry }) end end, 18)
   r.add:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:AddLine("Add this order to the Writs shopping list", 1, 1, 1)
-    GameTooltip:AddLine("What to buy for it, or its materials when making it is cheaper; what you have is used first.", 0.8, 0.8, 0.8, true)
+    ns:TooltipAddLine("Add this order to the Writs shopping list", 1, 1, 1)
+    ns:TooltipAddLine("What to buy for it, or its materials when making it is cheaper; what you have is used first.", 0.8, 0.8, 0.8, true)
     GameTooltip:Show()
   end)
   r.add:HookScript("OnLeave", function() GameTooltip:Hide() end)
