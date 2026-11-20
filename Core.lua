@@ -107,6 +107,21 @@ function ns.Money(copper)
   return table.concat(out, " ")
 end
 
+-- Money rounded for a narrow column: no copper from 1 gold, no silver from 100 gold
+-- (Frank's AH9, November 19: the Writs tab ran out of room). The exact amount goes in
+-- the hover.
+function ns.MoneyRound(copper)
+  if not copper then return nil end
+  copper = math.floor(copper + 0.5)
+  if copper >= 1000000 then copper = math.floor(copper / 10000 + 0.5) * 10000
+  elseif copper >= 10000 then copper = math.floor(copper / 100 + 0.5) * 100 end
+  return copper
+end
+function ns.MoneyShort(copper)
+  if not copper then return "?" end
+  return ns.Money(ns.MoneyRound(copper))
+end
+
 function ns.Age(t)
   if not t or t == 0 then return "" end
   local d = time() - t
