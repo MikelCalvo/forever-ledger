@@ -76,6 +76,11 @@ files["Core.lua"] = {
   globals = { "ForeverLedgerDB", "SLASH_FOREVERLEDGER1", "SLASH_FOREVERLEDGER2" },
 }
 
+-- API.lua hands prices to other addons, the one global they read.
+files["API.lua"] = {
+  globals = { "ForeverLedgerAPI" },
+}
+
 -- AHTabs.lua clears AuctionHouseFrame.displayMode after emptying Blizzard's content for
 -- our tabs (as the shared LibAHTab does), so a Blizzard tab clicked next opens again.
 files["AHTabs.lua"] = {

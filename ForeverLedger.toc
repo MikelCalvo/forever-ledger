@@ -62,4 +62,5 @@ GoldMaking.lua
 Writs.lua
 QuickDisenchant.lua
 PriceWindow.lua
+API.lua
 Probe.lua
