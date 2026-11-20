@@ -48,6 +48,10 @@ T.test("Localization: Russian counted nouns take the form the number needs", fun
     "3 новые сделки ниже обычной цены: смотрите «Заработок», «Сделки» (/fl).")
   T.eq(ns.LocalizeText('Added the materials for 21 items of X to shopping list "Y". Check Want and Up to there (/fl lists).'),
     "Добавлены материалы для 21 предмета X в список «Y». Проверьте «Нужно» и «До» (/fl lists).")
+  -- A count with suffixes the code adds after the number: no English word may survive.
+  T.eq(ns.LocalizeFormatted("%d items", 5) .. ns.LocalizeText(", first 5 shown/added")
+    .. ns.LocalizeText(", 2 still loading"), "5 предметов, показаны первые 5, ещё загружается: 2")
+  T.eq(ns.LocalizeText("Buy at BB"), "Купить там")
 end)
 
 T.test("Localization: every translation keeps the English placeholders in order", function()

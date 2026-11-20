@@ -333,7 +333,7 @@ local planN = {}             -- crafts to plan, per row key, when changed by han
 local refresh
 
 -- Columns from the right edge: right-aligned numbers, then Who and Kind left-aligned.
-local COL = { count = -4, countW = 60, profit = -68, brings = -138, cost = -208, who = -346, whoW = 62, kind = -432, kindW = 80 }
+local COL = { count = -4, countW = 60, profit = -68, brings = -138, cost = -208, who = -346, whoW = 62, kind = -452, kindW = 100 }
 local MONEY_W = 66
 local HEADERS = {
   { key = "name", label = "Idea", tip = "What to buy or craft. Click a row for how it adds up; right-click for its price window." },

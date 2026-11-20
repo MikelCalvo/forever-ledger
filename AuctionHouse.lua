@@ -683,7 +683,9 @@ function ns:RefreshDisenchantFinder()
   if next(finderSettings().bands) == nil then
     finder.count:SetText("No item levels picked: choose some under Item levels.")
   else
-    finder.count:SetText(("%d items%s%s"):format(#items, #items > n and (", first %d shown/added"):format(n) or "", waiting > 0 and (", %d still loading"):format(waiting) or ""))
+    finder.count:SetText(ns.LocalizeFormatted("%d items", #items)
+      .. (#items > n and ns.LocalizeText((", first %d shown/added"):format(n)) or "")
+      .. (waiting > 0 and ns.LocalizeText((", %d still loading"):format(waiting)) or ""))
   end
 end
 
