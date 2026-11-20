@@ -3631,6 +3631,7 @@ refreshLists = function()
   -- Search all can start while Live watch's quick checks run (they pause for it).
   local busy = (ns.Scan.active and not ns.Scan.quiet) or ns:SearchAllRunning()
   v.searchB:SetEnabled(list ~= nil and #show > 0 and ns:IsAHOpen() and not busy)
+  v.again:SetEnabled(list ~= nil and #list.items > 0)   -- (it was lit with no lists at all: Frank's screenshot, November 20)
   if search then
     if not list then
       v.info:SetText("Click New to start a list.")
@@ -3762,6 +3763,18 @@ local function escapeCloses(on)
   end
 end
 
+-- On its own over the main window, both in the same layer: bringing the panel forward put
+-- it only one step above the main window, under the main window's rows, which showed
+-- through it where the two overlap (Frank's screenshot, November 20, Shopping lists over
+-- Writs). Lift it clear of everything the main window holds.
+function ns:LiftSidePanel()
+  local main = _G.ForeverLedgerFrame
+  if side and main and main:IsShown() and side:GetFrameStrata() == main:GetFrameStrata()
+    and side:GetFrameLevel() <= main:GetFrameLevel() + 50 then
+    side:SetFrameLevel(math.min(main:GetFrameLevel() + 100, 9000))
+  end
+end
+
 local function place()
   local ah = AuctionHouseFrame
   side:ClearAllPoints()
@@ -3788,6 +3801,7 @@ local function place()
     side:SetSize(WIDTH, 560)
     side:SetPoint("CENTER")
     side:Raise()
+    ns:LiftSidePanel()
     side.floating = true
   end
   side.close:SetShown(side.floating)
@@ -3801,7 +3815,7 @@ local function ensureSide()
   -- A click anywhere on it brings it in front of other windows, such as a profession
   -- window over the auction house (owner's test, October 3).
   side:SetToplevel(true)
-  side:SetScript("OnMouseDown", function(self) self:Raise() end)
+  side:SetScript("OnMouseDown", function(self) self:Raise(); if self.floating then ns:LiftSidePanel() end end)
   side:SetMovable(true)
   side:SetClampedToScreen(true)
   T:Fill(side, T.bg)
@@ -3965,6 +3979,7 @@ ns:On("GLOBAL_MOUSE_DOWN", function()
   noteListUse()
   if not side.floating and AuctionHouseFrame and AuctionHouseFrame:IsShown() then AuctionHouseFrame:Raise() end
   side:Raise()
+  if side.floating then ns:LiftSidePanel() end
 end)
 
 function ns:ShowSidePanel(tab)
@@ -3981,6 +3996,7 @@ function ns:ShowSidePanel(tab)
   side:Show()
   matchProfessionLayer()
   side:Raise()
+  if side.floating then ns:LiftSidePanel() end
   showTab(tab or S().tab or "queue")
 end
 

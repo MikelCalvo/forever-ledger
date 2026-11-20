@@ -406,8 +406,13 @@ function ns:WritTooltipLines(id)
       e.who and (e.who .. (e.zone and (" (" .. e.zone .. ")") or "")) or (e.zone and ("someone in " .. e.zone) or "a customer not known yet"), t.rep)
     if c then
       local per = ns.WritPerRep(c.total, e.tier)
-      lines[2] = ("Cheapest: %s (%s), about %s per reputation after the coin pouch"):format(ns.Money(math.floor(c.total + 0.5)),
-        howText(c, e), per <= 0 and "nothing" or ns.Money(math.floor(per + 0.5)))
+      if per < 0 then
+        lines[2] = ("Cheapest: %s (%s); the coin pouch pays %s more, about %s per reputation"):format(ns.Money(math.floor(c.total + 0.5)),
+          howText(c, e), ns.Money(math.floor(t.pouch - c.total + 0.5)), ns.Money(math.floor(-per + 0.5)))
+      else
+        lines[2] = ("Cheapest: %s (%s), about %s per reputation after the coin pouch"):format(ns.Money(math.floor(c.total + 0.5)),
+          howText(c, e), ns.Money(math.floor(per + 0.5)))
+      end
     end
     return lines
   elseif tier then
@@ -470,7 +475,7 @@ function ns:BuildWrits(parent)
   f.info:SetPoint("TOPLEFT", f.tier, "BOTTOMLEFT", 0, -6)
   f.info:SetPoint("RIGHT", f, "RIGHT", -2, 0)
   f.info:SetJustifyH("LEFT")
-  f.info:SetText("Orders to deliver for reputation and a coin pouch, each once a day. Cheapest: buying or making the item at your last scan's prices. Hover an order for the customer's zone and how to get it, click it to search the auction house; List puts it on the Writs shopping list.")
+  f.info:SetText("Orders to deliver for reputation and a coin pouch, each once a day. Cheapest: buy or make it at your last scan's prices. Per rep: that less the pouch, per point; green + means the pouch pays you that much. Hover an order for the zone and how to get it; click it to search the auction house.")
   f.header = CreateFrame("Frame", nil, f)
   f.header:SetPoint("TOP", f.info, "BOTTOM", 0, -6)
   f.header:SetPoint("LEFT", f, "LEFT", 0, 0)
@@ -660,7 +665,9 @@ function ns:RefreshWrits()
       rep = tostring(t.rep),
       where = e.who or dim(e.zone and "not confirmed" or "not known yet"),
       cost = x.ready and "|cff7fd39cyou have it|r" or x.cost and (ns.MoneyShort(x.cost) .. dim(" " .. howText(x.c, e))) or dim("no price"),
-      perRep = x.perRep and (x.perRep <= 0 and "|cff7fd39cfree|r" or ns.MoneyShort(x.perRep)) or dim("?"),
+      -- Below zero the pouch pays more than the order costs: the gain per point, in green
+      -- (Frank's AH9, November 20: every order read "free", so the column told them apart by nothing).
+      perRep = x.perRep and (x.perRep < 0 and ("|cff7fd39c+" .. ns.MoneyShort(-x.perRep) .. "|r") or ns.MoneyShort(x.perRep)) or dim("?"),
       writ = x.writ and ns.MoneyShort(x.writ) or dim("-"),
     }
     for key, fs in pairs(r.cells) do
