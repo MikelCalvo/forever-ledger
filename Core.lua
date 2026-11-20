@@ -96,15 +96,17 @@ function ns.ItemCount(id, includeBank)
   return id and count and count(id, includeBank and true or false) or 0
 end
 
+local COIN = "|TInterface\\MoneyFrame\\UI-%sIcon:0:0:2:0|t"
+local GOLD, SILVER, COPPER = COIN:format("Gold"), COIN:format("Silver"), COIN:format("Copper")
+
 function ns.Money(copper)
   if not copper then return "?" end
   copper = math.floor(copper + 0.5)
-  if GetCoinTextureString then return GetCoinTextureString(copper) end
   local g, s, c = math.floor(copper / 10000), math.floor(copper % 10000 / 100), copper % 100
   local out = {}
-  if g > 0 then out[#out + 1] = g .. "g" end
-  if s > 0 then out[#out + 1] = s .. "s" end
-  if c > 0 or #out == 0 then out[#out + 1] = c .. "c" end
+  if g > 0 then out[#out + 1] = g .. GOLD end
+  if s > 0 then out[#out + 1] = s .. SILVER end
+  if c > 0 or #out == 0 then out[#out + 1] = c .. COPPER end
   return table.concat(out, " ")
 end
 

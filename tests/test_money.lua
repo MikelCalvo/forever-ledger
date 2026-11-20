@@ -1,33 +1,42 @@
 -- Money as text (Core.lua ns.Money, ns.MoneyPlain) and money typed in (ParseMoney,
--- ParseMoneyLoose). Outside the game there's no GetCoinTextureString, so ns.Money
--- writes plain "1g 2s 3c", the same as ns.MoneyPlain.
+-- ParseMoneyLoose). ns.Money shows the game's coin icons; ns.MoneyPlain writes plain
+-- "1g 2s 3c" for text boxes.
 local T = ...
 local ns = T.ns
 
+local ICONS = { g = "Gold", s = "Silver", c = "Copper" }
+local function coins(text)
+  return (text:gsub("(%d+)([gsc])", function(n, unit)
+    return n .. "|TInterface\\MoneyFrame\\UI-" .. ICONS[unit] .. "Icon:0:0:2:0|t"
+  end))
+end
+
+T.test("Money: the game's gold, silver and copper icons after each number", function()
+  T.eq(ns.Money(12345), "1|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t 23|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t"
+    .. " 45|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t")
+end)
+
 T.test("Money: copper, silver, gold", function()
-  T.eq(ns.Money(1), "1c")
-  T.eq(ns.Money(75), "75c")
-  T.eq(ns.Money(100), "1s")
-  T.eq(ns.Money(150), "1s 50c")
-  T.eq(ns.Money(10000), "1g")
-  T.eq(ns.Money(12345), "1g 23s 45c")
-  T.eq(ns.Money(10050), "1g 50c", "no 0s in the middle")
+  T.eq(ns.Money(1), coins("1c"))
+  T.eq(ns.Money(75), coins("75c"))
+  T.eq(ns.Money(100), coins("1s"))
+  T.eq(ns.Money(150), coins("1s 50c"))
+  T.eq(ns.Money(10000), coins("1g"))
+  T.eq(ns.Money(12345), coins("1g 23s 45c"))
+  T.eq(ns.Money(10050), coins("1g 50c"), "no 0s in the middle")
 end)
 
 T.test("Money: zero, rounding, big numbers, nil", function()
-  T.eq(ns.Money(0), "0c")
-  T.eq(ns.Money(0.4), "0c")
-  T.eq(ns.Money(99.5), "1s", "rounds to the nearest copper")
-  T.eq(ns.Money(123456789), "12345g 67s 89c")
+  T.eq(ns.Money(0), coins("0c"))
+  T.eq(ns.Money(0.4), coins("0c"))
+  T.eq(ns.Money(99.5), coins("1s"), "rounds to the nearest copper")
+  T.eq(ns.Money(123456789), coins("12345g 67s 89c"))
   T.eq(ns.Money(nil), "?")
 end)
 
-T.test("Money uses the game's coin text when there is one", function()
-  GetCoinTextureString = function(c) return "coins:" .. c end
-  local ok, out = pcall(ns.Money, 12.6)
-  GetCoinTextureString = nil
-  T.ok(ok, out)
-  T.eq(out, "coins:13")
+T.test("MoneyShort: rounded, with coin icons", function()
+  T.eq(ns.MoneyShort(12355), coins("1g 24s"))
+  T.eq(ns.MoneyShort(nil), "?")
 end)
 
 T.test("MoneyPlain", function()
