@@ -1127,3 +1127,4 @@ refresh = function()
 end
 
 function ns:RefreshGoldMaking() refresh() end
+function ns:ReworkGoldMaking() rows = nil; refresh() end
