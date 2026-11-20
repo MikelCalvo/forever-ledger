@@ -51,7 +51,7 @@ read_globals = {
   "UpdateAddOnMemoryUsage", "GetChannelDisplayInfo", "GetChannelName",
   "EnumerateServerChannels", "GetNumDisplayChannels", "GetInboxHeaderInfo",
   "GetInboxInvoiceInfo", "GetInboxItem", "GetInboxNumItems", "GetInstanceInfo",
-  "GetItemCount", "GetItemIcon", "GetItemInfo", "GetItemInfoInstant", "GetLootSlotInfo",
+  "GetItemCount", "GetItemIcon", "GetItemInfo", "GetItemInfoInstant", "GetItemSpell", "IsQuestFlaggedCompleted", "GetLootSlotInfo",
   "GetLootSlotLink", "GetLootSourceInfo", "GetNumLootItems", "GetMerchantItemCostInfo",
   "GetMerchantItemCostItem", "GetMerchantItemID", "GetMerchantItemInfo",
   "GetMerchantNumItems", "GetNumCompanions", "GetNumSkillLines", "GetNumSpellTabs",
