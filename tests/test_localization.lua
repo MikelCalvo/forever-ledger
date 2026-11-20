@@ -40,6 +40,14 @@ T.test("Localization: Russian counted nouns take the form the number needs", fun
   T.eq(ns.LocalizeFormatted("Craft them (%d %s)", 3, "crafts"), "Изготовить (3 шт.)")
   T.eq(ns.LocalizeFormatted("%d watched. Green: at or under Up to right now.", 3),
     "Наблюдаем: 3 предмета. Зелёное — сейчас по «До» или дешевле.")
+  -- A line the code builds before showing it: the English plural suffix must not survive.
+  T.eq(ns.LocalizeText("Prices from 12:34: 5 items"), "Цены за 12:34: 5 предметов")
+  T.eq(ns.LocalizeText("Prices from 12:34: 21 items"), "Цены за 12:34: 21 предмет")
+  T.eq(ns.LocalizeText("Your 5 armor: 3.20 each."), "Броня: распылено 5, 3.20 за штуку.")
+  T.eq(ns.LocalizeText("3 new deals below the usual price: see Gold making, Deals (/fl)."),
+    "3 новые сделки ниже обычной цены: смотрите «Заработок», «Сделки» (/fl).")
+  T.eq(ns.LocalizeText('Added the materials for 21 items of X to shopping list "Y". Check Want and Up to there (/fl lists).'),
+    "Добавлены материалы для 21 предмета X в список «Y». Проверьте «Нужно» и «До» (/fl lists).")
 end)
 
 T.test("Localization: every translation keeps the English placeholders in order", function()
@@ -49,7 +57,7 @@ T.test("Localization: every translation keeps the English placeholders in order"
   local spec = "%%[%-%+#0]*%d*%.?%d*[cdiouxXeEfgGqs]"
   local function kinds(text)
     local list = {}
-    for token in text:gmatch(spec) do list[#list + 1] = token:sub(-1) end
+    for token in text:gmatch(spec) do list[#list + 1] = token end
     return list
   end
   for _, locale in ipairs({ "zhCN", "ruRU" }) do
