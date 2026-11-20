@@ -5,7 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Translations**: the addon can show its text in other languages. Simplified Chinese is the first (thanks to yippp), with its own font; English stays the fallback for anything not translated yet. `/fl api`, `/fl perf` and debug lines stay English.
+
 ### Changed
+- The Disenchant window's button names the item it does next, with how many are ticked and their worth above it (the long line ran past the button).
 - Quick disenchant: the item you point at with the keys held shows **DE** in blue in its corner, and its tooltip says to click (also with other bag addons).
 - The price helper says when Always undercut by didn't change the price because a vendor pays more below it.
 - `/fl perf` names the parts of the addon that leave the most memory behind, and says when a freeze was the game clearing leftover memory.
@@ -82,7 +86,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - ~ **Simpler**: the Leveling tab, the training advice and dungeon runs are gone. The riding fund stays.
 
 ### Added
-- Shared locale support with Simplified Chinese display translations and language-specific fonts. Diagnostic reports and debug logs remain in English.
 - Tooltips: items the Darkmoon Faire takes for Prize Tickets get a coral red line, "Darkmoon Faire: 5 for 1 ticket (Yebb Neblegear)": the animal parts and the Blacksmithing, Engineering and Leatherworking turn-ins (Classic's list). Settings, Tooltips, Darkmoon Faire turn-ins.
 
 ### Changed
