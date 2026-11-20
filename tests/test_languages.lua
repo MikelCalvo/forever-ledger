@@ -114,6 +114,30 @@ T.test("Languages: a channel number learned from chat isn't trusted once the cha
   if not ok then error(err, 0) end
 end)
 
+T.test("Languages: a bag's slots read from its tooltip line in the client's own format", function()
+  local file = assert(io.open("Tooltip.lua", "rb"))
+  local code = file:read("*a"):gsub("\r\n", "\n"); file:close()
+  local chunk = assert(code:match("\n(local bagSlots.-\nlocal SLOTS_PATTERN[^\n]*)"))
+  local real = CONTAINER_SLOTS
+  local function slots(format, line)
+    CONTAINER_SLOTS = format
+    local pattern = assert(loadstring(chunk .. "\nreturn SLOTS_PATTERN"))()
+    return line:match(pattern)
+  end
+  local ok, err = pcall(function()
+    T.eq(slots("%d Slot %s", "10 Slot Bag"), "10", "English")
+    T.eq(slots("%d Slot %s", "Blue Leather Bag"), nil, "a line that isn't the slots")
+    local ru = "%2$s (%1$d |4ячейка:ячейки:ячеек;)"
+    T.eq(slots(ru, "Сумка (8 ячеек)"), "8", "Russian, as shown")
+    T.eq(slots(ru, "Сумка (1 |4ячейка:ячейки:ячеек;)"), "1", "Russian, before the client picks the word form")
+    T.eq(slots(ru, "Синяя кожаная сумка"), nil, "the bag's name")
+    T.eq(slots(ru, "Требуется (10-й уровень)"), nil, "another line with brackets")
+    T.eq(slots("%2$s [%1$d slots]. +", "Bag [10 slots]. +"), "10", "brackets, a dot and a plus")
+  end)
+  CONTAINER_SLOTS = real
+  if not ok then error(err, 0) end
+end)
+
 T.test("Languages: the five Blasted Lands deliveries", function()
   local done = { [2581] = true, [2583] = true, [2585] = true, [2601] = true, [2603] = true }
   T.eq(ns.QuestDoneByID(ns.QUEST_IDS["Blasted Lands quests (five)"], function(id) return done[id] or false end), true)
