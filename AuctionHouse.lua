@@ -149,7 +149,8 @@ local function altClickRow(row)
 end
 
 -- Watch one page: "commodity" or "item" buy pages (one item, with a line above the
--- list), or "browse" (search results, each row a different item).
+-- list on a commodity page and on the item box on an item page), or "browse" (search
+-- results, each row a different item).
 local function watch(page, kind)
   if not page or page.flWatcher then return end
   local commodity, browse = kind == "commodity", kind == "browse"
@@ -175,8 +176,11 @@ local function watch(page, kind)
       openAt(id)
     end)
   end
-  w.note = T:Text(page, 12, T.accent, "OVERLAY")
-  if list then
+  local onItem = kind == "item" and display
+  w.note = T:Text(onItem or page, 12, T.accent, "OVERLAY")
+  if onItem then
+    w.note:SetPoint("BOTTOMRIGHT", display, "BOTTOMRIGHT", -12, 8)
+  elseif list then
     -- Commodity pages have "N Available" just above the list, so go above that line.
     w.note:SetPoint("BOTTOMLEFT", list, "TOPLEFT", 4, commodity and 40 or 6)
   else
