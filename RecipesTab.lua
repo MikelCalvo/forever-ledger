@@ -111,12 +111,13 @@ local function foreverBook(prof)
     for _, e in ipairs(ns.FOREVER_CRAFTS or {}) do
       local t = fcByProf[e.prof] or {}
       fcByProf[e.prof] = t
-      t[e.id] = { n = e.n, out = e.out, oq = ((e.low or 1) + (e.high or e.low or 1)) / 2, r = e.r,
+      t[e.id] = { n = ns.SpellName(e.id) or e.n, en = e.n, out = e.out, oq = ((e.low or 1) + (e.high or e.low or 1)) / 2, r = e.r,
         fc = true, learn = e.learn, rank = e.skill }
     end
   end
   return fcByProf[prof] or {}
 end
+ns.ForeverRecipeBook = foreverBook
 
 -- Every recipe of a profession: the recorded ones, then the game data's others.
 local function eachRecipe(prof, fn)
@@ -237,7 +238,7 @@ end
 
 -- The most useful source: seen in game first (vendor or trainer with a position best),
 -- otherwise where it came from in original Classic (ClassicRecipes.lua, unconfirmed).
-local function bestSource(name)
+local function bestSource(name, classic)
   if not name then return end
   local pick
   for _, s in pairs(ns.db.recipeSources[name:lower()] or {}) do
@@ -245,8 +246,8 @@ local function bestSource(name)
     if not pick or score > pick.score then pick = { s = s, score = score } end
   end
   if pick then return pick.s end
-  local classic = ns:ClassicSource(name)
-  if classic then return classic end
+  local fromClassic = ns:ClassicSource(classic or name)
+  if fromClassic then return fromClassic end
   -- Nothing seen and not in Classic (new in Forever, like Savory Whimsyfin Delight):
   -- if its recipe item is on the auction house, that's where to get it.
   local item = ns.RecipeItemFor and ns.RecipeItemFor(name)
@@ -734,10 +735,11 @@ local function skillFor(prof, id, r)
     for _, s in pairs(ns.db.recipeSources[name:lower()] or {}) do
       if s.skill and s.skill > 0 then return s.skill end
     end
-    local e = ns.CLASSIC_RECIPES and ns.CLASSIC_RECIPES[name:lower()]
-    if e and e.skill then return e.skill end
   end
   local fc = foreverBook(prof)[id]
+  local classic = (fc and fc.en) or name
+  local e = classic and ns.CLASSIC_RECIPES and ns.CLASSIC_RECIPES[classic:lower()]
+  if e and e.skill then return e.skill end
   return fc and (fc.learn or fc.rank)
 end
 
@@ -823,10 +825,11 @@ local function recipeRows(prof, width, lay)
     if s.skill == "now" and not (skill and rank and skill <= rank) then return end
     if s.skill == "later" and not (skill and (not rank or skill > rank)) then return end
     local fromItem = fc[id] and fc[id].learn and true or false
-    local src = bestSource(r.n)
+    local en = fc[id] and fc[id].en or r.n
+    local src = bestSource(r.n, en)
     if s.source ~= "all" and sourceKind(src, fromItem) ~= s.source then return end
     list[#list + 1] = { id = id, r = r, names = names, type = t, override = mine ~= nil, profit = profit,
-      skill = skill, src = src, fromItem = fromItem }
+      skill = skill, src = src, fromItem = fromItem, en = en }
   end)
   -- Grouped by type (flip or shuffle first), then most profit first.
   local function usual(a, b)
@@ -858,7 +861,7 @@ local function recipeRows(prof, width, lay)
     row:SetPoint("TOPLEFT", f.content, "TOPLEFT", 0, -(i - 1) * ROW)
     row:SetWidth(width)
     row.stripe:SetShown(i % 2 == 0)
-    row.recipeID, row.out, row.recipeName = e.id, e.r.out, e.r.n
+    row.recipeID, row.out, row.recipeName = e.id, e.r.out, e.en
     row.cells.profit:SetJustifyH("RIGHT")
     row.icon:SetTexture(e.r.out and ns:ItemIcon(e.r.out) or "Interface\\Icons\\INV_Misc_QuestionMark")
     row.icon:ClearAllPoints()
