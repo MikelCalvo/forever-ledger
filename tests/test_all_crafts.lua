@@ -245,7 +245,7 @@ end)
 T.test("No two of the addon's files set the same ns name", function()
   local owner, clash = {}, {}
   for line in io.lines("ForeverLedger.toc") do
-    local file = line:gsub("\r", "")
+    local file = line:gsub("\r", ""):gsub("\\", "/")
     if file:match("%.lua$") then
       local seen = {}
       for l in io.lines(file) do
