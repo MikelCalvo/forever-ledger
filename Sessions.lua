@@ -306,8 +306,8 @@ local function iconButton(parent, icon, name, what, onClick)
   b:SetScript("OnEnter", function(self)
     tint(true)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine(self.name, 1, 1, 1)
-    if self.what then GameTooltip:AddLine(self.what, 0.7, 0.7, 0.7, true) end
+    ns:TooltipAddLine(self.name, 1, 1, 1)
+    if self.what then ns:TooltipAddLine(self.what, 0.7, 0.7, 0.7, true) end
     GameTooltip:Show()
   end)
   b:SetScript("OnLeave", function() tint(false); GameTooltip:Hide() end)
@@ -404,9 +404,9 @@ local function buildTracker()
     -- (The full view shows all of it already.)
     if not st or fullView() then return end
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("Session", 1, 1, 1)
-    GameTooltip:AddDoubleLine("Gold in", ns.Money(st.earned), 0.8, 0.8, 0.8, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Gold out", ns.Money(st.spent), 0.8, 0.8, 0.8, 1, 1, 1)
+    ns:TooltipAddLine("Session", 1, 1, 1)
+    ns:TooltipAddDoubleLine("Gold in", ns.Money(st.earned), 0.8, 0.8, 0.8, 1, 1, 1)
+    ns:TooltipAddDoubleLine("Gold out", ns.Money(st.spent), 0.8, 0.8, 0.8, 1, 1, 1)
     -- Where it came from and went (owner's test, October 3: "+1g 84s, I don't think
     -- that's right"): auction sales, vendor, mail, loot..., biggest first.
     local by = {}
@@ -414,18 +414,18 @@ local function buildTracker()
     table.sort(by, function(a, b) return math.abs(a[2]) > math.abs(b[2]) end)
     for _, x in ipairs(by) do
       local label = (ns.MONEY_LABELS and ns.MONEY_LABELS[x[1]]) or x[1]
-      GameTooltip:AddDoubleLine("  " .. label, (x[2] < 0 and "|cffee8597-|r" or "|cff7fd39c+|r") .. ns.Money(math.abs(x[2])),
+      ns:TooltipAddDoubleLine("  " .. label, (x[2] < 0 and "|cffee8597-|r" or "|cff7fd39c+|r") .. ns.Money(math.abs(x[2])),
         0.7, 0.7, 0.7, 1, 1, 1)
     end
-    GameTooltip:AddDoubleLine("Looted, worth about", ns.Money(st.loot), 0.8, 0.8, 0.8, 1, 1, 1)
+    ns:TooltipAddDoubleLine("Looted, worth about", ns.Money(st.loot), 0.8, 0.8, 0.8, 1, 1, 1)
     for k = 1, math.min(5, #st.items) do
       local it = st.items[k]
-      GameTooltip:AddDoubleLine(("  %d x %s"):format(it.n, ns.ItemName(it.id) or "?"), ns.Money(it.value), 0.7, 0.7, 0.7, 1, 1, 1)
+      ns:TooltipAddDoubleLine(("  %d x %s"):format(it.n, ns.ItemName(it.id) or "?"), ns.Money(it.value), 0.7, 0.7, 0.7, 1, 1, 1)
     end
-    if #st.items > 5 then GameTooltip:AddLine(("  and %d more: the arrow (More) shows them all"):format(#st.items - 5), 0.6, 0.6, 0.6) end
-    GameTooltip:AddLine(LOOT_NOTE, 0.6, 0.6, 0.6, true)
-    if ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore then GameTooltip:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5) end
-    GameTooltip:AddLine(ns.db.settings.sessionSmall and "Drag to move. Right-click for the bigger view, with More (the arrow), Reset, Pause and Stop."
+    if #st.items > 5 then ns:TooltipAddLine(("  and %d more: the arrow (More) shows them all"):format(#st.items - 5), 0.6, 0.6, 0.6) end
+    ns:TooltipAddLine(LOOT_NOTE, 0.6, 0.6, 0.6, true)
+    if ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore then ns:TooltipAddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5) end
+    ns:TooltipAddLine(ns.db.settings.sessionSmall and "Drag to move. Right-click for the bigger view, with More (the arrow), Reset, Pause and Stop."
       or "Drag to move. Right-click to fold it to one line. The arrow shows everything as it comes in.", 0.6, 0.6, 0.6, true)
     GameTooltip:Show()
   end)
@@ -488,7 +488,7 @@ function ns:ResetGeneralSession(sure)
   if not s or s.char ~= ns.CharKey() then ns:Print("No session is running here. /fl session start begins one."); return end
   if not sure then
     local st = ns:SessionTotals(s)
-    StaticPopup_Show("FOREVER_LEDGER_SESSION_RESET", ("%s, gold %s, loot %s"):format(duration(st.secs), signed(st.gained), ns.Money(st.loot)))
+    StaticPopup_Show("FOREVER_LEDGER_SESSION_RESET", ns.LocalizeText("%s, gold %s, loot %s"):format(duration(st.secs), signed(st.gained), ns.Money(st.loot)))
     return
   end
   ns.db.liveSession = { t = time(), resume = time(), active = 0, char = s.char, money = {}, loot = {} }

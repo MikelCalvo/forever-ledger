@@ -281,8 +281,9 @@ local function build()
     end)
     b:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_TOP")
-      GameTooltip:AddLine("Sort by " .. c.label:lower(), 1, 1, 1)
-      GameTooltip:AddLine("Click again to turn the order around.", 0.7, 0.7, 0.7)
+      local sortLabel = ns.HasLocale() and ns.LocalizeText(c.label) or c.label:lower()
+      ns:TooltipAddLine(ns.LocalizeText("Sort by %s"):format(sortLabel), 1, 1, 1)
+      ns:TooltipAddLine("Click again to turn the order around.", 0.7, 0.7, 0.7)
       GameTooltip:Show()
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -392,14 +393,14 @@ local function drawLoot(L, st, flashID)
   L.total:SetText(ns.Money(st.loot))
   if t.best then
     L.best.itemID = t.best.id
-    L.best.text:SetText(("Best drop: |T%s:14:14|t %s, %s each"):format(ns:ItemIcon(t.best.id) or "", t.best.name, ns.Money(math.floor(t.best.each + 0.5))))
+    L.best.text:SetText(ns.LocalizeText("Best drop: |T%s:14:14|t %s, %s each"):format(ns:ItemIcon(t.best.id) or "", t.best.name, ns.Money(math.floor(t.best.each + 0.5))))
   else
     L.best.itemID = nil
     L.best.text:SetText("Nothing looted yet (or it's all sold: that's in Gold).")
   end
   for _, b in ipairs(L.cols) do
     local on = sort.key == b.col.key
-    b.text:SetText(b.col.label .. (on and (sort.asc and " ^" or " v") or ""))
+    b.text:SetText(ns.LocalizeText(b.col.label) .. (on and (sort.asc and " ^" or " v") or ""))
     T:Font(b.text, 10, on and T.text or T.dim)
   end
   L.doneRows()

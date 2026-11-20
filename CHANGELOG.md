@@ -7,9 +7,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 - Vendor flips: click Profit % for return-on-cost sorting, or Profit to sort by the profit shown. Until you choose a column, the original profit estimate sets the order. Whole percentages are shown, watched items keep priority, and ordinary refreshes keep rows in place. Equal profits use the higher return on cost, and equal returns use the higher affordable profit.
+- **Translations**: the addon can show its text in other languages. Simplified Chinese is the first (thanks to yippp), with its own font; English stays the fallback for anything not translated yet. `/fl api`, `/fl perf` and debug lines stay English.
+
+### Changed
+- Writs tab: room for every column. The Tier column went (the filter at the top and the hover show it), Deliver to names the customer (the zone is in the hover), prices are rounded to the silver (exact in the hover) and the text at the top is shorter.
+- Auctions tab (beside the auction house): prices no longer run into the Qty column, the Next line fits (the first-click note is in the button's hover), and the tabs along the top stay clear of the close button.
+- The Disenchant window's button names the item it does next, with how many are ticked and their worth above it (the long line ran past the button), and says when there is nothing to disenchant.
+- Quick disenchant: the item you point at with the keys held shows **DE** in blue in its corner, and its tooltip says to click (also with other bag addons).
+- The price helper says when Always undercut by didn't change the price because a vendor pays more below it.
+- `/fl perf` names the parts of the addon that leave the most memory behind, and says when a freeze was the game clearing leftover memory.
 
 ### Fixed
-- **Always undercut by** works on Blizzard's Sell tab too (it only changed the Post tab): with the price helper on, the price box is filled with that much under the cheapest listing once the listings are in, or your own price when the cheapest is yours, and Undercut uses the same amount.
+- **Always undercut by** works on Blizzard's Sell tab too (it only changed the Post tab): with the price helper on, the price box is filled with that much under the cheapest listing once the listings are in, or your own price when the cheapest is yours, and Undercut uses the same amount. Putting the same item in again (another stack) fills it in again.
+- Booty Bay, Gadgetzan and Everlook are recognized in every game language (by the zone's map, not the English town name), so their scans are kept as neutral prices (GitHub #23).
+- Game clients in other languages: professions are saved under the same name in every language (from the game's skill number), so recipes, crafts and writs match them; entries saved under a translated name are merged in at login and after sync, keeping every recipe. Quest item lines know which quests you've done by quest number and show the quest's and zone's names in your language. Riding, Arcane Salvager and the Trade channel for ads are found by the game's own numbers and names. Gear version names are learned in any language. A language file can add its own chat words for the customer finder.
+- Hovering a Waylaid Crate or a writ no longer hitches: a crate's materials are remembered by item number and its line kept for 30 seconds, and a writ's cost is kept until the next full scan (up to 5 minutes). Finding a crate material by name no longer makes the game load every priced item (thousands at once, which froze the game for over half a second).
 
 ## [0.27.0] - 2026-11-19
 

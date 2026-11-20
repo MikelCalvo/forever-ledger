@@ -1,4 +1,5 @@
 local _, ns = ...
+local print = ns.LocalizedPrint
 
 ---------------------------------------------------------------------------
 -- Recipe book, part 1: record every recipe of each profession (learned or not),
@@ -432,7 +433,7 @@ local function captureTrainer()
     local sub = (STATES[second] and nil) or second
     if service and category ~= "header" then
       local reqName, skill = GetTrainerServiceSkillReq and GetTrainerServiceSkillReq(i)
-      if reqName and reqName ~= "" then profCount[reqName] = (profCount[reqName] or 0) + 1 end
+      if reqName and reqName ~= "" then local key = ns.ProfessionKey and ns.ProfessionKey(reqName) or reqName; profCount[key] = (profCount[key] or 0) + 1 end
       local t = service:match("^(%a+)")
       if TIERS[t] and (not tier or TIERS[t] > TIERS[tier]) then tier = t end
       local cost = GetTrainerServiceCost and GetTrainerServiceCost(i)

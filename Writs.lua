@@ -245,9 +245,13 @@ local function source(id)
   return s
 end
 
-local costs, costsAt = {}, 0
+-- Kept 5 minutes, or until the next full scan: worked out every 30 seconds, a writ's hover
+-- hitched again each time (Frank's AN30, November 19).
+local COST_KEEP = 300
+local costs, costsAt, costsScan = {}, -math.huge, nil
 function ns:WritCost(e)
-  if GetTime() - costsAt > 30 then wipe(costs); costsAt = GetTime() end
+  local scan = ns.db and ns.db.lastFullScan
+  if GetTime() - costsAt > COST_KEEP or scan ~= costsScan then wipe(costs); costsAt, costsScan = GetTime(), scan end
   local c = costs[e.item]
   if c and c.ahl then ns.ahledgerUses = (ns.ahledgerUses or 0) + 1 end   -- (AHledger's credit: Values.lua)
   if c == nil then
@@ -423,15 +427,16 @@ end
 local ROW = 22
 local f
 local rows = {}
+-- Columns (Frank's AH9, November 19: no room at any size). The tier shows in the filter and
+-- the hover, the zone in the hover; prices are rounded here and exact in the hover.
 local COLS = {
   { key = "name", label = "Order" },
   { key = "prof", label = "Profession", w = 96 },
-  { key = "tier", label = "Tier", w = 74 },
   { key = "rep", label = "Rep", w = 34, right = true },
-  { key = "where", label = "Deliver to", w = 190 },
-  { key = "cost", label = "Cheapest", w = 92, right = true },
-  { key = "perRep", label = "Per rep", w = 66, right = true },
-  { key = "writ", label = "Writ on AH", w = 72, right = true },
+  { key = "where", label = "Deliver to", w = 116 },
+  { key = "cost", label = "Cheapest", w = 104, right = true },
+  { key = "perRep", label = "Per rep", w = 62, right = true },
+  { key = "writ", label = "Writ AH", w = 62, right = true },
   { key = "add", label = "", w = 40 },
 }
 
@@ -442,6 +447,7 @@ local function S()
   w.tier = w.tier or "all"
   w.prof = w.prof or "all"
   w.sort = w.sort or { key = "perRep" }
+  if w.sort.key == "tier" then w.sort.key = "rep" end   -- (the Tier column went, November 19)
   return w
 end
 
@@ -464,7 +470,7 @@ function ns:BuildWrits(parent)
   f.info:SetPoint("TOPLEFT", f.tier, "BOTTOMLEFT", 0, -6)
   f.info:SetPoint("RIGHT", f, "RIGHT", -2, 0)
   f.info:SetJustifyH("LEFT")
-  f.info:SetText("A Craftsman's Writ asks for one item, delivered to a customer somewhere in the world, for reputation and a coin pouch; each order once a day, no profession needed. Cheapest: buying it or making it, at your last scan's prices. Per rep takes off the coin pouch's usual money. Reputation and pouch amounts are from player guides, not yet seen in game. Yours: the writs in your bags and bank. List puts an order on the Writs shopping list (what to buy, or its materials when making it is cheaper). Click an order to search the auction house for it.")
+  f.info:SetText("Orders to deliver for reputation and a coin pouch, each once a day. Cheapest: buying or making the item at your last scan's prices. Hover an order for the customer's zone and how to get it, click it to search the auction house; List puts it on the Writs shopping list.")
   f.header = CreateFrame("Frame", nil, f)
   f.header:SetPoint("TOP", f.info, "BOTTOM", 0, -6)
   f.header:SetPoint("LEFT", f, "LEFT", 0, 0)
@@ -508,25 +514,25 @@ local function rowTooltip(self)
   if not e then return end
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
   GameTooltip:SetItemByID(e.item)
-  GameTooltip:AddLine(" ")
+  ns:TooltipAddLine(" ")
   local t = TIERS[e.tier]
-  GameTooltip:AddDoubleLine("Writ", ("%s, %d reputation"):format(t.label, t.rep), 0.7, 0.7, 0.7, 1, 1, 1)
-  GameTooltip:AddDoubleLine("Deliver to", e.who and (e.who .. (e.zone and (", " .. e.zone) or "")) or (e.zone and ("not known yet (players say " .. e.zone:gsub("%?$", "") .. ")") or "not known yet"),
+  ns:TooltipAddDoubleLine("Writ", ("%s, %d reputation"):format(t.label, t.rep), 0.7, 0.7, 0.7, 1, 1, 1)
+  ns:TooltipAddDoubleLine("Deliver to", e.who and (e.who .. (e.zone and (", " .. e.zone) or "")) or (e.zone and ("not known yet (players say " .. e.zone:gsub("%?$", "") .. ")") or "not known yet"),
     0.7, 0.7, 0.7, 1, 1, 1)
-  GameTooltip:AddDoubleLine("To make it", ("%s, skill %d"):format(e.prof, e.skill or 0), 0.7, 0.7, 0.7, 1, 1, 1)
+  ns:TooltipAddDoubleLine("To make it", ("%s, skill %d"):format(e.prof, e.skill or 0), 0.7, 0.7, 0.7, 1, 1, 1)
   if c and ns.GoldPlanLines then
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("The cheapest way", 1, 0.82, 0)
+    ns:TooltipAddLine(" ")
+    ns:TooltipAddLine("The cheapest way", 1, 0.82, 0)
     local lines = ns.GoldPlanLines(c.need, { e.item }, c.plan, function(id) return c.src(id).recipe end,
       function(v) return ns.Money(math.floor((v or 0) + 0.5)) end)
     for _, l in ipairs(lines) do
-      GameTooltip:AddDoubleLine(("  "):rep(l.depth + 1) .. l.head:format(itemName(l.id) or ns.ItemName(l.id)), l.text, 0.85, 0.85, 0.85, 1, 1, 1)
+      ns:TooltipAddDoubleLine(("  "):rep(l.depth + 1) .. l.head:format(itemName(l.id) or ns.ItemName(l.id)), l.text, 0.85, 0.85, 0.85, 1, 1, 1)
     end
-    GameTooltip:AddDoubleLine("In all", ns.Money(math.floor(c.total + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
+    ns:TooltipAddDoubleLine("In all", ns.Money(math.floor(c.total + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
   elseif not c then
-    GameTooltip:AddLine("No price for it or its materials yet: run a full scan.", 0.6, 0.6, 0.6, true)
+    ns:TooltipAddLine("No price for it or its materials yet: run a full scan.", 0.6, 0.6, 0.6, true)
   end
-  GameTooltip:AddLine("Click to search the auction house for it.", 0.5, 0.5, 0.5, true)
+  ns:TooltipAddLine("Click to search the auction house for it.", 0.5, 0.5, 0.5, true)
   GameTooltip:Show()
 end
 
@@ -553,8 +559,8 @@ local function getRow(i)
   r.add = T:Button(r, "List", 38, function() if r.entry then ns:WritsToShoppingList({ r.entry }) end end, 18)
   r.add:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:AddLine("Add this order to the Writs shopping list", 1, 1, 1)
-    GameTooltip:AddLine("What to buy for it, or its materials when making it is cheaper; what you have is used first.", 0.8, 0.8, 0.8, true)
+    ns:TooltipAddLine("Add this order to the Writs shopping list", 1, 1, 1)
+    ns:TooltipAddLine("What to buy for it, or its materials when making it is cheaper; what you have is used first.", 0.8, 0.8, 0.8, true)
     GameTooltip:Show()
   end)
   r.add:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -621,7 +627,7 @@ function ns:RefreshWrits()
     if key == "name" then return x.name:lower() end
     if key == "prof" then return x.e.prof end
     if key == "tier" or key == "rep" then return tierRank[x.e.tier] end
-    if key == "where" then return x.e.zone and x.e.zone:lower() end
+    if key == "where" then return (x.e.who or x.e.zone or "~"):lower() end
     return x[key]
   end
   table.sort(list, function(a, b)
@@ -651,12 +657,11 @@ function ns:RefreshWrits()
     local values = {
       name = (e.qty > 1 and (e.qty .. " x ") or "") .. x.name .. (x.have and (T:AccentCode() .. "  yours|r") or ""),
       prof = e.prof,
-      tier = t.label,
       rep = tostring(t.rep),
-      where = e.who and (e.who .. dim(", " .. (e.zone or "?"))) or dim(e.zone and (e.zone:gsub("%?$", "") .. ", not confirmed") or "not known yet"),
-      cost = x.ready and "|cff7fd39cyou have it|r" or x.cost and (ns.Money(math.floor(x.cost + 0.5)) .. dim(" " .. howText(x.c, e))) or dim("no price"),
-      perRep = x.perRep and (x.perRep <= 0 and "|cff7fd39cfree|r" or ns.Money(math.floor(x.perRep + 0.5))) or dim("?"),
-      writ = x.writ and ns.Money(x.writ) or dim("-"),
+      where = e.who or dim(e.zone and "not confirmed" or "not known yet"),
+      cost = x.ready and "|cff7fd39cyou have it|r" or x.cost and (ns.MoneyShort(x.cost) .. dim(" " .. howText(x.c, e))) or dim("no price"),
+      perRep = x.perRep and (x.perRep <= 0 and "|cff7fd39cfree|r" or ns.MoneyShort(x.perRep)) or dim("?"),
+      writ = x.writ and ns.MoneyShort(x.writ) or dim("-"),
     }
     for key, fs in pairs(r.cells) do
       fs:ClearAllPoints()

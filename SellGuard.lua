@@ -55,7 +55,7 @@ local function evaluate(g)
     return
   end
   -- Two short lines, centred under Post (owner, October 3: "centered and clean").
-  g.text:SetText(("|cffff7070Vendor pays: %s%s|r"):format(ns.Money(vendor), qty > 1 and (" for %d"):format(qty) or ""))
+  g.text:SetText(ns.LocalizeText("|cffff7070Vendor pays: %s%s|r"):format(ns.Money(vendor), qty > 1 and ns.LocalizeText(" for %d"):format(qty) or ""))
   g.text2:SetText(("Auction house: %s after the %d%% cut"):format(ns.Money(net), math.floor(ns:AHCut() * 100 + 0.5)))
   local lock = ns.db.settings.sellGuard ~= false and not unlocked[g.key]
   g.anyway:SetShown(lock)
@@ -181,16 +181,19 @@ end
 local FILL_SECONDS, FILL_WAIT = 3, 10
 local function autoFill(h, frame, id, key, cheapest, mine)
   local by = ns.db.settings.postUndercut
-  if not (type(by) == "number" and by > 0) then h.fillKey = nil; return end
+  if not (type(by) == "number" and by > 0) then h.fillKey, h.fillNote = nil, nil; return end
   local now = GetTime()
-  if h.fillKey ~= key then h.fillKey, h.fillSeen, h.fillUntil = key, now, nil end
+  if h.fillKey ~= key then h.fillKey, h.fillSeen, h.fillUntil, h.fillNote = key, now, nil, nil end
   if not (cheapest or mine) then return end   -- the listings aren't in yet
+  local p = ns.PostPrice({ undercut = by }, nil, cheapest, ns.PostVendorFloor and ns:PostVendorFloor(id), mine)
+  -- Why the box wasn't changed, on the helper (Frank's AH8, November 19: Curiously Tasty
+  -- Omelet, 1s 50c from a vendor and 1s 50c the cheapest, looked like the setting failing).
+  h.fillNote = p.skip and p.floor and ("Not undercut: under %s a vendor pays more."):format(ns.Money(p.floor)) or nil
   if not h.fillUntil then
     if now - h.fillSeen > FILL_WAIT then return end
     h.fillUntil = now + FILL_SECONDS
   end
   if now > h.fillUntil then return end
-  local p = ns.PostPrice({ undercut = by }, nil, cheapest, ns.PostVendorFloor and ns:PostVendorFloor(id), mine)
   if not p.price or p.skip then return end
   local current = call(frame, "GetUnitPrice") or call(frame.PriceInput, "GetAmount")
   if current ~= p.price then
@@ -209,7 +212,9 @@ local function helperUpdate(h)
     if h.why ~= text then h.why = text; ns:Debug("Price helper: " .. text) end
   end
   if ns.db.settings.priceHelper == false then h.box:Hide(); why("hidden, switched off in Settings"); return end
-  if type(id) ~= "number" then h.box:Hide(); why("hidden, no item on the page"); return end
+  -- (The page emptied: the same item put in again is filled in again. Frank's AH8,
+  -- November 19: a stack of two filled, then one Silk Cloth put back in only matched.)
+  if type(id) ~= "number" then h.fillKey = nil; h.box:Hide(); why("hidden, no item on the page"); return end
   local rec = (ns.db.prices[ns.MarketKey()] or {})[id]
   local cheapest = rec and not rec.none and rec.m
   -- Gear: the cheapest of this version ("of the Monkey"), as Your auctions does; the
@@ -225,7 +230,11 @@ local function helperUpdate(h)
   -- The listings the page looked up now beat the last scan's.
   local liveCheapest, mine = liveListings(frame, id, loc)
   if liveCheapest then cheapest = liveCheapest end
-  autoFill(h, frame, id, id .. (link or ""), liveCheapest, mine)
+  -- Keyed by the bag slot as well: another stack of the same item is a new fill.
+  local okSlot, bag, slot = false, nil, nil
+  if loc and loc.GetBagAndSlot then okSlot, bag, slot = pcall(loc.GetBagAndSlot, loc) end
+  local where = okSlot and bag and (":" .. tostring(bag) .. "/" .. tostring(slot)) or ""
+  autoFill(h, frame, id, id .. (link or "") .. where, liveCheapest, mine)
   local stats = ns.PriceStats and ns:PriceStats(id, "month")
   local usual = stats and stats.points >= 3 and math.floor(stats.usual)
   if not (cheapest or usual) then
@@ -244,7 +253,9 @@ local function helperUpdate(h)
   if usual then parts[#parts + 1] = "Usual " .. ns.Money(usual) end
   if cheapest then parts[#parts + 1] = "cheapest now " .. ns.Money(cheapest) end
   local dumped = usual and cheapest and cheapest < usual * DUMP
-  h.text:SetText(table.concat(parts, "   ") .. (dumped and "\n|cffffd100Well below usual: you may do better waiting.|r" or ""))
+  -- (Two lines at most: the reason it wasn't undercut wins.)
+  local second = h.fillNote or (dumped and "Well below usual: you may do better waiting.")
+  h.text:SetText(table.concat(parts, "   ") .. (second and ("\n|cffffd100" .. second .. "|r") or ""))
   h.under_b:SetText(h.under and ("Undercut " .. ns.MoneyPlain(h.under)) or "Undercut")
   h.under_b:SetEnabled(h.under ~= nil)
   h.under_b:SetWidth(h.under_b:GetFontString():GetStringWidth() + 16)
@@ -289,8 +300,8 @@ local function helper(frame, name)
   for _, b in ipairs({ h.under_b, h.usual_b }) do
     b:HookScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_TOP")
-      GameTooltip:AddLine(self == h.under_b and "Just under the cheapest" or "Your usual price", 1, 1, 1)
-      GameTooltip:AddLine(self == h.under_b and ("Fills the price box with %s under the cheapest listing now (Settings, Selling: Always undercut by). You still click Post."):format(ns.MoneyPlain(h.by or 1))
+      ns:TooltipAddLine(self == h.under_b and "Just under the cheapest" or "Your usual price", 1, 1, 1)
+      ns:TooltipAddLine(self == h.under_b and ("Fills the price box with %s under the cheapest listing now (Settings, Selling: Always undercut by). You still click Post."):format(ns.MoneyPlain(h.by or 1))
         or "Fills the price box with the usual price from your scans this month. You still click Post.", nil, nil, nil, true)
       GameTooltip:Show()
     end)

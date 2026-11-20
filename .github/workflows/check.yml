@@ -30,6 +30,11 @@ jobs:
       - name: Run the tests
         run: lua5.1 tests/run.lua
 
+      # How much of the addon's text each language file covers (a report, never a failure
+      # for missing translations; it fails only if a language file doesn't load).
+      - name: Translation coverage
+        run: lua5.1 tools/locale-report.lua
+
       # The Discord scripts: they compile, and the announcement turns the change marks
       # into the server's emojis when their codes are set (and keeps the text mark if not).
       - name: Check the Discord scripts

@@ -30,6 +30,21 @@ local OFFERING = { "lfw", "wts", "selling", "can make", "can craft", "offering",
   "lf work", "looking for work", "lf job", "lf jobs", "come buy", "for hire", "your mats", "tips appreciated" }
 local lastAlert = {}
 
+-- Words in the player's language, from its file in Locales\ (chatWords = { asking = {...},
+-- offering = {...}, professions = { Enchanting = {...} }, services = { mage = {...} } },
+-- lower case), added to the English ones, which players often use anyway.
+function ns.AddChatWords(cw, words, asking, offering, services)
+  if type(cw) ~= "table" then return end
+  local function add(list, more) for _, w in ipairs(more or {}) do list[#list + 1] = w end end
+  add(asking, cw.asking)
+  add(offering, cw.offering)
+  for prof, more in pairs(cw.professions or {}) do
+    words[prof] = words[prof] or {}
+    add(words[prof], more)
+  end
+  for _, sv in ipairs(services) do add(sv.words, (cw.services or {})[sv.key]) end
+end
+
 -- Class services (owner, September 30): Mage food and water, Mage portals, Warlock
 -- summons, Rogue lockpicking. Each needs its spell (Classic IDs), or the level it's
 -- learned at in case Forever's spell IDs differ.
@@ -56,6 +71,8 @@ local SERVICES = {
       "open box", "open a box", "open my box", "junkbox" } },
 }
 ns.CLASS_SERVICES = SERVICES
+local localeData = ns.GetLocaleData and ns.GetLocaleData()
+if localeData then ns.AddChatWords(localeData.chatWords, WORDS, ASKING, OFFERING, SERVICES) end
 
 -- The class services this character can offer now.
 local function myServices()
@@ -284,6 +301,7 @@ ns:On("TRADE_SKILL_SHOW", function()
     local okLink, link = pcall(TS.GetTradeSkillListLink)
     local okInfo, info = pcall(TS.GetBaseProfessionInfo)
     local name = okInfo and info and info.professionName
+    if name then name = ns.ProfessionKey(name, ns.PROFESSION_SKILL_LINES[info.professionID or 0] and info.professionID or info.parentProfessionID) end
     if okLink and link and name then
       local links = ns.db.profLinks or {}
       ns.db.profLinks = links
@@ -318,16 +336,42 @@ end
 
 -- The main Trade channel (where most players look; owner's choice after testing), or
 -- Trade (Services) if you're not in Trade: its channel number.
-local function adChannel()
+-- Trade is found by the game's channel number for it (zone channel 2), so it works in any
+-- game language; the English names stay as a fallback. Channel numbers seen in chat teach
+-- which of your channels is which (CHAT_MSG_CHANNEL below).
+local TRADE_ZONE_CHANNEL = 2
+local zoneOf = {}      -- [your channel number] = { zone = the game's zone channel ID, name = the channel's name then }
+-- The game's answer now comes first; a number learned from chat counts only while the
+-- channel by that number still has the same name (Codex review, November 19: Trade left
+-- and its number reused for a custom channel would have sent the ad there). Cleared
+-- whenever your channels change.
+local function zoneChannel(number, name)
+  local get = C_ChatInfo and C_ChatInfo.GetChannelInfoFromIdentifier
+  if get and name then
+    local ok, info = pcall(get, name)
+    if ok and type(info) == "table" and type(info.zoneChannelID) == "number" then return info.zoneChannelID end
+  end
+  local seen = zoneOf[number]
+  if seen and seen.name == name then return seen.zone end
+end
+ns.AdZoneChannel, ns.AdZoneSeen = zoneChannel, zoneOf
+function ns.PickAdChannel(channels, zoneFor)
   local services
+  for _, c in ipairs(channels) do
+    local zone = zoneFor(c.number, c.name)
+    if zone == TRADE_ZONE_CHANNEL then return c.number, c.name end
+    if c.name:find("Services", 1, true) then services = services or c
+    elseif not zone and c.name:find("^Trade") and not c.name:find("Local", 1, true) then return c.number, c.name end
+  end
+  if services then return services.number, services.name end
+end
+local function adChannel()
+  local channels = {}
   for i = 1, (GetNumDisplayChannels and GetNumDisplayChannels() or 0) do
     local name, header, _, number = GetChannelDisplayInfo(i)
-    if not header and name and number then
-      if name:find("Services", 1, true) then services = services or { number, name }
-      elseif name:find("^Trade") and not name:find("Local", 1, true) then return number, name end
-    end
+    if not header and name and number then channels[#channels + 1] = { number = number, name = name } end
   end
-  if services then return services[1], services[2] end
+  return ns.PickAdChannel(channels, zoneChannel)
 end
 
 function ns:PostAd(kind)
@@ -570,8 +614,8 @@ refresh = function()
       -- Hover for the whole message.
       r:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:AddLine(self.entry.who, 1, 1, 1)
-        GameTooltip:AddLine(self.entry.msg, 0.9, 0.9, 0.9, true)
+        ns:TooltipAddLine(self.entry.who, 1, 1, 1)
+        ns:TooltipAddLine(self.entry.msg, 0.9, 0.9, 0.9, true)
         GameTooltip:Show()
       end)
       r:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -608,14 +652,14 @@ function ns:ShowCustomers(quiet)
       local b = T:Button(win, label, width, nil, 24)
       b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
       b:SetScript("OnClick", function(_, button)
-        if button == "RightButton" then StaticPopup_Show("FOREVER_LEDGER_EDIT_AD", nil, nil, kind)
+        if button == "RightButton" then ns:ShowPopup("FOREVER_LEDGER_EDIT_AD", nil, nil, kind)
         else ns:PostAd(kind) end
       end)
       b:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:AddLine(label, 1, 1, 1)
-        GameTooltip:AddLine(adText(kind), 0.9, 0.9, 0.9, true)
-        GameTooltip:AddLine("Click to post it in Trade. Right-click to change the text.", T.accent[1], T.accent[2], T.accent[3], true)
+        ns:TooltipAddLine(label, 1, 1, 1)
+        ns:TooltipAddLine(adText(kind), 0.9, 0.9, 0.9, true)
+        ns:TooltipAddLine("Click to post it in Trade. Right-click to change the text.", T.accent[1], T.accent[2], T.accent[3], true)
         GameTooltip:Show()
       end)
       b:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -665,8 +709,8 @@ function ns:ShowCustomers(quiet)
     win.clear:SetPoint("RIGHT", sil, "LEFT", -6, 0)
     win.clear:HookScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_TOP")
-      GameTooltip:AddLine("Clear all", 1, 1, 1)
-      GameTooltip:AddLine("Hides every request in the list, like x on each. New ones still show up.", nil, nil, nil, true)
+      ns:TooltipAddLine("Clear all", 1, 1, 1)
+      ns:TooltipAddLine("Hides every request in the list, like x on each. New ones still show up.", nil, nil, nil, true)
       GameTooltip:Show()
     end)
     win.clear:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -725,8 +769,8 @@ function ns:ShowCustomers(quiet)
     end)
     sil:HookScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_TOP")
-      GameTooltip:AddLine("Silence customer alerts", 1, 1, 1)
-      GameTooltip:AddLine("No window, sound or chat line for new requests, for as long as you pick. They're still listed here.", nil, nil, nil, true)
+      ns:TooltipAddLine("Silence customer alerts", 1, 1, 1)
+      ns:TooltipAddLine("No window, sound or chat line for new requests, for as long as you pick. They're still listed here.", nil, nil, nil, true)
       GameTooltip:Show()
     end)
     sil:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -762,8 +806,15 @@ function ns:ShowWorkLog()
   refresh()
 end
 
--- The 9th value is the channel's plain name ("Trade", "Services").
-ns:On("CHAT_MSG_CHANNEL", function(msg, sender, _, channelName, _, _, _, _, baseName)
+-- Your channels changed (joined, left, renumbered): what chat taught is forgotten.
+for _, ev in ipairs({ "CHANNEL_UI_UPDATE", "CHAT_MSG_CHANNEL_NOTICE" }) do
+  ns:On(ev, function() wipe(zoneOf) end)
+end
+
+-- The 7th is the game's zone channel ID, the 8th your number for it, the 9th the
+-- channel's plain name ("Trade - City").
+ns:On("CHAT_MSG_CHANNEL", function(msg, sender, _, channelName, _, _, zoneID, number, baseName)
+  if type(number) == "number" and type(zoneID) == "number" then zoneOf[number] = { zone = zoneID, name = baseName } end
   onChat(msg, sender, baseName or channelName)
 end)
 ns:On("CHAT_MSG_SAY", function(msg, sender) onChat(msg, sender, "Say") end)

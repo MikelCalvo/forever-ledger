@@ -6,6 +6,100 @@ local PROFESSIONS = {
   Cooking = true, Fishing = true, ["First Aid"] = true,
 }
 
+-- Professions are saved under their English name, found from the game's skill line ID,
+-- so a German or Russian client keys them the same as the recipe data ("Enchanting", not
+-- "Verzauberkunst"). The game's own names are remembered account-wide (profAliases), so
+-- entries saved under them, yours or a partner's from sync, move to the English key.
+local SKILL_LINES = {
+  [171] = "Alchemy", [164] = "Blacksmithing", [333] = "Enchanting", [202] = "Engineering",
+  [182] = "Herbalism", [165] = "Leatherworking", [186] = "Mining", [393] = "Skinning",
+  [197] = "Tailoring", [185] = "Cooking", [356] = "Fishing", [129] = "First Aid",
+}
+ns.PROFESSION_SKILL_LINES = SKILL_LINES
+local function aliases()
+  if ns.db then
+    ns.db.profAliases = ns.db.profAliases or {}
+    return ns.db.profAliases
+  end
+  ns.profAliasesEarly = ns.profAliasesEarly or {}
+  return ns.profAliasesEarly
+end
+function ns.ProfessionKey(name, skillLine)
+  local en = skillLine and SKILL_LINES[skillLine]
+  local known = aliases()
+  if en then
+    if type(name) == "string" and name ~= en and known[name] ~= en then
+      known[name] = en
+      if ns.AddLocaleText then ns.AddLocaleText(en, name) end
+      if ns.db and ns.NormalizeProfessions then ns.NormalizeProfessions(ns.db) end
+    end
+    return en
+  end
+  if name and known[name] then return known[name] end
+  return name
+end
+
+-- Two saved entries for one profession become one, losing nothing (Codex review, November
+-- 19: keeping the English one whole dropped newer recipes saved under the game's name).
+-- Every recipe of both is kept; where both have one, the newer entry's wins, and the newer
+-- entry's rank, max and time win too.
+function ns.MergeProfession(a, b)
+  if not a then return b end
+  if not b then return a end
+  local newer, older = a, b
+  if (b.updated or 0) > (a.updated or 0) then newer, older = b, a end
+  local out = {}
+  for k, v in pairs(older) do out[k] = v end
+  for k, v in pairs(newer) do out[k] = v end
+  local recipes, n = {}, 0
+  for id, r in pairs(older.recipes or {}) do recipes[id] = r end
+  for id, r in pairs(newer.recipes or {}) do recipes[id] = r end
+  for _ in pairs(recipes) do n = n + 1 end
+  out.recipes = recipes
+  if out.recipeCount then out.recipeCount = math.max(out.recipeCount, n) end
+  return out
+end
+-- An entry saved under the game's own name moves to the English key, merged with any
+-- entry already there. True if anything changed.
+function ns.MoveProfessionKey(profs, name, key)
+  if not profs or not name or not key or name == key or not profs[name] then return false end
+  profs[key] = ns.MergeProfession(profs[key], profs[name])
+  profs[name] = nil
+  return true
+end
+-- Every character's professions under the English keys the game's names are known for.
+-- Names not known yet stay as they are (never dropped). True if anything moved.
+function ns.NormalizeProfessions(db)
+  local known = db and db.profAliases
+  if not known or not next(known) then return false end
+  local changed = false
+  for _, c in pairs(db.chars or {}) do
+    local move = {}   -- (collected first: adding keys while walking a table isn't safe)
+    for name in pairs(c.profs or {}) do if known[name] then move[#move + 1] = name end end
+    for _, name in ipairs(move) do
+      if ns.MoveProfessionKey(c.profs, name, known[name]) then changed = true end
+    end
+  end
+  if changed and ns.BuildUsageIndex and ns.usage then ns:BuildUsageIndex() end
+  return changed
+end
+
+-- At login: the game's names for every profession it will tell (not only this character's),
+-- then every saved entry under one of them moves to its English key.
+ns:OnReady(function()
+  for name, en in pairs(ns.profAliasesEarly or {}) do ns.db.profAliases[name] = ns.db.profAliases[name] or en end
+  local get = C_TradeSkillUI and C_TradeSkillUI.GetProfessionInfoBySkillLineID
+  if get then
+    for line in pairs(SKILL_LINES) do
+      local ok, info = pcall(get, line)
+      if ok and type(info) == "table" and type(info.professionName) == "string" and info.professionName ~= "" then
+        ns.ProfessionKey(info.professionName, line)
+      end
+    end
+  end
+  ns.NormalizeProfessions(ns.db)
+end)
+
 local function safe(fn, ...)
   if not fn then return nil end
   local ok, a, b, c, d = pcall(fn, ...)
@@ -32,14 +126,18 @@ end
 function ns:ScanSkillLines()
   if not ns.db then return end
   local c = ns:GetChar()
-  local found = {}
+  local found, moved = {}, false
 
   if GetProfessions and GetProfessionInfo then
     local p1, p2, arch, fish, cook, aid = GetProfessions()
     for _, idx in ipairs({ p1 or false, p2 or false, arch or false, fish or false, cook or false, aid or false }) do
       if idx then
-        local name, _, rank, maxRank = GetProfessionInfo(idx)
-        if name then found[name] = { rank, maxRank } end
+        local name, _, rank, maxRank, _, _, skillLine = GetProfessionInfo(idx)
+        if name then
+          local key = ns.ProfessionKey(name, skillLine)
+          if ns.MoveProfessionKey(c.profs, name, key) then moved = true end
+          found[key] = { rank, maxRank }
+        end
       end
     end
   end
@@ -47,7 +145,8 @@ function ns:ScanSkillLines()
   if not next(found) and GetNumSkillLines and GetSkillLineInfo then
     for i = 1, GetNumSkillLines() do
       local name, isHeader, _, rank, _, _, maxRank = GetSkillLineInfo(i)
-      if name and not isHeader and PROFESSIONS[name] then found[name] = { rank, maxRank } end
+      local key = name and ns.ProfessionKey(name)
+      if key and not isHeader and PROFESSIONS[key] then found[key] = { rank, maxRank } end
     end
   end
 
@@ -55,7 +154,7 @@ function ns:ScanSkillLines()
     ns:Debug("Couldn't read profession list yet.")
     return
   end
-  local changed = false
+  local changed = moved
   for name, v in pairs(found) do
     local p = c.profs[name] or { recipes = {} }
     p.recipes = p.recipes or {}
@@ -116,10 +215,14 @@ function ns:CaptureTradeSkill()
   local base = safe(T.GetBaseProfessionInfo)
   if type(base) == "table" and base.professionName then
     profName, rank, maxRank = base.professionName, base.skillLevel, base.maxSkillLevel
+    local line = SKILL_LINES[base.professionID or 0] and base.professionID or base.parentProfessionID
+    local key = ns.ProfessionKey(profName, line)
+    if key ~= profName then ns.MoveProfessionKey(ns:GetChar().profs, profName, key) end
+    profName = key
   end
   if not profName then
     local _, name, r, m = safe(T.GetTradeSkillLine)
-    profName, rank, maxRank = name, r, m
+    profName, rank, maxRank = name and ns.ProfessionKey(name), r, m
   end
   if not profName then ns:Debug("Couldn't read which profession is open."); return end
 

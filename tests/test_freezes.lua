@@ -56,6 +56,24 @@ T.test("Freeze watch: the slowest part of our share is named", function()
   ns.db.freezeLog = nil
 end)
 
+T.test("Freeze watch: leftovers made, and memory cleared in a freeze", function()
+  -- (Frank's AN30, November 19: 148 MB before clearing against 44 MB in use.)
+  local saved = ns.perf
+  ns.perf = {}
+  T.eq(ns.LeftoverLine(4), nil, "none yet")
+  ns.PerfNote("Tooltip: crates", 3, true, 3 * 1024)
+  ns.PerfNote("CHAT_MSG_ADDON", 1, false, 10 * 1024)
+  ns.PerfNote("Tiny", 1, false, 10)
+  local line = ns.LeftoverLine(4)
+  T.ok(line:find("CHAT_MSG_ADDON 10.0 MB, Tooltip: crates 3.0 MB", 1, true), line)
+  T.ok(not line:find("Tiny", 1, true), "under 1 MB isn't named")
+  T.ok(ns.PerfLines(3)[1]:find("MB of leftovers", 1, true) or ns.PerfLines(3)[2]:find("MB of leftovers", 1, true))
+  ns.perf = saved
+  ns.db.freezeLog = { { t = 1, ms = 600, ours = 2, slow = {}, clearedMB = 95 } }
+  T.ok(table.concat(ns.FreezeLines(8), "\n"):find("cleared 95 MB of leftover memory", 1, true))
+  ns.db.freezeLog = nil
+end)
+
 T.test("Freeze watch: a timed step inside a timed task isn't counted twice", function()
   -- (Codex review, November 17: 100 ms outer with an 80 ms inner showed as 180 ms.)
   local realClock = debugprofilestop

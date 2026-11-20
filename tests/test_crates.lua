@@ -33,3 +33,28 @@ T.test("Crates: the filled crate is known by item number, each quality", functio
   T.ok(ns.SEALED_CRATE_IDS[248765] and ns.SEALED_CRATE_IDS[248770] and ns.SEALED_CRATE_IDS[248775])
   T.ok(not ns.SEALED_CRATE_IDS[248682], "an empty crate isn't a filled one")
 end)
+
+T.test("Crates: a bundle's item found by name without loading every priced item", function()
+  -- (Frank's AN30, November 19: 6,304 item loads in 14 seconds and a 650 ms freeze on a
+  -- crate hover, from looking up every priced item's name.)
+  local market = ns.MarketKey()
+  ns.db.prices[market] = ns.db.prices[market] or {}
+  local prices = ns.db.prices[market]
+  prices[990301], prices[990302] = { m = 10 }, { m = 20 }
+  ns.db.itemNames[990303] = "Saved Name Bar"
+  local realInfo, realItem = ns.GetItemInfo, C_Item
+  local asked = {}
+  ns.GetItemInfo = function(id) asked[id] = true; if id == 990301 then return "Loaded Bar" end end
+  C_Item = { IsItemDataCachedByID = function(id) return id == 990301 end }
+  local ok, err = pcall(function()
+    ns.CrateNamesReset()
+    T.eq(ns.CrateIdForName("Loaded Bar"), 990301, "an item the game has loaded")
+    T.eq(ns.CrateIdForName("Saved Name Bar"), 990303, "a saved name")
+    T.ok(not asked[990302], "an item the game hasn't loaded isn't asked for")
+    T.eq(ns.CrateIdForName("Nobody Bar"), nil)
+  end)
+  ns.GetItemInfo, C_Item = realInfo, realItem
+  prices[990301], prices[990302], ns.db.itemNames[990303] = nil, nil, nil
+  ns.CrateNamesReset()
+  if not ok then error(err, 0) end
+end)
