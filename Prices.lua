@@ -794,7 +794,11 @@ local function compareListings(before, after, gap)
         table.remove(fresh, repost)
         reposted = reposted + v.qty
       else
-        gone = gone + v.qty
+        local rest
+        for k, f in ipairs(fresh) do
+          if f.price == v.price and f.qty < v.qty and (not rest or f.qty > fresh[rest].qty) then rest = k end
+        end
+        gone = gone + v.qty - (rest and table.remove(fresh, rest).qty or 0)
       end
     else
       maybe = maybe + v.qty
