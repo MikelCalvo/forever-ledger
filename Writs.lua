@@ -180,9 +180,19 @@ local LIST = {
   { 14130, "Tailoring", "A", 275 },
 }
 
+-- Writ item IDs the list above lacks, from the game data (WritsData.lua, Codex, built from
+-- the client's tables: it agrees with every ID above), matched by the item asked for. So a
+-- writ is known by its ID, not its English name, on every client. Only IDs are taken:
+-- tier, count and reward stay the list's (the game data doesn't have them).
+-- Item 3391: the writ says "Ogre's Strength", the item "Ogre Strength" (FOREVER_WRITS.md).
+local catalogWrit = { [3391] = 264011 }
+for _, o in ipairs(ns.WRIT_DATA and ns.WRIT_DATA.orders or {}) do
+  if o.item and o.writ then catalogWrit[o.item] = catalogWrit[o.item] or o.writ end
+end
+
 local WRITS, byWrit, byItem = {}, {}, {}
 for i, w in ipairs(LIST) do
-  local e = { item = w[1], prof = w[2], tier = w[3], skill = w[4], who = w[5], zone = w[6], writ = w[7], qty = w[8] or 1, n = i }
+  local e = { item = w[1], prof = w[2], tier = w[3], skill = w[4], who = w[5], zone = w[6], writ = w[7] or catalogWrit[w[1]], qty = w[8] or 1, n = i }
   WRITS[i] = e
   if e.writ then byWrit[e.writ] = e end
   byItem[e.item] = e

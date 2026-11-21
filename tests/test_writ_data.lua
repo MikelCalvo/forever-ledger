@@ -37,3 +37,19 @@ T.test("Writ data: preserve all sealed identities and unresolved name collisions
   T.eq(orders[264012].itemBasis, "client name")
   T.eq(#data.coinPouches, 4, "identities only; not an asserted reward link")
 end)
+
+T.test("Writs: every order the game data knows is found by its writ's item ID", function()
+  local ns = T.ns
+  local found = 0
+  for _, o in ipairs(ns.WRIT_DATA.orders) do
+    if o.item then
+      local e = ns:WritFor(o.writ)
+      T.ok(e, "writ " .. o.writ .. " is known by its ID")
+      T.eq(e and e.item, o.item, "writ " .. o.writ .. " asks for its item")
+      found = found + 1
+    end
+  end
+  T.eq(found, 146)
+  local ogre = ns:WritFor(264011)
+  T.eq(ogre and ogre.item, 3391, "Ogre's Strength / Ogre Strength")
+end)
