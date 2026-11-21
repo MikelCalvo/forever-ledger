@@ -70,7 +70,8 @@ ns.GetItemInfo = getItemInfo
 ns:On("GET_ITEM_INFO_RECEIVED", function(id, success)
   if not id then return end
   askedAt[id] = nil
-  if success == false then noSuchItem[id] = true end
+  -- (A later yes clears an earlier no: Codex review, November 21.)
+  if success == false then noSuchItem[id] = true elseif success then noSuchItem[id] = nil end
 end)
 
 -- Item names, remembered in saved data once the game has given them. The game keeps

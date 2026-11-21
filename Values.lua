@@ -513,6 +513,11 @@ local function freshCache()
   end
 end
 
+-- The same check, for whoever starts a sliced run: values out of date are thrown away
+-- before it starts, as inside it they're kept (Codex review, November 21: Gold making's
+-- runs only read values in slices, so an expired chain value stayed visit after visit).
+function ns.FreshValues() freshCache() end
+
 local function allOptions(id)
   local list = listCache[id]
   if not list then list = options(id, 0); listCache[id] = list end

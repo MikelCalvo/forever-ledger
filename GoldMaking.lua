@@ -399,6 +399,7 @@ local function work()
   if working and not working.stopped then return end
   local before = ns.AHledgerUses and ns.AHledgerUses() or 0
   local finished, gen, startedAt = false, generation, time()
+  if ns.FreshValues then ns.FreshValues() end   -- (values out of date go now: in slices they're kept)
   local stamp = ns.ValuesStamp and ns.ValuesStamp()
   working = ns.RunInSlices("Gold making list", function() return ns:GoldIdeas() end, function(r, n)
     finished = true

@@ -232,5 +232,8 @@ T.test("Item details: one ask per item until the game answers; an item it doesn'
   T.fire("GET_ITEM_INFO_RECEIVED", GONE, false)
   S.items[GONE] = { name = "Never" }
   T.eq(ns.GetItemInfo(GONE), nil, "the game said it has no such item: not asked again this session")
+  -- (Codex review, November 21: a later answer that it does exist counts.)
+  T.fire("GET_ITEM_INFO_RECEIVED", GONE, true)
+  T.eq(ns.GetItemInfo(GONE), "Never", "a later yes clears the no")
   S.items[ID], S.items[GONE] = nil, nil
 end)

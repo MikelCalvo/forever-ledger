@@ -134,6 +134,28 @@ T.test("Gold making: a new auction house cut or safety margin works the list out
   if not ok then error(err, 0) end
 end)
 
+-- Codex review, November 21: values are kept while a run works in slices, so values out of
+-- date stayed visit after visit; they go before a run starts.
+T.test("Gold making: values out of date are thrown away before a run starts", function()
+  local realIdeas, seen = ns.GoldIdeas, nil
+  ns.GoldIdeas = function() seen = ns:BestOption(BAG); return {}, 0 end
+  local ok, err = pcall(function()
+    price(BAG, 100000)
+    ns:InvalidateValues(true)
+    local first = ns:BestOption(BAG)
+    T.ok(first and first.value > 0, "a value to start with")
+    price(BAG, 5000)
+    ns:InvalidateValues()          -- (a small change: rebuilt within 30 seconds)
+    S.now = S.now + 31
+    ns._goldMakingTest.work()
+    T.runTimers()
+    T.ok(seen and seen.value < first.value, "the run saw the new price, not the kept value")
+  end)
+  ns.GoldIdeas = realIdeas
+  T.runTimers()
+  if not ok then error(err, 0) end
+end)
+
 -- Codex review, November 21: a sliced run finishing after a settings change put its old
 -- list back.
 T.test("Gold making: a settings change stops the run in progress; its old list never comes back", function()
