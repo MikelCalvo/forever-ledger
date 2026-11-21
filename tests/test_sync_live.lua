@@ -126,6 +126,63 @@ T.test("A big message is taken in over several frames, and the next one waits it
   assert(ok, err)
 end)
 
+-- Codex review, November 21: the three below.
+T.test("Unlinking stops a message half taken in and the ones waiting", function()
+  setup(false)
+  read()
+  local key = "Testrealm|Alliance"
+  local prices = {}
+  for id = 1, 300 do prices[72000 + id] = { m = 5, q = 1, t = S.now, src = "scan" } end
+  local realClock, ms = debugprofilestop, 0
+  local ok, err = pcall(function()
+    debugprofilestop = function() ms = ms + 1; return ms end
+    deliver({ k = "d", prices = { [key] = prices } })
+    deliver({ k = "d", prices = { [key] = { [72999] = { m = 7, q = 1, t = S.now, src = "scan" } } } })
+    local got = 0
+    for id = 72001, 72300 do if ns.db.prices[key][id] then got = got + 1 end end
+    T.ok(got > 0 and got < 300, "started: " .. got)
+    ns:SyncCommand("unpair")
+    T.runTimers()
+    local after = 0
+    for id = 72001, 72300 do if ns.db.prices[key][id] then after = after + 1 end end
+    T.eq(after, got, "nothing more of it after unlinking")
+    T.eq(ns.db.prices[key][72999], nil, "the waiting one is dropped")
+  end)
+  debugprofilestop = realClock
+  T.runTimers()
+  assert(ok, err)
+end)
+
+T.test("A message that fails a frame later lets the next one go", function()
+  setup(false)
+  read()
+  local key = "Testrealm|Alliance"
+  ns.db.prices[key] = ns.db.prices[key] or {}
+  ns.db.prices[key][72501] = { m = 5, q = 1, t = 1, src = "scan" }
+  local realClock, ms = debugprofilestop, 0
+  local ok, err = pcall(function()
+    debugprofilestop = function() ms = ms + 100; return ms end   -- (gives the frame back at once)
+    local errors = #S.errors
+    deliver({ k = "d", prices = { [key] = { [72501] = { m = 6, q = 1, t = "not a time", src = "scan" } } } })
+    deliver({ k = "d", prices = { [key] = { [72502] = { m = 7, q = 1, t = S.now, src = "scan" } } } })
+    T.runTimers()
+    T.ok(#S.errors > errors, "the first failed")
+    T.eq(ns.db.prices[key][72502] and ns.db.prices[key][72502].m, 7, "the second was still taken in")
+  end)
+  debugprofilestop = realClock
+  ns.db.prices[key][72501], ns.db.prices[key][72502] = nil, nil
+  T.runTimers()
+  assert(ok, err)
+end)
+
+T.test("Sync ping sends its message (it isn't taken for one received)", function()
+  setup(false)
+  read()
+  ns:SyncCommand("ping Some Body")
+  T.ok(#sent >= 1, "a whisper went out")
+  T.runTimers()
+end)
+
 T.test("A message that stops arriving is forgotten", function()
   setup(false)
   read()

@@ -390,19 +390,30 @@ end
 -- A whole message is taken in over several frames, one message at a time in the order they
 -- came (Frank's /fl perf, November 21: a partner's day of price history took 166 ms in
 -- one frame).
-local queue, merging = {}, nil
+-- (inbox, not queue: queue is what goes out, and the same name hid it from everything below,
+-- so unlinking didn't stop a send already on its way: Codex review, November 21.)
+local inbox, merging = {}, nil
 local function nextMessage()
-  -- (A run that failed never says it's done: the next message goes ahead anyway.)
-  if (merging and not (merging.run and merging.run.stopped)) or #queue == 0 then return end
-  local m = table.remove(queue, 1)
+  if merging or #inbox == 0 then return end
+  local m = table.remove(inbox, 1)
   local token = {}
   merging = token
-  local run = ns.RunInSlices("Sync: taking in a message", function() handle(m[1], m[2]) end, function()
-    if merging == token then merging = nil end
-    nextMessage()
-  end)
-  token.run = run
-  if run.stopped and merging == token then merging = nil; nextMessage() end   -- (failed at once)
+  -- Finished or failed (at once or frames later), the next message goes ahead.
+  local function over()
+    if merging == token then merging = nil; nextMessage() end
+  end
+  token.run = ns.RunInSlices("Sync: taking in a message", function() handle(m[1], m[2]) end, over, over)
+  if token.cancel then ns.StopSlices(token.run) end   -- (unlinked while it started)
+end
+-- Unlinking stops a message half taken in and drops the ones waiting: what they'd still add
+-- (the partner's books, characters) is what unlinking just removed (Codex review, November 21).
+-- The prices already taken in stay, as they do on unlinking.
+local function stopIncoming()
+  if merging then
+    merging.cancel = true
+    if merging.run then ns.StopSlices(merging.run) end
+  end
+  inbox, merging = {}, nil
 end
 
 ns:On("CHAT_MSG_ADDON", function(prefix, msg, channel, sender)
@@ -426,7 +437,7 @@ ns:On("CHAT_MSG_ADDON", function(prefix, msg, channel, sender)
   incoming[key] = nil
   local data, err = ns.Deserialize(table.concat(r.parts))
   if not data then ns:Debug("Sync: couldn't read a message from", name, err); return end
-  queue[#queue + 1] = { data, name }
+  inbox[#inbox + 1] = { data, name }
   nextMessage()
 end)
 
@@ -492,6 +503,7 @@ local function endLink()
   s.syncMoney, s.syncBags = false, false
   queue, sending, booksSent, booksChanged, partnerBooks, partnerOnline = {}, false, nil, true, false, false
   askedFor, catchUp, historyGot = nil, nil, nil
+  stopIncoming()
   return shared
 end
 

@@ -751,7 +751,8 @@ function ns.SlicePart(name)
   partLabel = name and (sliceRun.label .. ": " .. name) or nil
   partStart, partKB = clock(), collectgarbage("count")
 end
-function ns.RunInSlices(label, fn, done)
+-- failed (optional): called, outside the run, when fn stops with an error after it started.
+function ns.RunInSlices(label, fn, done, failed)
   local run = { co = coroutine.create(fn), label = label }
   local step
   step = ns.Timed(label, function()
@@ -762,7 +763,11 @@ function ns.RunInSlices(label, fn, done)
     closePart()
     run.part, partLabel, sliceRun = partLabel, nil, nil
     slicing = nil
-    if not result[1] then run.stopped = true; geterrorhandler()(result[2]); return end
+    if not result[1] then
+      run.stopped = true; geterrorhandler()(result[2])
+      if failed then failed() end
+      return
+    end
     if coroutine.status(run.co) == "dead" then run.stopped = true; done(unpack(result, 2))
     else C_Timer.After(0, step) end
   end)
