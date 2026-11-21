@@ -525,33 +525,62 @@ end
 
 -- Data saved while the game gave an empty realm name (November 21, see RealmName above):
 -- markets "|Alliance" and characters "Name-" (or "?|Alliance", "Name-?" with none at all),
--- and a character's "Name- (neutral)" auctions list, back under the realm. Only names of
--- your own characters count as character keys.
-local function blankRealmRenamer(db, realm)
-  local names = { [ns.FullName()] = true }
-  for key in pairs(db.chars or {}) do
-    local name = type(key) == "string" and key:match("^(.+)%-[^%-]+$")
-    if name then names[name] = true end
-    name = type(key) == "string" and key:match("^(.+)%-%??$")
-    if name then names[name] = true end
+-- and a character's "Name- (neutral)" auctions list, back under the realm.
+-- Each character goes back to its own realm (Codex review, November 21: an account with
+-- characters on two rulesets had the other one's data moved to the logged-in one's
+-- realm): the realm read now for the character logged in, else the one remembered for it
+-- (charRealm), else the one its other records are under. A character whose realm isn't
+-- known stays as it is until it logs in. Market data ("|Alliance") goes to the only realm
+-- that side's characters are on; with that side on several rulesets it stays where it is
+-- (prices go stale anyway; mixing rulesets would be worse).
+-- realm: the logged-in character's realm. Also learns from the tables in extra (sync).
+local function blankRealmRenamer(db, realm, extra)
+  local home, seen, sideRealm, anyRealm = {}, {}, {}, nil
+  local function good(r) return type(r) == "string" and r:find("%S") and r ~= "?" end
+  local function note(t, key, r)
+    if t[key] == nil then t[key] = r elseif t[key] ~= r then t[key] = false end
+  end
+  for _, source in ipairs({ db, extra }) do
+    for key, c in pairs(source and source.chars or {}) do
+      local name, r
+      if type(key) == "string" then name, r = key:match("^(.+)%-([^%-]+)$") end
+      if name and good(r) then
+        note(seen, name, r)
+        local side = type(c) == "table" and c.faction
+        if type(side) == "string" then note(sideRealm, side, r) end
+        if anyRealm == nil then anyRealm = r elseif anyRealm ~= r then anyRealm = false end
+      end
+    end
+  end
+  for name, r in pairs(seen) do if r then home[name] = r end end
+  for _, source in ipairs({ extra, db }) do
+    for name, r in pairs(source and source.charRealm or {}) do if good(r) then home[name] = r end end
+  end
+  if good(realm) then
+    home[ns.FullName()] = realm
+    if anyRealm == nil then anyRealm = realm elseif anyRealm ~= realm then anyRealm = false end
   end
   local function fix(s)
     local side = s:match("^%??|(%a+)$")
-    if side then return realm .. "|" .. side end
+    if side then
+      local r = sideRealm[side]
+      if r == nil then r = anyRealm end
+      return r and r .. "|" .. side or nil
+    end
     local name = s:match("^(.+)%-%??$")
-    if name and names[name] then return name .. "-" .. realm end
+    if name and home[name] then return name .. "-" .. home[name] end
     name = s:match("^(.+)%-%?? %(neutral%)$")
-    if name and names[name] then return name .. "-" .. realm .. " (neutral)" end
+    if name and home[name] then return name .. "-" .. home[name] .. " (neutral)" end
   end
   return fix, function(v, k)
-    if k == "realm" and (v == "" or v == "?") then return realm end
+    if k == "realm" then return end   -- (a character record's realm: set from its key after)
     return fix(v)
   end
 end
 
 -- Whether any table has such a key (a quick look, so the full repair runs only when needed).
-function ns.HasBlankRealmData(db, realm)
-  local fix = blankRealmRenamer(db, realm)
+function ns.HasBlankRealmData(db, realm, extra)
+  local fix = blankRealmRenamer(db, realm, extra)
   for _, t in pairs(db) do
     if type(t) == "table" then
       for k in pairs(t) do
@@ -562,10 +591,15 @@ function ns.HasBlankRealmData(db, realm)
   return false
 end
 
-function ns.FixBlankRealm(db, realm)
+function ns.FixBlankRealm(db, realm, extra)
   if not realm then return end
-  local fixKey, fixValue = blankRealmRenamer(db, realm)
+  local fixKey, fixValue = blankRealmRenamer(db, realm, extra)
   renameData(db, nil, fixKey, fixValue)
+  -- A character record moved back gets its realm from its key.
+  for key, c in pairs(db.chars or {}) do
+    local r = type(key) == "string" and type(c) == "table" and (c.realm == "" or c.realm == "?") and key:match("%-([^%-]+)$")
+    if r and r ~= "?" then c.realm = r end
+  end
 end
 
 function ns.CharKey()
@@ -1277,7 +1311,8 @@ function ns:MergeData(data, via)
   local db, nChars, nPrices, nVendor, nBags = ns.db, 0, 0, 0, 0
   ns.PlainRealmData(data)   -- (from someone still on a version that files by server)
   -- (and from one that saved under an empty realm name: November 21)
-  if ns.RealmName() and ns.HasBlankRealmData(data, ns.RealmName()) then ns.FixBlankRealm(data, ns.RealmName()) end
+  -- (Each character to its own realm, learned from both sides' records.)
+  if ns.RealmName() and ns.HasBlankRealmData(data, ns.RealmName(), db) then ns.FixBlankRealm(data, ns.RealmName(), db) end
   for key, c in pairs(data.chars or {}) do
     local mine = db.chars[key]
     if via and ns:IsOwnChar(key) then

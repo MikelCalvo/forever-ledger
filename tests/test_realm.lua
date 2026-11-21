@@ -181,3 +181,50 @@ T.test("Empty realm name: data saved meanwhile moves back under the realm", func
   T.eq(db.itemNames[1], "Pick-", "only your characters' names")
   T.eq(ns.HasBlankRealmData(db, "PvE"), false)
 end)
+
+-- Codex review, November 21: characters on two rulesets.
+T.test("Empty realm name: another character goes back to its own realm, not the logged-in one's", function()
+  local other, blank = "Other Person-Hardcore", "Other Person-"
+  local db = {
+    chars = { ["Ivellos Veren-PvE"] = { realm = "PvE", faction = "Alliance", updated = 5 },
+      [other] = { realm = "Hardcore", faction = "Alliance", updated = 1, level = 20 },
+      [blank] = { realm = "", updated = 2, level = 21 } },
+    money = { [blank] = { [123] = { loot = 50 } } },
+    sales = { { c = blank, a = 5 } },
+    prices = { ["|Alliance"] = { [1] = { m = 12, t = 200 } } },
+  }
+  T.ok(ns.HasBlankRealmData(db, "PvE"))
+  ns.FixBlankRealm(db, "PvE")
+  T.eq(db.chars["Other Person-PvE"], nil, "not moved to the logged-in character's realm")
+  T.eq(db.chars[blank], nil)
+  T.eq(db.chars[other].level, 21, "joined its own record")
+  T.eq(db.chars[other].realm, "Hardcore")
+  T.eq(db.money[other][123].loot, 50)
+  T.eq(db.sales[1].c, other)
+  T.ok(db.prices["|Alliance"], "Alliance characters on two rulesets: the market stays as it is")
+  T.eq(db.prices["PvE|Alliance"], nil, "and isn't mixed into either")
+  T.eq(ns.HasBlankRealmData(db, "PvE"), false, "nothing left that can be placed")
+end)
+
+T.test("Empty realm name: the remembered realm places a character, an unknown one waits", function()
+  local db = {
+    chars = { ["Other Person-"] = { realm = "", updated = 2 }, ["Stranger Person-"] = { realm = "", updated = 3 } },
+    charRealm = { ["Other Person"] = "Hardcore" },
+    money = { ["Other Person-"] = { [123] = { loot = 50 } }, ["Stranger Person-"] = { [123] = { loot = 9 } } },
+  }
+  ns.FixBlankRealm(db, "PvE")
+  T.eq(db.chars["Other Person-Hardcore"].realm, "Hardcore", "from charRealm")
+  T.eq(db.money["Other Person-Hardcore"][123].loot, 50)
+  T.ok(db.chars["Stranger Person-"], "unknown realm: left until it logs in")
+  T.eq(db.money["Stranger Person-"][123].loot, 9)
+end)
+
+T.test("Empty realm name: synced data is placed by both sides' records", function()
+  local mine = { chars = { ["Other Person-Hardcore"] = { realm = "Hardcore", updated = 1 } } }
+  local data = { chars = { ["Other Person-"] = { realm = "", updated = 2, level = 30 } },
+    sales = { { c = "Other Person-", a = 1 } } }
+  T.ok(ns.HasBlankRealmData(data, "PvE", mine))
+  ns.FixBlankRealm(data, "PvE", mine)
+  T.eq(data.chars["Other Person-Hardcore"].level, 30)
+  T.eq(data.sales[1].c, "Other Person-Hardcore")
+end)

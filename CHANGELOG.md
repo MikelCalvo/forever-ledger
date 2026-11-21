@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Full scans now also count listings that ran out of time, alongside those that sold, so a sell chance can be worked out later from your own scans.
 
 ### Fixed
+- Accounts with characters on more than one ruleset: data a character saved under an empty realm name goes back to that character's own realm, not the realm of whoever logged in first after the update (found in Codex's review of 0.28.1).
 - Your auctions: one missing from the game's answer for a moment no longer counts as sold, and one you cancel at the auction house no longer counts as sold either (thanks to vulpeep).
 - Sell speed: when part of a lot was bought between two full scans, only the bought part counts as sold (thanks to vulpeep).
 - Gold making: a craft that needs lots of materials no longer freezes the game while its plan is worked out (thanks to vulpeep).
