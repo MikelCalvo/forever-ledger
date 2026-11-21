@@ -92,3 +92,23 @@ T.test("Freeze watch: a timed step inside a timed task isn't counted twice", fun
   T.eq(added, 100, "the frame's share: the outer task once")
   ns.perf["Test outer"], ns.perf["Test inner"] = nil, nil
 end)
+
+T.test("Freeze watch: a timed task that stops with an error doesn't hide the rest of the frame", function()
+  -- (Codex verification, November 18: an 80 ms task that threw left the count raised, so the
+  -- next 20 ms handler and a later 50 ms task counted as parts, and the frame showed 0 ms ours.)
+  local realClock, realHandler = debugprofilestop, geterrorhandler
+  local now = 0
+  debugprofilestop = function() return now end
+  geterrorhandler = function() return function() end end
+  local broken = ns.Timed("Test broken", function() now = now + 80; error("test") end)
+  ns:On("FL_TEST_DEPTH", function() broken() end)
+  ns:On("FL_TEST_DEPTH", function() now = now + 20 end)
+  local later = ns.Timed("Test later", function() now = now + 50 end)
+  local share = ns.FrameShare()
+  T.fire("FL_TEST_DEPTH")
+  later()
+  local added = ns.FrameShare() - share
+  debugprofilestop, geterrorhandler = realClock, realHandler
+  T.eq(added, 150, "the event's 100 ms and the later task's 50")
+  ns.perf["Test broken"], ns.perf["Test later"], ns.perf.FL_TEST_DEPTH = nil, nil, nil
+end)

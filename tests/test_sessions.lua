@@ -95,6 +95,47 @@ T.test("Sessions: a sale whose mail came before the post isn't this session's lo
   end)
 end)
 
+T.test("Sessions: posts from before their times were kept still count after a new one", function()
+  -- (Codex verification, November 19: a session running across that update had posted 3
+  -- with no times; one new post of 2 made those 3 unusable, so their sale left them as loot.)
+  withValues(function()
+    S.items[A] = { name = "Session Test Hoop" }
+    local oldName = ns.db.itemNames[A]
+    ns.db.itemNames[A] = "Session Test Hoop"
+    local s = session({ [A] = 5 })
+    s.posted = { [A] = 3 }   -- the older shape: counts, no times
+    ns:SessionPosted(A, 2)
+    T.eq(s.posted[A], 5)
+    ns:SessionSold("Session Test Hoop", 3, S.now - 1800)   -- the older 3, mail before the new post
+    T.eq(s.sold and s.sold[A], 3, "the 3 posted before times were kept")
+    T.eq(s.posted[A], 2)
+    T.eq(s.postedAt[A][1][2], 2, "the new post is still there for its own sale")
+    ns:SessionSold("Session Test Hoop", 2, S.now - 1800)
+    T.eq(s.sold[A], 3, "the new 2 can't be a sale whose mail came before them")
+    S.items[A], ns.db.itemNames[A] = nil, oldName
+  end)
+end)
+
+T.test("Sessions: a reset popup left open never clears a newer session", function()
+  -- (Codex verification, November 19: stop, start again, then Accept cleared the new one.)
+  withValues(function()
+    local a = session({ [A] = 1 })
+    local popup = {}
+    local realShow = StaticPopup_Show
+    StaticPopup_Show = function() return popup end
+    ns:ResetGeneralSession()
+    StaticPopup_Show = realShow
+    T.eq(popup.data, a, "the popup holds the session it described")
+    local b = session({ [B] = 2 })   -- a new one in its place
+    ns:SessionMoney("loot", 900)
+    StaticPopupDialogs.FOREVER_LEDGER_SESSION_RESET.OnAccept(popup, popup.data)
+    T.eq(ns.db.liveSession, b, "the new session is untouched")
+    T.eq(b.money.loot, 900)
+    StaticPopupDialogs.FOREVER_LEDGER_SESSION_RESET.OnAccept(popup, b)
+    T.ok(ns.db.liveSession ~= b, "the one it described is reset")
+  end)
+end)
+
 T.test("Sessions: loot no longer held drops out; posted auctions still count", function()
   withValues(function()
     session({ [A] = 4 })

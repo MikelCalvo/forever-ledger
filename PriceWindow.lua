@@ -534,6 +534,11 @@ local function build()
   f.kind = text(f, 11, T.dim)
   f.kind:SetPoint("TOPLEFT", f.name, "BOTTOMLEFT", 0, -4)
   f.kind:SetWidth(W - 300)
+  -- AHledger's terms: credit where its prices show, here too when a value or craft cost
+  -- below used one (Codex verification, November 18).
+  f.credit = text(f, 10, T.dim)
+  f.credit:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 14, 6)
+  f.credit:Hide()
   f.search = T:Button(f, "Search on the auction house", 200, function()
     if not ns:SearchAuctionHouse(f.id) then ns:Print("Open the auction house first, then click Search again.") end
   end, 24)
@@ -680,6 +685,7 @@ function ns:RefreshPriceWindow()
   if not (f and f:IsShown()) then return end
   f.cover:SetShown(not f.id)
   if not f.id then f:SetHeight(200); return end
+  local ahlBefore = ns.AHledgerUses and ns.AHledgerUses() or 0
   local id = f.id
   local s = ns:ItemPriceSummary(id, state.suffix)
   local card = 0
@@ -967,6 +973,12 @@ function ns:RefreshPriceWindow()
     for _, r in ipairs(f.mats) do r:Hide() end
   end
   T:HideCards(f, card + 1)
+  local credit = ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore
+  f.credit:SetShown(credit and true or false)
+  if credit then
+    f.credit:SetText(ns.AHLEDGER_CREDIT)
+    height = height + 14
+  end
   f:SetHeight(height)
 end
 

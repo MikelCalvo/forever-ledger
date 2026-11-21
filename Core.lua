@@ -688,10 +688,10 @@ function ns.FrameShare() return frameOurs end
 -- Wrap a function so its time is counted under a label.
 function ns.Timed(label, fn)
   return function(...)
-    local t, m = clock(), memKB()
-    depth = depth + 1
+    local t, m, before = clock(), memKB(), depth
+    depth = before + 1
     local a, b, c, d = fn(...)
-    depth = math.max(0, depth - 1)
+    depth = before
     note(label, clock() - t, nil, memKB() - m)
     return a, b, c, d
   end
@@ -717,13 +717,14 @@ local function withoutSecrets(...)
 end
 
 local function dispatch(list, event, ...)
-  local t, m = clock(), memKB()
-  depth = depth + 1
+  local t, m, before = clock(), memKB(), depth
   for i = 1, #list do
+    depth = before + 1   -- (again for each: a timed task that stopped with an error left it raised,
+                         -- which made the rest of this frame's work look like parts: Codex, November 18)
     local ok, err = pcall(list[i], ...)
     if not ok then geterrorhandler()(err) end
   end
-  depth = math.max(0, depth - 1)
+  depth = before
   note(event, clock() - t, nil, memKB() - m)
 end
 

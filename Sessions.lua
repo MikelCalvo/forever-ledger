@@ -164,16 +164,30 @@ local function nameMatches(sale, base)
 end
 local MAIL_SLACK = 300
 -- How many of this session's posts of id a sale whose mail came at arrived can be.
+-- Posts from before their times were kept (a session running across that update): what
+-- posted counts beyond the timed batches. They stay usable once a timed one is added
+-- (Codex verification, November 19: the first new post made the older ones vanish), and
+-- as the oldest they are used first.
+local function batchSum(batches)
+  local m = 0
+  for _, b in ipairs(batches or {}) do m = m + b[2] end
+  return m
+end
+local function untimed(s, id)
+  return math.max(0, ((s.posted or {})[id] or 0) - batchSum(s.postedAt and s.postedAt[id]))
+end
 local function postsBefore(s, id, arrived)
   local n = (s.posted or {})[id] or 0
   local batches = s.postedAt and s.postedAt[id]
-  if not (arrived and batches) then return n end   -- (no mail time, or posts from before this was kept)
-  local m = 0
+  if not (arrived and batches) then return n end   -- (no mail time, or no timed posts)
+  local m = untimed(s, id)
   for _, b in ipairs(batches) do if b[1] <= arrived + MAIL_SLACK then m = m + b[2] end end
   return math.min(n, m)
 end
 local function usePosts(s, id, qty)
+  local old = untimed(s, id)
   s.posted[id] = s.posted[id] - qty
+  qty = qty - math.min(qty, old)
   local batches = s.postedAt and s.postedAt[id]
   while batches and qty > 0 and batches[1] do   -- the oldest first
     local take = math.min(qty, batches[1][2])
@@ -480,17 +494,22 @@ end
 StaticPopupDialogs["FOREVER_LEDGER_SESSION_RESET"] = {
   text = "Reset the session?\n\nWhat it has counted so far (%s) is cleared and the clock starts again from zero. It isn't kept in your sessions.",
   button1 = "Reset", button2 = CANCEL or "Cancel",
-  OnAccept = function() ns:ResetGeneralSession(true) end,
+  -- The session it described, never a newer one started while it stayed open (Codex
+  -- verification, November 19: stop, start again, then Accept cleared the new one).
+  OnAccept = function(_, which) ns:ResetGeneralSession(true, which) end,
   timeout = 0, whileDead = true, hideOnEscape = true, showAlert = true,
 }
-function ns:ResetGeneralSession(sure)
+function ns:ResetGeneralSession(sure, which)
   local s = live()
   if not s or s.char ~= ns.CharKey() then ns:Print("No session is running here. /fl session start begins one."); return end
+  if which and which ~= s then ns:Print("That session has ended, so nothing was reset."); return end
   if not sure then
     local st = ns:SessionTotals(s)
-    StaticPopup_Show("FOREVER_LEDGER_SESSION_RESET", ns.LocalizeText("%s, gold %s, loot %s"):format(duration(st.secs), signed(st.gained), ns.Money(st.loot)))
+    local popup = StaticPopup_Show("FOREVER_LEDGER_SESSION_RESET", ns.LocalizeText("%s, gold %s, loot %s"):format(duration(st.secs), signed(st.gained), ns.Money(st.loot)))
+    if popup then popup.data = s end
     return
   end
+  if StaticPopup_Hide then StaticPopup_Hide("FOREVER_LEDGER_SESSION_RESET") end
   ns.db.liveSession = { t = time(), resume = time(), active = 0, char = s.char, money = {}, loot = {} }
   ns.sessionLastLoot = nil
   ns:Print("Session reset: counting again from now.")
@@ -530,6 +549,7 @@ function ns:StartGeneralSession()
     ns:Print(("Ended the session left running on %s (%s)."):format((c and c.name) or s.char,
       kept and "it's in your sessions" or "nothing happened in it, so it isn't kept"))
   end
+  if StaticPopup_Hide then StaticPopup_Hide("FOREVER_LEDGER_SESSION_RESET") end
   ns.db.liveSession = { t = time(), resume = time(), active = 0, char = ns.CharKey(), money = {}, loot = {} }
   ns:Print("Session started: gold in and out and what you loot are counted. /fl session stop (or Stop on the tracker) ends it.")
   showTracker()
@@ -543,6 +563,7 @@ function ns:StopGeneralSession(quiet)
   if not s then ns:Print("No session is running. /fl session start begins one."); return end
   local st = ns:SessionTotals(s)
   ns.db.liveSession = nil
+  if StaticPopup_Hide then StaticPopup_Hide("FOREVER_LEDGER_SESSION_RESET") end
   hideTracker()
   -- Started and stopped with nothing happening (a misclick, a test): not kept (owner's
   -- test, October 3: the Dashboard listed several "0 min, gold 0c" sessions).
