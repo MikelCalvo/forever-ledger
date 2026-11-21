@@ -1250,6 +1250,10 @@ end
 -- another) mid-check ends it, or its deals were judged and marked against the other's
 -- prices (Codex review of ab3fd99).
 local DEAL_BATCH = 400
+local DEAL_BUDGET_MS = 4
+local function dealClock()
+  return debugprofilestop and debugprofilestop() or GetTime() * 1000
+end
 local dealRun = 0
 -- A below-usual-price deal on an item's current saved price, or nil.
 local function usualNow(id, market, now)
@@ -1271,6 +1275,7 @@ function ns:CheckDeals()
     if run ~= dealRun or ns.MarketKey() ~= key then return end
     local market = ns.db.prices[key] or {}
     local flipAlerted = seen("flips")
+    local started = dealClock()
     freshJudged()
     local stop = math.min(i + DEAL_BATCH - 1, #ids)
     for k = i, stop do
@@ -1282,6 +1287,7 @@ function ns:CheckDeals()
         found[#found + 1] = id
       end
       if usualNow(id, market, now) then usual[#usual + 1] = id end
+      if k < stop and dealClock() - started >= DEAL_BUDGET_MS then stop = k; break end
     end
     i = stop + 1
     if i <= #ids then C_Timer.After(0, step); return end

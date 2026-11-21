@@ -302,3 +302,25 @@ T.test("Buy queue logs: routine replies and errors with nothing being bought are
   ns.db.settings.debug, ns.db.buyTrace, ns.db.buyErrors, Q.buyAt = false, nil, nil, nil
   T.runTimers()
 end)
+
+T.test("Deal check: costly items yield on elapsed budget before the count limit", function()
+  local m = market()
+  for id = 95000, 95999 do m[id] = { m = 100, a = 100, q = 1, t = time(), src = "scan" } end
+  local oldClock, real = debugprofilestop, ns.WatchedFind
+  local clock, looked = 0, 0
+  debugprofilestop = function() return clock end
+  ns.WatchedFind = function(self, id)
+    clock, looked = clock + 3, looked + 1
+    return real(self, id)
+  end
+  local ok, err = pcall(function()
+    ns:CheckDeals()
+    T.ok(looked > 0 and looked <= 2, "elapsed budget, not 400 costly items: " .. looked)
+    T.runTimers()
+    T.ok(looked >= 1000, "all remaining items processed in later parts")
+  end)
+  debugprofilestop, ns.WatchedFind = oldClock, real
+  for id = 95000, 95999 do m[id] = nil end
+  T.runTimers()
+  assert(ok, err)
+end)
