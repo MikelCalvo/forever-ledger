@@ -1413,6 +1413,20 @@ function ns:IsOwnChar(key)
   return inv ~= nil and not inv.via
 end
 
+-- A character's professions in short (name, skill, how many recipes): sync sends a partner's
+-- characters with a new time on nearly every message, and rebuilding the recipe index for
+-- each threw every value away (Frank's /fl perf, November 21).
+local function professionsInShort(c)
+  local parts = {}
+  for prof, p in pairs(type(c) == "table" and c.profs or {}) do
+    local n = 0
+    for _ in pairs(p.recipes or {}) do n = n + 1 end
+    parts[#parts + 1] = prof .. ":" .. tostring(p.rank) .. ":" .. n
+  end
+  table.sort(parts)
+  return (c.realm or "") .. "|" .. (c.faction or "") .. "|" .. table.concat(parts, ",")
+end
+
 -- Merge characters, prices and vendor prices from another account (Import and live
 -- sync). Newer data wins. via = the sync partner's name: what comes from them is marked
 -- with it (c.via, inv.via) so unpairing can remove it, and it never replaces a character
@@ -1420,6 +1434,7 @@ end
 -- bags changed.
 function ns:MergeData(data, via)
   local db, nChars, nPrices, nVendor, nBags = ns.db, 0, 0, 0, 0
+  local newRecipes = false
   ns.PlainRealmData(data)   -- (from someone still on a version that files by server)
   -- (and from one that saved under an empty realm name: November 21)
   -- (Each character to its own realm, learned from both sides' records.)
@@ -1429,6 +1444,7 @@ function ns:MergeData(data, via)
     if via and ns:IsOwnChar(key) then
       -- (yours: keep your own copy)
     elseif not mine or (c.updated or 0) > (mine.updated or 0) then
+      if not mine or professionsInShort(mine) ~= professionsInShort(c) then newRecipes = true end
       c.via = via or c.via
       db.chars[key] = c
       nChars = nChars + 1
@@ -1458,7 +1474,8 @@ function ns:MergeData(data, via)
   -- sent, so they can't be filled in. Recorded over the next frames (History.lua): a
   -- full scan's thousands in one go ran too long (Frank's BugSack, November 12).
   local nowDay = ns.LocalDay and ns.LocalDay(time())
-  local later = {}
+  local later, here, changedIds = {}, ns.MarketKey(), {}
+  if ns.SlicePart then ns.SlicePart("prices") end   -- (in /fl perf, when in slices)
   -- (MaybeYield: live sync takes a message in over several frames; the payload's own tables
   -- are walked, so prices saved meanwhile don't break the walk.)
   for market, items in pairs(data.prices or {}) do
@@ -1469,6 +1486,7 @@ function ns:MergeData(data, via)
       if not mine or (rec.t or 0) > (mine.t or 0) then
         db.prices[market][id] = rec
         nPrices = nPrices + 1
+        if market == here then changedIds[id] = true end
         if via and nowDay and rec.t and rec.m and not rec.none and ns.LocalDay(rec.t) == nowDay then
           later[#later + 1] = { id, rec.m, rec.a, rec.q, market, rec = rec, day = nowDay }
         end
@@ -1478,14 +1496,20 @@ function ns:MergeData(data, via)
   if ns.RecordPriceHistoryLater then ns:RecordPriceHistoryLater(later) end
   for id, rec in pairs(data.vendorBuy or {}) do
     local mine = db.vendorBuy[id]
-    if not mine or (rec.t or 0) > (mine.t or 0) then db.vendorBuy[id] = rec; nVendor = nVendor + 1 end
+    if not mine or (rec.t or 0) > (mine.t or 0) then db.vendorBuy[id] = rec; nVendor = nVendor + 1; changedIds[id] = true end
   end
   for id, v in pairs(data.vendorSell or {}) do
-    if db.vendorSell[id] == nil then db.vendorSell[id] = v; nVendor = nVendor + 1 end
+    if db.vendorSell[id] == nil then db.vendorSell[id] = v; nVendor = nVendor + 1; changedIds[id] = true end
   end
+  if ns.SlicePart then ns.SlicePart("sales and purchases") end
   local nBooks = via and data.books and ns:MergeBooks(data.books, via) or 0
-  if nChars > 0 and ns.BuildUsageIndex then ns:BuildUsageIndex() end
-  if (nPrices > 0 or nVendor > 0 or nBags > 0) and ns.InvalidateValues then ns:InvalidateValues() end
+  if ns.SlicePart then ns.SlicePart("characters") end
+  if newRecipes and ns.BuildUsageIndex then ns:BuildUsageIndex() end
+  -- Only the items that changed have their values worked out again (values don't read bags):
+  -- a partner's prices threw every value away within 30 seconds (Frank's /fl perf, November 21).
+  if ns.InvalidateItem then
+    for id in pairs(changedIds) do ns:InvalidateItem(id) end
+  elseif (nPrices > 0 or nVendor > 0) and ns.InvalidateValues then ns:InvalidateValues() end
   -- A partner's or an import's professions under a translated name (Codex review, November 19).
   if nChars > 0 and ns.NormalizeProfessions then ns.NormalizeProfessions(db) end
   return nChars, nPrices, nVendor, nBags, nBooks

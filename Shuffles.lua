@@ -240,6 +240,11 @@ function ns:FindShuffles()
   return vendor, ah, ns:FindVendorFlips()
 end
 
+-- Worked out once per recipe (the recipe tables are kept for good; weak keys let a replaced
+-- one go): route keys by materials table, Classic's materials by row.
+local routeKeys = setmetatable({}, { __mode = "k" })
+local classicMats = setmetatable({}, { __mode = "k" })
+
 -- Every profession's crafts that sell to a vendor for more than their materials cost,
 -- whoever knows them (owner, November 12: "show all possible crafts that could provide a
 -- profit crafting and selling to a vendor", to see whether the Sells to a vendor tab is
@@ -277,6 +282,10 @@ function ns:FindAllVendorCrafts()
   local function recipeKey(prof, rid) return prof .. ":" .. tostring(rid) end
   local function routeKey(prof, out, mats)
     if not out or not mats or #mats == 0 then return nil end
+    -- (Kept with the recipe's materials: the same keys every run made 70 MB of leftovers in
+    -- 100 seconds, Frank's /fl perf, November 21.)
+    local kept = routeKeys[mats]
+    if kept and kept.prof == prof and kept.out == out then return kept.key end
     local sums, ids = {}, {}
     for _, m in ipairs(mats) do
       if not sums[m[1]] then ids[#ids + 1] = m[1] end
@@ -285,7 +294,9 @@ function ns:FindAllVendorCrafts()
     table.sort(ids)
     local parts = {}
     for _, id in ipairs(ids) do parts[#parts + 1] = id .. ":" .. sums[id] end
-    return prof .. ":" .. out .. ":" .. table.concat(parts, ",")
+    local key = prof .. ":" .. out .. ":" .. table.concat(parts, ",")
+    routeKeys[mats] = { prof = prof, out = out, key = key }
+    return key
   end
   -- Items a profession makes in Forever (your profession windows, or the game's own data):
   -- Classic's recipe for one of these is out of date, as Forever's own recipe for it is
@@ -294,23 +305,31 @@ function ns:FindAllVendorCrafts()
   -- Silverleaf), and showed as a second, wrong "(Classic)" row.
   local foreverMakes = {}
   local function makesKey(prof, out) return out and (prof .. ":" .. out) or nil end
-  for prof, book in pairs(ns.db.recipeBook or {}) do
-    for rid, r in pairs(book) do
-      recipes[#recipes + 1] = { prof = prof, rid = rid, n = r.n, out = r.out, oq = r.oq or 1, r = r.r }
-      seenRecipe[recipeKey(prof, rid)] = true
-      local key = routeKey(prof, r.out, r.r)
-      if key then seenRoute[key] = true end
-      local made = makesKey(prof, r.out)
-      if made then foreverMakes[made] = true end
-    end
+  -- (The book's recipes listed first: a profession window opened between frames can add
+  -- recipes, and a table that grows while pairs() walks it breaks the walk.)
+  local book = {}
+  for prof, b in pairs(ns.db.recipeBook or {}) do
+    for rid, r in pairs(b) do book[#book + 1] = { prof, rid, r } end
+  end
+  for _, e in ipairs(book) do
+    if ns.MaybeYield then ns.MaybeYield() end
+    local prof, rid, r = e[1], e[2], e[3]
+    recipes[#recipes + 1] = { prof = prof, rid = rid, n = r.n, out = r.out, oq = r.oq or 1, r = r.r }
+    seenRecipe[recipeKey(prof, rid)] = true
+    local key = routeKey(prof, r.out, r.r)
+    if key then seenRoute[key] = true end
+    local made = makesKey(prof, r.out)
+    if made then foreverMakes[made] = true end
   end
   for _, c in ipairs(ns.FOREVER_CRAFTS or {}) do
+    if ns.MaybeYield then ns.MaybeYield() end
     local made = makesKey(c.prof, c.out)
     if made then foreverMakes[made] = true end
   end
   local capturedRoutes = {}
   for key in pairs(seenRoute) do capturedRoutes[key] = true end
   for _, c in ipairs(ns.FOREVER_CRAFTS or {}) do
+    if ns.MaybeYield then ns.MaybeYield() end
     local key = routeKey(c.prof, c.out, c.r)
     if not seenRecipe[recipeKey(c.prof, c.id)] and not (key and capturedRoutes[key]) then
       recipes[#recipes + 1] = { prof = c.prof, rid = c.id, n = c.n, out = c.out,
@@ -325,8 +344,12 @@ function ns:FindAllVendorCrafts()
   local seenClassic = {}
   for _, c in ipairs(ns.CLASSIC_CRAFT_LIST or {}) do
     if ns.MaybeYield then ns.MaybeYield() end
-    local mats = {}
-    for id, q in c[7]:gmatch("(%d+):(%d+)") do mats[#mats + 1] = { tonumber(id), tonumber(q) } end
+    local mats = classicMats[c]
+    if not mats then
+      mats = {}
+      for id, q in c[7]:gmatch("(%d+):(%d+)") do mats[#mats + 1] = { tonumber(id), tonumber(q) } end
+      classicMats[c] = mats
+    end
     local key = routeKey(c[1], c[3], mats)
     local classicKey = key and (key .. ":" .. c[4] .. ":" .. c[5])
     if key and not seenRoute[key] and not seenClassic[classicKey] and not foreverMakes[makesKey(c[1], c[3])] then

@@ -401,6 +401,7 @@ local function earlyJudge(id, it, now)
   end
   if not ns:AddCheapest(id, it.min, it.q) then return end
   if S.changedIds then S.changedIds[id] = true end
+  if ns.InvalidateItem then ns:InvalidateItem(id) end
   local saved = (ns.db.prices[ns.MarketKey()] or {})[id]
   S.early[id] = { rec = saved, price = it.min, limit = limit, gear = gear, watched = it.watched }
   if not gear and saved then provisional[id] = { rec = saved, l = saved.l, t = saved.t } end
@@ -452,7 +453,8 @@ local function early(rows)
   end
   if S.earlyCount > before then
     S.newFlips = true   -- (the Buy queue goes first: step, below)
-    if ns.InvalidateValues then ns:InvalidateValues() end
+    -- (Each new cheapest went out of date as it came: ns:InvalidateItem above.)
+    if not ns.InvalidateItem and ns.InvalidateValues then ns:InvalidateValues() end
   end
 end
 

@@ -219,3 +219,28 @@ T.test("Bags and bank merge by their own times", function()
   T.eq(inv.bank[2589], 50, "older bank not taken over the newer one")
   T.eq(inv.bankT, 200)
 end)
+
+-- Frank's /fl perf, November 21: a partner's characters come with a new time on nearly every
+-- message, and each rebuilt the recipe list and threw every value away.
+T.test("A partner's character with the same professions doesn't rebuild the recipe list", function()
+  local real, built = ns.BuildUsageIndex, 0
+  ns.BuildUsageIndex = function() built = built + 1 end
+  local ok, err = pcall(function()
+    local function crafter(updated, recipes)
+      local c = char("Crafty Bastiane", updated)
+      c.profs = { Tailoring = { rank = 100, recipes = recipes } }
+      return c
+    end
+    local key = "Crafty Bastiane-Testrealm"
+    ns:MergeData({ chars = { [key] = crafter(300, { [1] = { n = "A" } }) } }, "Crafty Bastiane")
+    T.eq(built, 1, "a new character")
+    ns:MergeData({ chars = { [key] = crafter(400, { [1] = { n = "A" } }) } }, "Crafty Bastiane")
+    T.eq(built, 1, "only its time changed")
+    T.eq(ns.db.chars[key].updated, 400, "the newer record is still kept")
+    ns:MergeData({ chars = { [key] = crafter(500, { [1] = { n = "A" }, [2] = { n = "B" } }) } }, "Crafty Bastiane")
+    T.eq(built, 2, "a recipe learned")
+  end)
+  ns.BuildUsageIndex = real
+  ns.db.chars["Crafty Bastiane-Testrealm"] = nil
+  if not ok then error(err, 0) end
+end)

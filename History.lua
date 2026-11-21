@@ -825,8 +825,9 @@ recordPending = ns.Timed("Sync: price history", function(mine)
   end
   if pendingAt < #pendingHistory then C_Timer.After(0, function() recordPending(mine) end); return end
   pendingHistory, pendingAt = {}, 0
-  -- (usual prices and deals read today's history)
-  if ns.InvalidateValues then ns:InvalidateValues() end
+  -- (Values leave today's history out, and MergeData already marked these prices changed:
+  -- throwing every value away here remade all of them after each partner's message, Frank's
+  -- /fl perf, November 21.)
 end)
 
 -- list: { { id, cheapest, typical, listed, market, rec = price record, day = local day }, ... }

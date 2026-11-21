@@ -110,7 +110,7 @@ function ns:RememberItem(id)
   local name, _, _, _, _, _, _, _, _, _, sell = getItemInfo(id)
   if name then
     ns.db.vendorSell[id] = sell or 0
-    if ns.InvalidateValues then ns:InvalidateValues() end
+    if ns.InvalidateItem then ns:InvalidateItem(id) end
   elseif not waiting[id] then
     waiting[id] = true
     if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
@@ -227,7 +227,7 @@ function ns:GetSellPrice(id)
       ns:Debug("Vendor price changed:", ns.ItemName(id) or id, ns.Money(saved), "->", ns.Money(live))
       -- Price history from before today no longer applies (History.lua historyStart).
       if ns.LocalDay then ns.db.vendorSellChanged[id] = ns.LocalDay() end
-      if ns.InvalidateValues then ns:InvalidateValues() end
+      if ns.InvalidateItem then ns:InvalidateItem(id) end
     end
     return live
   end
@@ -642,7 +642,7 @@ end
 -- price changed from a live look since then keeps it; the scan adds only its versions
 -- and price history.
 local function record(id, units, src, liveSince)
-  if ns.InvalidateValues then ns:InvalidateValues() end
+  if ns.InvalidateItem then ns:InvalidateItem(id) end
   local key = ns.MarketKey()
   ns.db.prices[key] = ns.db.prices[key] or {}
   local keep = src == "full" and liveSince and liveAt[id] and liveAt[id] >= liveSince

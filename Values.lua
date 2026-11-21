@@ -278,9 +278,23 @@ function ns:BestEnchanter()
   return name, best
 end
 
+-- Which items' values used each item (a material's price, a craft's output, a disenchant's
+-- result, an essence's other size), noted while values are worked out: when one item
+-- changes, only it and the items whose values lead to it are worked out again.
+local usedBy, changed, anyChanged = {}, {}, false
+local building   -- the item whose options are being worked out
+local function uses(id)
+  if building and id ~= building then
+    local u = usedBy[id]
+    if not u then u = {}; usedBy[id] = u end
+    u[building] = true
+  end
+end
+
 -- What a material costs to buy: the vendor price when a vendor sells it, otherwise
 -- the auction house price.
 local function buyCost(id)
+  uses(id)
   -- The cheaper of a vendor and the auction house (see buyInfo in Shuffles.lua).
   local vendor, ah = ns:GetVendorBuyPrice(id), (ns:GetPrice(id))
   if vendor and ah then return math.min(vendor, ah) end
@@ -311,20 +325,44 @@ local listCache = {}    -- itemID = full options list at depth 0 (tooltips, find
 local thrownAway = 0
 function ns.ValuesStamp() return thrownAway end
 function ns:InvalidateValues(now)
-  if now then cache, listCache, cacheTime, dirty = {}, {}, GetTime(), false; thrownAway = thrownAway + 1 else dirty = true end
+  if now then
+    cache, listCache, cacheTime, dirty = {}, {}, GetTime(), false; thrownAway = thrownAway + 1
+    usedBy, changed, anyChanged = {}, {}, false
+  else dirty = true end
 end
--- One item's price changed (a search shown on the auction house): only its own values go
--- now, and chains that use it as a material follow with the next rebuild, as for other
--- small changes (Frank's /fl perf, November 21: throwing every value away a second after
--- each search remade all of them, 187 MB of leftovers for one Gold making list).
-function ns:InvalidateItem(id)
-  if not id then return end
+local function dropItem(id)
   listCache[id] = nil
   for d = 0, MAX_STEPS + 1 do
     cache[id .. ":" .. d] = nil
     cache["all:" .. id .. ":" .. d] = nil
   end
-  dirty = true
+end
+-- One item changed (a search shown on the auction house, a Live watch reading, a partner's
+-- price, the item's details arriving): its own values go now, and the values that lead to
+-- it go at the next look outside a sliced run (Frank's /fl perf, November 21: each such
+-- change threw every value away within 30 seconds, and Gold making remade all of them,
+-- 230 MB of leftovers in 100 seconds).
+function ns:InvalidateItem(id)
+  if not id then return end
+  dropItem(id)
+  changed[id], anyChanged = true, true
+end
+-- Everything that leads to the changed items goes too.
+local function dropUsers()
+  local todo, n = {}, 0
+  for id in pairs(changed) do n = n + 1; todo[n] = id end
+  changed, anyChanged = {}, false
+  local seen = {}
+  while n > 0 do
+    local id = todo[n]; todo[n] = nil; n = n - 1
+    local u = usedBy[id]
+    if u then
+      usedBy[id] = nil
+      for user in pairs(u) do
+        if not seen[user] then seen[user] = true; dropItem(user); n = n + 1; todo[n] = user end
+      end
+    end
+  end
 end
 
 local best
@@ -358,6 +396,7 @@ function ns.AHledgerUses() return ns.ahledgerUses or 0 end
 -- otherwise which items looked profitable depended on the order they were worked out,
 -- and disenchant shuffles came and went on every refresh (owner's log, September 30).
 local function follow(nextID, depth, from)
+  uses(nextID)
   local o = best(nextID, depth + 1)
   if not o then return end
   if not passesThrough(o, from) then return o end
@@ -379,6 +418,7 @@ end
 -- screenshot, November 6: Greater Magic Essence). from: the item this came from, so
 -- splitting doesn't combine straight back.
 local function sellable(id, depth, from)
+  uses(id)
   local key = "all:" .. id .. ":" .. (depth + 1)
   local list = cache[key]
   if not list then list = options(id, depth + 1); cache[key] = list end
@@ -477,8 +517,10 @@ end
 do
   local raw = options
   options = function(id, depth)
-    local before = ns.ahledgerUses or 0
+    local before, outer = ns.ahledgerUses or 0, building
+    building = id
     local list = raw(id, depth)
+    building = outer
     if (ns.ahledgerUses or 0) ~= before then
       list.ahl = true
       for _, o in ipairs(list) do o.ahl = true end
@@ -509,7 +551,10 @@ local function freshCache()
   if ns.InSlices and ns.InSlices() then return end
   if (dirty and age > 30) or age > 300 then
     cache, listCache, cacheTime, dirty = {}, {}, GetTime(), false
+    usedBy, changed, anyChanged = {}, {}, false
     if ns.PerfNote then ns.PerfNote("Values thrown away (count only)", 0) end
+  elseif anyChanged then
+    dropUsers()
   end
 end
 

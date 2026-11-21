@@ -356,3 +356,27 @@ T.test("One item's new price: its own value now, the rest kept until the next re
   ns:InvalidateValues(true)
   T.ok(ns:GetValue(60032) > b, "and follows after it")
 end)
+
+-- Frank's /fl perf, November 21: each changed item threw every value away within 30 seconds.
+T.test("One item's new price: values that lead to it follow, the others stay", function()
+  me(recipes({ { "Test Robe", 60071, { { 60070, 2 } } } }))
+  price(60070, 100)
+  price(60071, 5000)
+  price(60072, 2000)
+  ns.db.vendorSell[60070], ns.db.vendorSell[60071], ns.db.vendorSell[60072] = 1, 1, 1
+  local cloth, other = ns:GetValue(60070), ns:GetValue(60072)
+  local _, opts = ns:GetValue(60070)
+  T.eq(opts[1].kind, "craft", "the cloth is worth most as the robe")
+  price(60071, 9000)
+  price(60072, 4000)
+  ns:InvalidateItem(60071)
+  T.ok(ns:GetValue(60070) > cloth, "the material's value follows the robe's new price")
+  T.eq(ns:GetValue(60072), other, "an unrelated item's value stays")
+  -- Once more: what leads to the robe is noted again as values are worked out again.
+  price(60071, 9000)
+  local before = ns:GetValue(60070)
+  price(60071, 20000)
+  ns:InvalidateItem(60071)
+  T.ok(ns:GetValue(60070) > before, "again, after values were worked out once more")
+  ns:InvalidateValues(true)
+end)
