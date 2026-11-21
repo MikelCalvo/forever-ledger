@@ -635,27 +635,54 @@ local function heldWord(price)
   return by == "gold" and "can't afford" or "over limit"   -- short: the Profit column
 end
 
--- Flips best first by the profit you can make with what you can spend right now, so
--- buying always goes down the list from the best you can afford (Magic, October 3:
--- after four buys, one said 8c and the next 10c but stayed below it). Re-sorted each
--- time the queue picks its next item.
+-- ROI is profit divided by purchase cost. Use the affordable part of the
+-- scanned price ladder, so a cheap first unit is not averaged with unaffordable ones.
+local function flipSortMode()
+  local mode = S().flipSort
+  if mode == "roi" or mode == "listedProfit" then return mode end
+  return "profit"
+end
+local buyNow
+local function flipReturn(e, qty, cost)
+  local profit = qty * (e.worth or 0) - cost
+  return profit, cost > 0 and profit / cost or nil
+end
+local function flipMetrics(e, cash)
+  local qty, cost = buyNow(e, cash)
+  local profit, roi = flipReturn(e, qty, cost)
+  return qty, cost, profit, roi
+end
 sortFlips = function()
   local list = Q.lanes and Q.lanes.flips
-  if not list or #list < 2 then return end
-  local cash = spendable()
+  if not list or #list == 0 then return end
+  local cash, mode = spendable(), flipSortMode()
   for _, e in ipairs(list) do
-    local cost = math.max(e.cost or e.limit or 1, 1)
-    e.sortValue = ((e.worth or 0) - cost) * math.min(e.n or 1, math.floor(cash / cost))
+    e.affordN, e.affordCost, e.affordProfit, e.roi = flipMetrics(e, cash)
+    if mode == "profit" then
+      -- Keep the upstream average-cost order until the player selects a column.
+      local cost = math.max(e.cost or e.limit or 1, 1)
+      e.sortValue = ((e.worth or 0) - cost) * math.min(e.n or 1, math.floor(cash / cost))
+    else
+      e.sortValue = e.affordProfit
+    end
   end
   -- Watched items at your price first: you asked for them (owner, November 10).
   table.sort(list, function(a, b)
     local wa, wb = a.reason == "watch", b.reason == "watch"
     if wa ~= wb then return wa end
+    local aReady, bReady = a.affordN > 0 and a.affordProfit > 0, b.affordN > 0 and b.affordProfit > 0
+    if mode ~= "profit" and aReady ~= bReady then return aReady end
+    if mode == "roi" and (a.roi or -1) ~= (b.roi or -1) then return (a.roi or -1) > (b.roi or -1) end
     if a.sortValue ~= b.sortValue then return a.sortValue > b.sortValue end
-    return (a.profit or 0) > (b.profit or 0)
+    if mode ~= "roi" and (a.roi or -1) ~= (b.roi or -1) then return (a.roi or -1) > (b.roi or -1) end
+    if mode == "profit" and (a.profit or 0) ~= (b.profit or 0) then return (a.profit or 0) > (b.profit or 0) end
+    return a.id < b.id
   end)
 end
-Q.sortFlips = sortFlips   -- (for the tests)
+Q.sortFlips, Q.flipMetrics = sortFlips, flipMetrics   -- (for the tests)
+local function percentText(value)
+  return value and ("%.0f%%"):format(value * 100) or "—"
+end
 
 local function cantAfford(e)
   local cash = spendable()
@@ -681,14 +708,16 @@ Q.oneAtATime = oneAtATime   -- (for the tests)
 -- though a click buys the one at 10c).
 -- Also returns how many were listed at or under the limit, and for one-a-click rows
 -- "one" plus whether the price is an estimate.
-local function buyNow(e)
+buyNow = function(e, cash)
   if e.waiting then return 0, 0, 0 end
-  local cash = spendable()
+  cash = cash or spendable()
   local want
   if e.reason == "list" then
     want = e.want or math.huge
     if Q.listLeft and ns.ListStillWanted then want = math.min(want, Q.listLeft(e.id)) end
     want = math.max(want, 0)
+  elseif e.lane == "flips" then
+    want = math.max(e.n or 1, 0)
   end
   local limit = e.limit or math.huge
   local n, cost, listed = 0, 0, 0
@@ -703,9 +732,10 @@ local function buyNow(e)
         or (limit < math.huge and limit) or nil
     end
     listed = e.n or 1
-    if each and each > 0 and each <= cash and (not want or want > 0) then n, cost = 1, each end
+    if each and each > 0 and each <= limit and each <= cash and (not want or want > 0) then n, cost = 1, each end
     return n, cost, listed, "one", estimate
   end
+  if rec and rec.none then return 0, 0, 0 end
   local function take(p, k)
     listed = listed + k
     if want then k = math.min(k, want - n) end
@@ -716,10 +746,9 @@ local function buyNow(e)
   if not (rec and rec.l) then
     -- No ladder: the count the row came with, at its price each.
     local each = e.cost or (limit < math.huge and limit) or (rec and rec.m)
-    if each and each > 0 then take(each, e.n or 1) end
+    if each and each > 0 and each <= limit then take(each, e.n or 1) end
     return n, cost, listed
   end
-  if rec.none then return 0, 0, 0 end
   local prev, short = 0, false
   for p, c in rec.l:gmatch("(%d+):(%d+)") do
     p, c = tonumber(p), tonumber(c)
@@ -1778,6 +1807,7 @@ end
 -- Buy and Total (Frank, November 15): how many the queue would buy now and what they'd
 -- cost, instead of Cheap (how many were listed under your price).
 local COL = { profit = -4, total = -82, cheap = -168, limit = -200, why = -346, whyW = 66 }
+local FLIP_COL = { profit = -60, total = -138, cheap = -224, limit = -256, why = -402, whyW = 66, roi = -4 }
 local WHY = { flip = "FLIP", watch = "WATCH" }
 
 -- The star's look: the auction house's own favorite star where the game has it.
@@ -1793,6 +1823,7 @@ end
 ns.SetWatchStar = setStar   -- (ScanOnce.lua's rows too)
 
 local function laneRow(L, i)
+  local col = L.def.key == "flips" and FLIP_COL or COL
   local r = L.rows[i]
   if r then return r end
   r = CreateFrame("Button", nil, L.content)
@@ -1840,13 +1871,18 @@ local function laneRow(L, i)
   -- name gets the room that's left and is the one shortened (owner, November 15: "if any
   -- of these sections is cutoff it should be the WHY section", then the name).
   r.limit, r.n, r.profit, r.total = T:Text(r, 11), T:Text(r, 11), T:Text(r, 11), T:Text(r, 11)
-  r.profit:SetPoint("RIGHT", r, "RIGHT", COL.profit, 0)
-  r.total:SetPoint("RIGHT", r, "RIGHT", COL.total, 0)
-  r.n:SetPoint("RIGHT", r, "RIGHT", COL.cheap, 0)
-  r.limit:SetPoint("RIGHT", r, "RIGHT", COL.limit, 0)
+  r.profit:SetPoint("RIGHT", r, "RIGHT", col.profit, 0)
+  r.total:SetPoint("RIGHT", r, "RIGHT", col.total, 0)
+  r.n:SetPoint("RIGHT", r, "RIGHT", col.cheap, 0)
+  r.limit:SetPoint("RIGHT", r, "RIGHT", col.limit, 0)
+  if L.def.key == "flips" then
+    r.roi = T:Text(r, 10)
+    r.roi:SetPoint("RIGHT", r, "RIGHT", col.roi, 0)
+    r.roi:SetWidth(48); r.roi:SetJustifyH("RIGHT"); r.roi:SetWordWrap(false)
+  end
   r.why = T:Text(r, 10, T.dim)
-  r.why:SetPoint("LEFT", r, "RIGHT", COL.why, 0)
-  r.why:SetWidth(COL.whyW)
+  r.why:SetPoint("LEFT", r, "RIGHT", col.why, 0)
+  r.why:SetWidth(col.whyW)
   r.why:SetJustifyH("LEFT")
   r.why:SetWordWrap(false)
   r.name = T:Text(r, 11)
@@ -2026,15 +2062,31 @@ local function buildLane(v, d)
   header:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", 4, -2)
   header:SetPoint("TOPRIGHT", strip, "BOTTOMRIGHT", -4, -2)
   header:SetHeight(14)
-  -- The same places as the rows' columns (COL), from the right; rows end 10 short of it.
-  for _, c in ipairs({ { "Item", 34, "LEFT" }, { d.key == "lists" and "List" or "Why", COL.why - 10, "WHY" },
-                       { "Up to", COL.limit - 10 }, { "Buy", COL.cheap - 10 }, { "Total", COL.total - 10 },
-                       { d.key == "lists" and "Now" or "Profit", COL.profit - 10 } }) do
-    local fs = T:Text(header, 10, T.dim)
-    if c[3] == "LEFT" then fs:SetPoint("LEFT", c[2], 0)
-    elseif c[3] == "WHY" then fs:SetPoint("LEFT", header, "RIGHT", c[2], 0)
-    else fs:SetPoint("RIGHT", header, "RIGHT", c[2], 0) end
-    fs:SetText(c[1])
+  -- Match the rows' right-anchored columns, including the percentage column.
+  local col = d.key == "flips" and FLIP_COL or COL
+  local columns = { { "Item", 34, "LEFT" }, { d.key == "lists" and "List" or "Why", col.why - 10, "WHY" },
+    { "Up to", col.limit - 10 }, { "Buy", col.cheap - 10 }, { "Total", col.total - 10 },
+    { d.key == "lists" and "Now" or "Profit", col.profit - 10, nil, d.key == "flips" and "listedProfit" or nil } }
+  if d.key == "flips" then columns[#columns + 1] = { "Profit %", col.roi - 10, nil, "roi" } end
+  L.sortHeaders = {}
+  for _, c in ipairs(columns) do
+    if c[4] then
+      local mode = c[4]
+      local button = T:Button(header, c[1], mode == "listedProfit" and 80 or 48, function()
+        if flipSortMode() == mode then return end
+        S().flipSort = mode
+        sortFlips()
+        refreshQueue()
+      end, 14)
+      button:SetPoint("RIGHT", header, "RIGHT", c[2], 0)
+      L.sortHeaders[#L.sortHeaders + 1] = { button = button, mode = mode, label = c[1] }
+    else
+      local fs = T:Text(header, 10, T.dim)
+      if c[3] == "LEFT" then fs:SetPoint("LEFT", c[2], 0)
+      elseif c[3] == "WHY" then fs:SetPoint("LEFT", header, "RIGHT", c[2], 0)
+      else fs:SetPoint("RIGHT", header, "RIGHT", c[2], 0) end
+      fs:SetText(c[1])
+    end
   end
   L.sf, L.content = T:Scroll(L)
   local scrollList = L.sf:GetScript("OnMouseWheel")
@@ -2285,6 +2337,10 @@ end
 
 local function fillLane(L)
   local d, armed = L.def, Q.armed == L.def.key
+  for _, head in ipairs(L.sortHeaders or {}) do
+    local mode = flipSortMode()
+    head.button:SetSelected(mode == head.mode or (mode == "profit" and head.mode == "listedProfit"))
+  end
   -- Shown in order, but what you can't afford yet goes to the bottom (Magic, October 3).
   local list = {}
   for _, e in ipairs(Q.lanes[d.key] or {}) do if not cantAfford(e) then list[#list + 1] = e end end
@@ -2366,20 +2422,13 @@ local function fillLane(L)
       local rec = (ns.db.prices[ns.MarketKey()] or {})[e.id]
       local now = rec and rec.m and not rec.none and ns.MoneyPlain(rec.m) or "none"
       r.profit:SetText(e.waiting and ("|cff888888" .. now .. "|r") or now)
+    elseif d.key == "flips" then
+      local profit, roi = flipReturn(e, buyN, buyCost)
+      r.profit:SetText(profit > 0 and ("|cff7fd39c" .. money(profit) .. "|r")
+        or e.reason == "watch" and "|cffb9a3ffwatched|r" or "")
+      r.roi:SetText(percentText(roi))
     else
-      -- Profit on what you'd buy now (Buy and Total), not the whole lot (Magic, October 3:
-      -- "said 48c profit, I only made 21c" with 1s 27c to spend). It follows your gold.
-      local afford = buyN
-      e.affordN = afford
-      -- Just what you can make with your gold and limit; the full amount is in the hover
-      -- (Magic, October 3: "of 48c" isn't needed at a glance).
-      if e.profit and e.profit > 0 and afford < (e.n or 1) and afford > 0 then
-        r.profit:SetText(("|cff7fd39c%s|r"):format(money((e.worth or 0) * afford - buyCost)))
-      elseif e.reason == "watch" and not (e.profit and e.profit > 0) then
-        r.profit:SetText("|cffb9a3ffwatched|r")   -- bought at your price, not to vendor
-      else
-        r.profit:SetText(e.profit and e.profit > 0 and ("|cff7fd39c" .. money(e.profit) .. "|r") or "")
-      end
+      r.profit:SetText(e.profit and e.profit > 0 and ("|cff7fd39c" .. money(e.profit) .. "|r") or "")
     end
     if poor then r.profit:SetText("|cffee8597" .. heldWord(poor) .. "|r")
     elseif e.stale then r.profit:SetText(ns.LocalizeText("|cff888888seen %dm ago|r"):format(math.floor(e.age / 60))) end

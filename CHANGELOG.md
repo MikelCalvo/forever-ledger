@@ -30,6 +30,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - ✓ **Always undercut** works on Blizzard's Sell tab too.
 
 ### Added
+- Vendor flips: click Profit % for return-on-cost sorting, or Profit to sort by the profit shown. Until you choose a column, the original profit estimate sets the order. Whole percentages are shown, watched items keep priority, and ordinary refreshes keep rows in place. Equal profits use the higher return on cost, and equal returns use the higher affordable profit.
 - **Translations**: the addon can show its text in other languages. Simplified Chinese is the first (thanks to yippp), with its own font; English stays the fallback for anything not translated yet. `/fl api`, `/fl perf` and debug lines stay English.
 
 ### Changed
