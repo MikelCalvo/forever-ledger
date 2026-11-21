@@ -540,7 +540,8 @@ local function blankRealmRenamer(db, realm, extra)
   local function note(t, key, r)
     if t[key] == nil then t[key] = r elseif t[key] ~= r then t[key] = false end
   end
-  for _, source in ipairs({ db, extra }) do
+  for i = 1, 2 do
+    local source = i == 1 and db or extra
     for key, c in pairs(source and source.chars or {}) do
       local name, r
       if type(key) == "string" then name, r = key:match("^(.+)%-([^%-]+)$") end
@@ -553,7 +554,9 @@ local function blankRealmRenamer(db, realm, extra)
     end
   end
   for name, r in pairs(seen) do if r then home[name] = r end end
-  for _, source in ipairs({ extra, db }) do
+  -- (Not ipairs over { extra, db }: with no extra the list would look empty.)
+  for i = 1, 2 do
+    local source = i == 1 and extra or db
     for name, r in pairs(source and source.charRealm or {}) do if good(r) then home[name] = r end end
   end
   if good(realm) then
