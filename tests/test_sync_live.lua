@@ -108,7 +108,7 @@ T.test("A big message is taken in over several frames, and the next one waits it
   for id = 1, 300 do prices[71000 + id] = { m = 5, q = 1, t = S.now, src = "scan" } end
   local realClock, ms = debugprofilestop, 0
   local ok, err = pcall(function()
-    debugprofilestop = function() ms = ms + 3; return ms end   -- (each look: 3 ms later)
+    debugprofilestop = function() ms = ms + 1; return ms end   -- (each look: 1 ms later; /fl perf's part names look too)
     deliver({ k = "d", prices = { [key] = prices } })
     deliver({ k = "d", prices = { [key] = { [71999] = { m = 7, q = 1, t = S.now, src = "scan" } } } })
     local got = 0
