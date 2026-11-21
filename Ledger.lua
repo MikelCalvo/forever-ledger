@@ -189,6 +189,7 @@ local function records(tab, from, charOK, match, opts)
     local sales, buys = {}, {}
     local byName = nameIndex()
     for _, e in ipairs(ns.db.sales) do
+      ns.MaybeYield()
       if keep(e) then
         local id = e.n and byName[e.n:lower()]
         sales[#sales + 1] = { t = e.t, id = id, item = e.n or "?", iconKey = id or e.n, qty = e.q, total = e.a,
@@ -196,6 +197,7 @@ local function records(tab, from, charOK, match, opts)
       end
     end
     for _, e in ipairs(ns.db.purchases) do
+      ns.MaybeYield()
       if keep(e) then
         -- No quantity means a non-commodity purchase, which is always one item.
         buys[#buys + 1] = { t = e.t, id = e.id, item = nameOf(e.id), iconKey = e.id, qty = e.q or 1, total = e.a,
@@ -203,6 +205,7 @@ local function records(tab, from, charOK, match, opts)
       end
     end
     for _, e in ipairs(ns.db.vendorLog) do
+      ns.MaybeYield()
       if keep(e) and e.id then
         local sold = e.s == "sell"
         local r = { t = e.t, id = e.id, item = nameOf(e.id), iconKey = e.id, qty = e.q, total = e.a, where = "Vendor",
@@ -212,6 +215,7 @@ local function records(tab, from, charOK, match, opts)
     end
     -- Older than 30 days: one line per item and month (History.lua foldLedger).
     for _, m in ipairs(ns.db.ledgerMonths or {}) do
+      ns.MaybeYield()
       if keep(m) then
         local auction = m.k == "sale" or m.k == "buy"
         local sold = m.k == "sale" or m.k == "vsell"
@@ -312,6 +316,7 @@ local function records(tab, from, charOK, match, opts)
     end
     local loggedOnStart = {}   -- [charKey][source] = copper logged on its first, partial day
     for _, e in ipairs(ns.db.otherLog or {}) do
+      ns.MaybeYield()
       if partial[e.c] and ns.LocalDay(e.t) == partial[e.c] then
         local t = loggedOnStart[e.c] or {}
         loggedOnStart[e.c] = t
@@ -346,6 +351,7 @@ local function records(tab, from, charOK, match, opts)
       end
     end
     for _, e in ipairs(ns.db.otherLog or {}) do
+      ns.MaybeYield()
       local cover = coverFrom[e.c]
       if OTHER[e.s] and (e.t or 0) >= from and charOK(e.c) and cover and ns.LocalDay(e.t) >= cover then
         local signed = OTHER_IN[e.s] and e.a or -e.a
@@ -856,43 +862,54 @@ function ns:RefreshLedger()
   end
   stamp = table.concat(stamp, "\1")
   local cached = f.cache and f.cache.stamp == stamp and f.cache
-  local list
-  if cached then
-    list = cached.list
-    if itemTab then
-      f.group:SetOptions(cached.gopts)
-      f.group:SetValue(s.group)
-      f.rarity:SetOptions(cached.ropts)
-      f.rarity:SetValue(s.rarity)
+  if not cached and f.building ~= stamp then
+    -- Built a few milliseconds a frame (Frank's /fl perf, November 21: 236 ms in one go);
+    -- the last list of this sub-tab stays on screen meanwhile. A filter changed during a
+    -- build drops that build.
+    ns.StopSlices(f.buildRun)
+    f.building = stamp
+    local tab, group, rarity, inside = s.tab, s.group, s.rarity, true
+    f.buildRun = ns.RunInSlices("Ledger list", function()
+      if not itemTab then return { stamp = stamp, tab = tab, list = records(tab, from, charOK, match) } end
+      local g, r = group, rarity
+      local function itemOK(id)
+        -- Rarity first: it is quick, and an item it rules out needs no group look-up.
+        return (r == "all" or qualityOf(id) == tonumber(r)) and (g == "all" or groupSet(id)[g] ~= nil)
+      end
+      local function run()
+        local seen = {}
+        local filtered = g ~= "all" or r ~= "all"
+        return records(tab, from, charOK, match, { seen = seen, itemOK = filtered and itemOK or nil }), seen
+      end
+      local list, seen = run()
+      local gopts, ropts, hasG, hasR = itemChoices(seen)
+      -- A choice none of these items has any more (another range or character): Any.
+      if not hasG[g] or not hasR[r] then
+        if not hasG[g] then g = "all" end
+        if not hasR[r] then r = "all" end
+        list = run()
+      end
+      return { stamp = stamp, tab = tab, list = list, gopts = gopts, ropts = ropts, group = g, rarity = r }
+    end, function(result)
+      if f.building ~= stamp then return end
+      f.building, f.cache = nil, result
+      if result.group then s.group, s.rarity = result.group, result.rarity end
+      if not inside then ns:RefreshLedger() end
+    end)
+    inside = false
+    cached = f.cache and f.cache.stamp == stamp and f.cache   -- (done within the first slice)
+  end
+  -- Building: the last list of this sub-tab meanwhile, or nothing yet.
+  local shownFrom = cached or (f.cache and f.cache.tab == s.tab and f.cache) or nil
+  local list = shownFrom and shownFrom.list or {}
+  f.loading = not cached
+  if itemTab then
+    if shownFrom and shownFrom.gopts then
+      f.group:SetOptions(shownFrom.gopts)
+      f.rarity:SetOptions(shownFrom.ropts)
     end
-  elseif itemTab then
-    local function itemOK(id)
-      -- Rarity first: it is quick, and an item it rules out needs no group look-up.
-      return (s.rarity == "all" or qualityOf(id) == tonumber(s.rarity))
-        and (s.group == "all" or groupSet(id)[s.group] ~= nil)
-    end
-    local function run()
-      local seen = {}
-      local filtered = s.group ~= "all" or s.rarity ~= "all"
-      return records(s.tab, from, charOK, match, { seen = seen, itemOK = filtered and itemOK or nil }), seen
-    end
-    local seen
-    list, seen = run()
-    local gopts, ropts, hasG, hasR = itemChoices(seen)
-    -- A choice none of these items has any more (another range or character): Any.
-    if not hasG[s.group] or not hasR[s.rarity] then
-      if not hasG[s.group] then s.group = "all" end
-      if not hasR[s.rarity] then s.rarity = "all" end
-      list = run()
-    end
-    f.group:SetOptions(gopts)
     f.group:SetValue(s.group)
-    f.rarity:SetOptions(ropts)
     f.rarity:SetValue(s.rarity)
-    f.cache = { stamp = stamp, list = list, gopts = gopts, ropts = ropts }
-  else
-    list = records(s.tab, from, charOK, match)
-    f.cache = { stamp = stamp, list = list }
   end
   f.list = list
 
@@ -968,7 +985,7 @@ function ns:RefreshLedger()
   end
   for i = n + 1, #rows do rows[i]:Hide() end
   local narrowed = itemTab and (s.group ~= "all" or s.rarity ~= "all")
-  f.empty:SetText((EMPTY[s.tab] or EMPTY.all) .. (narrowed and "\n\nThe Group or Rarity choice is hiding some: choose Any group and Any rarity to see them." or ""))
+  f.empty:SetText(f.loading and "Loading..." or (EMPTY[s.tab] or EMPTY.all) .. (narrowed and "\n\nThe Group or Rarity choice is hiding some: choose Any group and Any rarity to see them." or ""))
   f.empty:SetShown(#list == 0)
   f.content:SetHeight(math.max(n * ROW_HEIGHT, 30))
   f.sf.UpdateScrollBar()

@@ -700,23 +700,33 @@ local function clock() return debugprofilestop and debugprofilestop() or GetTime
 -- one go. Each slice is timed as label (nothing timed may be running when it yields).
 local SLICE_MS = 8
 local slicing, sliceStart = nil, 0
+-- A table's keys as a list, to walk it in slices safely while it may grow.
+function ns.KeysOf(t)
+  local out = {}
+  for k in pairs(t or {}) do out[#out + 1] = k end
+  return out
+end
 function ns.MaybeYield()
   if slicing and coroutine.running() == slicing and clock() - sliceStart > SLICE_MS then coroutine.yield() end
 end
+-- Returns the run: run.stopped is true once it finished, failed or was stopped
+-- (ns.StopSlices: the rest is dropped and done is never called).
 function ns.RunInSlices(label, fn, done)
-  local co = coroutine.create(fn)
+  local run = { co = coroutine.create(fn) }
   local step
   step = ns.Timed(label, function()
-    slicing, sliceStart = co, clock()
-    local result = { coroutine.resume(co) }
+    if run.stopped then return end
+    slicing, sliceStart = run.co, clock()
+    local result = { coroutine.resume(run.co) }
     slicing = nil
-    if not result[1] then geterrorhandler()(result[2]); return end
-    if coroutine.status(co) == "dead" then done(unpack(result, 2))
+    if not result[1] then run.stopped = true; geterrorhandler()(result[2]); return end
+    if coroutine.status(run.co) == "dead" then run.stopped = true; done(unpack(result, 2))
     else C_Timer.After(0, step) end
   end)
   step()
-  return co
+  return run
 end
+function ns.StopSlices(run) if run then run.stopped = true end end
 
 local frameOurs, frameTop, frameTopMs = 0, nil, 0   -- this frame's time in our code (freeze watch, below)
 local framePart, framePartMs, frameTipItem = nil, 0, nil   -- its slowest part (sub), the tooltip item we worked on
@@ -886,6 +896,9 @@ function ns.FrameShare() return frameOurs end
 -- Wrap a function so its time is counted under a label.
 function ns.Timed(label, fn)
   return function(...)
+    -- Inside a sliced run the slice is timed as a whole, and a task timed here could be
+    -- left open by a yield, so it just runs.
+    if slicing and coroutine.running() == slicing then return fn(...) end
     local t, m, before = clock(), memKB(), depth
     depth = before + 1
     local a, b, c, d = fn(...)

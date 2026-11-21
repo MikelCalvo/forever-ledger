@@ -198,7 +198,8 @@ end
 -- Booty Bay against your own auction house, both ways (Values.lua NeutralCompare).
 local function neutralRows(out)
   local realm = ns.RealmName() or "?"
-  for id in pairs(ns.db.prices[realm .. "|Neutral"] or {}) do
+  for _, id in ipairs(ns.KeysOf(ns.db.prices[realm .. "|Neutral"])) do
+    if ns.MaybeYield then ns.MaybeYield() end
     local c = ns:NeutralCompare(id)
     if c and c.t and time() - c.t <= NEUTRAL_FRESH then
       -- Buy at Booty Bay, sell here.
@@ -384,7 +385,7 @@ local workedAHledger   -- (AHledger prices went into the list: its credit in the
 -- the game on opening the tab). The last list stays on screen until the new one is done.
 local working   -- the run in progress, if any
 local function work()
-  if working and coroutine.status(working) ~= "dead" then return end   -- (dead: it stopped with an error)
+  if working and not working.stopped then return end
   local before = ns.AHledgerUses and ns.AHledgerUses() or 0
   local finished = false
   working = ns.RunInSlices("Gold making list", function() return ns:GoldIdeas() end, function(r, n)

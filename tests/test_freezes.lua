@@ -141,3 +141,28 @@ T.test("Slices: long work gives the frame back and still finishes", function()
   T.runTimers()
   assert(ok, err)
 end)
+
+T.test("Slices: a stopped run never finishes, and timed tasks inside a run just run", function()
+  local realClock, now = debugprofilestop, 0
+  debugprofilestop = function() return now end
+  local ok, err = pcall(function()
+    local done, inner = false, ns.Timed("Test inner", function() now = now + 5; ns.MaybeYield(); return "in" end)
+    local run = ns.RunInSlices("Test stop", function()
+      local got
+      for _ = 1, 10 do got = inner() end
+      return got
+    end, function() done = true end)
+    T.eq(run.stopped, nil, "still going after the first frame")
+    ns.StopSlices(run)
+    T.runTimers()
+    T.eq(done, false, "stopped: done never called")
+    T.eq(run.stopped, true)
+    local result
+    ns.RunInSlices("Test inner yield", function() return inner() end, function(r) result = r end)
+    T.runTimers()
+    T.eq(result, "in", "a timed task that gave the frame back still returned")
+  end)
+  debugprofilestop = realClock
+  T.runTimers()
+  assert(ok, err)
+end)

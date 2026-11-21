@@ -323,6 +323,7 @@ function ns:FindAllVendorCrafts()
   end
   local seenClassic = {}
   for _, c in ipairs(ns.CLASSIC_CRAFT_LIST or {}) do
+    if ns.MaybeYield then ns.MaybeYield() end
     local mats = {}
     for id, q in c[7]:gmatch("(%d+):(%d+)") do mats[#mats + 1] = { tonumber(id), tonumber(q) } end
     local key = routeKey(c[1], c[3], mats)
@@ -347,6 +348,7 @@ function ns:FindAllVendorCrafts()
 
   local list, seen, noPrice = {}, {}, 0
   for _, rec in ipairs(recipes) do
+    if ns.MaybeYield then ns.MaybeYield() end
     local first = rec.out and rec.r and rec.r[1]
     local sell = first and outputSell(rec) or nil
     if sell and sell > 0 then
@@ -399,7 +401,10 @@ ns.FindAllVendorCrafts = ns.Timed("Finding every profession's vendor crafts", ns
 -- Vendor flips have no crafting time, so they're ranked by total profit on offer.
 function ns:FindVendorFlips()
   local flips = {}
-  for id in pairs(ns.db.prices[ns.MarketKey()] or {}) do
+  -- (The IDs first: in slices a scan can add items between frames, and a table that grows
+  -- while pairs() walks it breaks the walk.)
+  for _, id in ipairs(ns.KeysOf(ns.db.prices[ns.MarketKey()])) do
+    if ns.MaybeYield then ns.MaybeYield() end
     local f = ns:VendorFlip(id)
     if f then flips[#flips + 1] = f end
   end
@@ -1020,7 +1025,9 @@ function ns:FindDeals(maxAge)
   local vendorPct, vendorMin = (s.dealVendorPct or 10) / 100, s.dealVendorMin or 0
   freshJudged()
   local now, deals = time(), {}
-  for id, rec in pairs(market) do
+  for _, id in ipairs(ns.KeysOf(market)) do
+    if ns.MaybeYield then ns.MaybeYield() end
+    local rec = market[id] or {}
     local price = rec.m
     if price and not rec.none and now - (rec.t or 0) <= (maxAge or DEAL_RECENT) then
       -- Quick look at the vendor price before the full check, which reads the tooltip.
