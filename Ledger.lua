@@ -156,6 +156,8 @@ end
 -- Records for each sub-tab
 ---------------------------------------------------------------------------
 local GROUP_SECONDS = 60
+-- The saved logs the lists come from (RefreshLedger builds again when one of them grows).
+local LOGS = { "sales", "purchases", "vendorLog", "ledgerMonths", "otherLog", "sessions" }
 
 -- Combine trades of the same item, at the same price each, in the same place, by the
 -- same character, within a minute of each other (selling 10 oils one by one is one row).
@@ -843,8 +845,27 @@ function ns:RefreshLedger()
   local itemTab = s.tab == "sales" or s.tab == "purchases" or s.tab == "resale"
   f.group:SetShown(itemTab)
   f.rarity:SetShown(itemTab)
+  -- The same filters over the same logs give the same list: built again only when one of
+  -- them changes, or a minute on (Frank's /fl perf, November 21: 240 ms and 20 MB of
+  -- leftovers for each of 24 refreshes in 20 minutes).
+  local stamp = { s.tab, s.range, tostring(s.char), match, tostring(s.group), tostring(s.rarity), math.floor(time() / 60) }
+  for _, k in ipairs(LOGS) do
+    local l = ns.db[k] or {}
+    local last = l[#l]
+    stamp[#stamp + 1] = #l .. ":" .. tostring(last and last.t or 0)
+  end
+  stamp = table.concat(stamp, "\1")
+  local cached = f.cache and f.cache.stamp == stamp and f.cache
   local list
-  if itemTab then
+  if cached then
+    list = cached.list
+    if itemTab then
+      f.group:SetOptions(cached.gopts)
+      f.group:SetValue(s.group)
+      f.rarity:SetOptions(cached.ropts)
+      f.rarity:SetValue(s.rarity)
+    end
+  elseif itemTab then
     local function itemOK(id)
       -- Rarity first: it is quick, and an item it rules out needs no group look-up.
       return (s.rarity == "all" or qualityOf(id) == tonumber(s.rarity))
@@ -868,8 +889,10 @@ function ns:RefreshLedger()
     f.group:SetValue(s.group)
     f.rarity:SetOptions(ropts)
     f.rarity:SetValue(s.rarity)
+    f.cache = { stamp = stamp, list = list, gopts = gopts, ropts = ropts }
   else
     list = records(s.tab, from, charOK, match)
+    f.cache = { stamp = stamp, list = list }
   end
   f.list = list
 
