@@ -255,6 +255,8 @@ T.test("Groups: gear sorts into level bands by required level", function()
   types[ROBE], types[SWORD], types[UNSEEN] = { 4, 1 }, { 2, 7 }, { 4, 2 }
   S.items[ROBE] = { name = "Test Robe", quality = 2, minLevel = 22 }
   S.items[SWORD] = { name = "Test Sword", quality = 2, minLevel = 60 }
+  -- (As the game does when details arrive: an item asked about earlier waits for this.)
+  T.fire("GET_ITEM_INFO_RECEIVED", ROBE, true); T.fire("GET_ITEM_INFO_RECEIVED", SWORD, true)
   T.eq(ns.NaturalGroup(ROBE), "gear.cloth.l16")
   T.eq(ns.NaturalGroup(SWORD), "gear.weapon.l56")
   T.eq(ns.NaturalGroup(UNSEEN), "gear.leather", "not described by the game yet: its kind")
