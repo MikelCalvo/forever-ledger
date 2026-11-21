@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Full scans now also count listings that ran out of time, alongside those that sold, so a sell chance can be worked out later from your own scans.
 
 ### Fixed
+- Far less memory churn while Live watch runs: a search on the auction house now refreshes only that item's values, not every value at once (other values follow within 30 seconds, as for other small changes).
 - The Ledger no longer freezes the game: its list is built a little each frame (the last one stays on screen meanwhile), and only again when something new is logged, a filter changes, or a minute has passed.
 - Opening Gold making no longer freezes the game for up to a second: every part of the list is worked out a little each frame, and the last one stays on screen until the new one is ready.
 - Accounts with characters on more than one ruleset: data a character saved under an empty realm name goes back to that character's own realm, not the realm of whoever logged in first after the update (found in Codex's review of 0.28.1).

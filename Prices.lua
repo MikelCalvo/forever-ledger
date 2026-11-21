@@ -1107,9 +1107,10 @@ local function saveLive(id, units, complete)
   if #units == 0 and not complete then return end
   record(id, units, "scan")
   ns:Debug("Saved the prices on screen for", ns.ItemName(id) or id, #units == 0 and "(none listed)" or "")
+  if ns.InvalidateItem then ns:InvalidateItem(id) end
   if not liveRefresh and ns.RefreshFlipsIfShown then
     liveRefresh = true
-    C_Timer.After(1, function() liveRefresh = nil; ns:InvalidateValues(true); ns:RefreshFlipsIfShown() end)
+    C_Timer.After(1, function() liveRefresh = nil; ns:RefreshFlipsIfShown() end)
   end
 end
 

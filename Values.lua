@@ -309,6 +309,19 @@ local listCache = {}    -- itemID = full options list at depth 0 (tooltips, find
 function ns:InvalidateValues(now)
   if now then cache, listCache, cacheTime, dirty = {}, {}, GetTime(), false else dirty = true end
 end
+-- One item's price changed (a search shown on the auction house): only its own values go
+-- now, and chains that use it as a material follow with the next rebuild, as for other
+-- small changes (Frank's /fl perf, November 21: throwing every value away a second after
+-- each search remade all of them, 187 MB of leftovers for one Gold making list).
+function ns:InvalidateItem(id)
+  if not id then return end
+  listCache[id] = nil
+  for d = 0, MAX_STEPS + 1 do
+    cache[id .. ":" .. d] = nil
+    cache["all:" .. id .. ":" .. d] = nil
+  end
+  dirty = true
+end
 
 local best
 

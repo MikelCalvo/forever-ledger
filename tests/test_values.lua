@@ -340,3 +340,19 @@ T.test("Items that bind are worth only their vendor price (loot)", function()
   ns.db.vendorSell[60060] = 30
   T.eq(ns:LootValue(60060), 4750, "an item that doesn't bind: the auction house")
 end)
+
+-- Frank's /fl perf, November 21: a search on screen threw every value away.
+T.test("One item's new price: its own value now, the rest kept until the next rebuild", function()
+  me()
+  price(60031, 1000)
+  price(60032, 2000)
+  ns.db.vendorSell[60031], ns.db.vendorSell[60032] = 1, 1
+  local a, b = ns:GetValue(60031), ns:GetValue(60032)
+  price(60031, 3000)
+  price(60032, 5000)
+  ns:InvalidateItem(60031)
+  T.ok(ns:GetValue(60031) > a, "the searched item's value follows its new price")
+  T.eq(ns:GetValue(60032), b, "another item's value stays until the next rebuild")
+  ns:InvalidateValues(true)
+  T.ok(ns:GetValue(60032) > b, "and follows after it")
+end)
