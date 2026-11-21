@@ -217,3 +217,20 @@ T.test("AHledger prices: values worked out from them are counted for its credit,
   ns:InvalidateValues(true)
   if not ok then error(err, 0) end
 end)
+
+-- Frank's /fl perf, November 21: 63,334 item answers in 39 seconds.
+T.test("Item details: one ask per item until the game answers; an item it doesn't have isn't asked again", function()
+  local S = T.S
+  local ID, GONE = 97901, 97902
+  S.items[ID], S.items[GONE] = nil, nil
+  T.eq(ns.GetItemInfo(ID), nil, "not loaded yet")
+  S.items[ID] = { name = "Late Arrival" }
+  T.eq(ns.GetItemInfo(ID), nil, "no second ask before the answer")
+  T.fire("GET_ITEM_INFO_RECEIVED", ID, true)
+  T.eq(ns.GetItemInfo(ID), "Late Arrival", "asked again once it arrived")
+  T.eq(ns.GetItemInfo(GONE), nil)
+  T.fire("GET_ITEM_INFO_RECEIVED", GONE, false)
+  S.items[GONE] = { name = "Never" }
+  T.eq(ns.GetItemInfo(GONE), nil, "the game said it has no such item: not asked again this session")
+  S.items[ID], S.items[GONE] = nil, nil
+end)

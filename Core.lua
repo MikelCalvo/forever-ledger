@@ -730,6 +730,8 @@ function ns.KeysOf(t)
   for k in pairs(t or {}) do out[#out + 1] = k end
   return out
 end
+-- Whether the code running now is part of a sliced run.
+function ns.InSlices() return slicing ~= nil and coroutine.running() == slicing end
 function ns.MaybeYield()
   if slicing and coroutine.running() == slicing and clock() - sliceStart > SLICE_MS then coroutine.yield() end
 end

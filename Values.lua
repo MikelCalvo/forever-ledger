@@ -503,9 +503,12 @@ end
 -- Scans and settings changes rebuild straight away (InvalidateValues(true)).
 local function freshCache()
   local age = GetTime() - cacheTime
+  -- (Not in the middle of a sliced run: Gold making's list would start over from nothing
+  -- halfway, and items arriving keep the cache dirty: Frank's /fl perf, November 21. Its
+  -- next look picks the changes up. Only full resets count for its redo.)
+  if ns.InSlices and ns.InSlices() then return end
   if (dirty and age > 30) or age > 300 then
     cache, listCache, cacheTime, dirty = {}, {}, GetTime(), false
-    thrownAway = thrownAway + 1
     if ns.PerfNote then ns.PerfNote("Values thrown away (count only)", 0) end
   end
 end

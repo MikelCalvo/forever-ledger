@@ -44,17 +44,34 @@ end)
 -- took turns disappearing on every refresh (owner's log, September 30).
 local infoCache = {}
 local rawGetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+-- An empty answer means the game has asked the server, which answers with
+-- GET_ITEM_INFO_RECEIVED. Asking again before that sent another request each time: 63,334
+-- answers in 39 seconds of Gold making (Frank's /fl perf, November 21), many for Classic
+-- items Forever doesn't have. So an item asked about waits for its answer (or a minute),
+-- and one the game says it doesn't have isn't asked about again this session.
+local ASK_AGAIN = 60
+local askedAt, noSuchItem = {}, {}
 local function getItemInfo(id)
   if not id or not rawGetItemInfo then return end
   local hit = infoCache[id]
   if hit then return unpack(hit, 1, hit.n) end
+  if noSuchItem[id] then return end
+  local now = GetTime()
+  if askedAt[id] and now - askedAt[id] < ASK_AGAIN then return end
   local function keep(...)
-    if (...) ~= nil then infoCache[id] = { n = select("#", ...), ... } end
+    if (...) ~= nil then infoCache[id] = { n = select("#", ...), ... }; askedAt[id] = nil
+    else askedAt[id] = now end
     return ...
   end
   return keep(rawGetItemInfo(id))
 end
 ns.GetItemInfo = getItemInfo
+-- (Registered before the handlers below, which read the item as it arrives.)
+ns:On("GET_ITEM_INFO_RECEIVED", function(id, success)
+  if not id then return end
+  askedAt[id] = nil
+  if success == false then noSuchItem[id] = true end
+end)
 
 -- Item names, remembered in saved data once the game has given them. The game keeps
 -- only so many item details in memory, and asking for hundreds (the Disenchant finder)

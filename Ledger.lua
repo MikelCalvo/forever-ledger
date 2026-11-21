@@ -918,6 +918,10 @@ function ns:RefreshLedger()
 
   local cols = COLUMNS[s.tab]
   local sort = s.sort[s.tab] or { key = s.tab == "resale" and "profit" or "t", desc = true }
+  -- Sorted once per list and order (it was sorted again on every refresh: 100 ms with
+  -- thousands of rows, Frank's /fl perf, November 21).
+  local order = tostring(sort.key) .. (sort.desc and ":desc" or ":asc")
+  if list.sortedBy ~= order then
   table.sort(list, function(a, b)
     local va, vb = a[sort.key], b[sort.key]
     if type(va) == "string" then va = va:lower() end
@@ -930,6 +934,8 @@ function ns:RefreshLedger()
     if sort.desc then return va > vb end
     return va < vb
   end)
+  list.sortedBy = order
+  end
 
   -- Header
   -- Clear of the scroll bar (long names ran under it and off the edge: owner's test,
