@@ -65,7 +65,7 @@
 ### Getting around
 - **Welcome and Help:** a short guide the first time, Help by topic with common questions, and search boxes for Settings and Help.
 - **Your look:** three themes (FL Clean, FL Bronze, FL Gilded), your accent color (or EllesmereUI's), and a Size from 75% to 150%.
-- **Your language:** text in Simplified Chinese so far, with more languages welcome ([how to translate](https://github.com/ivellos/forever-ledger/blob/main/docs/TRANSLATING.md)), and every part that reads the game works on clients in any language.
+- **Your language:** text in Simplified Chinese and Russian so far, with more languages welcome ([how to translate](https://github.com/ivellos/forever-ledger/blob/main/docs/TRANSLATING.md)), and every part that reads the game works on clients in any language.
 - **Settings profiles:** characters can share a set of settings or each have their own; export a profile for a friend.
 - **Works with AHledger, Auctionator, TSM and Auctioneer** prices and full scans, switches off what they (or ForeverForge) already show, and looks at home with EllesmereUI.
 - **Two accounts?** Live sync shares prices, price history and recipes between them while both are online, and your gold, sales, bags and bank if you like. Remove characters you no longer have in Settings.

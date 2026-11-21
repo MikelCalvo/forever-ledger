@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Russian**: the addon's text in Russian, with the right word forms for numbers (1 предмет, 2 предмета, 5 предметов; thanks to zergzorg). Other languages load nothing extra.
+- Vendor flips: click **Profit %** to sort by return on cost, or **Profit** to sort by the profit you can make now. Until you choose, the usual order stays. Watched items stay first (thanks to yippp).
+- `ForeverLedgerAPI` for other addons: your own scanned prices, price levels, the cost of buying a number of an item and the usual price (thanks to vulpeep; see docs/DEVELOPING.md).
+
+### Fixed
+- Your auctions: one missing from the game's answer for a moment no longer counts as sold, and one you cancel at the auction house no longer counts as sold either (thanks to vulpeep).
+- Sell speed: when part of a lot was bought between two full scans, only the bought part counts as sold (thanks to vulpeep).
+- Gold making: a craft that needs lots of materials no longer freezes the game while its plan is worked out (thanks to vulpeep).
+- Gold making: changing the auction house cut or the safety margin works the list out again at once (thanks to vulpeep).
+- A material listed far above its price of the last day or two no longer makes a craft or disenchant look very profitable (thanks to vulpeep).
+- The auction house buy note on an item's page sits on the item box, where the list's header no longer covers it (thanks to vulpeep).
+- Deal checks pause after a few milliseconds of work instead of a set number of items, so a slow moment doesn't hitch the game (thanks to yippp).
+- Non-English clients: bag tooltips no longer error, recipe books saved under the game's profession name join the English one, the shopping list, saved filter and group dialogs are translated, and recipes from the game data show their names in the client's language (thanks to vulpeep).
+
 ## [0.28.1] - 2026-11-21
 
 ### Highlights
@@ -30,7 +45,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - ✓ **Always undercut** works on Blizzard's Sell tab too.
 
 ### Added
-- Vendor flips: click Profit % for return-on-cost sorting, or Profit to sort by the profit shown. Until you choose a column, the original profit estimate sets the order. Whole percentages are shown, watched items keep priority, and ordinary refreshes keep rows in place. Equal profits use the higher return on cost, and equal returns use the higher affordable profit.
 - **Translations**: the addon can show its text in other languages. Simplified Chinese is the first (thanks to yippp), with its own font; English stays the fallback for anything not translated yet. `/fl api`, `/fl perf` and debug lines stay English.
 
 ### Changed
