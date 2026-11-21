@@ -908,6 +908,57 @@ T.test("Full scan: a lot bought in part counts only the part bought as sold", fu
   wipe(S.timers)
 end)
 
+T.test("Full scan: a listing gone from the last time band counts as expired, one with time left as sold", function()
+  local Scan = ns.Scan
+  local key = ns.MarketKey()
+  local realMarket = ns.db.prices[key]
+  ns.db.prices[key] = {}
+  ns.db.historySold2 = {}
+  wipe(S.timers)
+  local SHORT, LONG = 94060, 94061
+  local listings
+  rawset(AH, "GetNumReplicateItems", function() return #listings end)
+  rawset(AH, "GetReplicateItemInfo", function(idx)
+    local l = listings[idx + 1]
+    return nil, nil, l[2], nil, nil, nil, nil, l[1] * l[2], nil, l[1] * l[2], nil, nil, nil, nil, nil, nil, l[3]
+  end)
+  rawset(AH, "GetReplicateItemTimeLeft", function(idx) return listings[idx + 1][4] end)
+  local function fullScan()
+    Scan.active, Scan.full, Scan.started = true, true, GetTime()
+    S.now = S.now + 20
+    T.fire("REPLICATE_ITEM_LIST_UPDATE")
+    T.runTimers()
+  end
+  listings = { { 700, 5, SHORT, 1 }, { 800, 3, LONG, 4 }, { 100, 1, 94063, 4 } }
+  fullScan()
+  S.now = S.now + 900
+  listings = { { 100, 1, 94063, 4 } }
+  fullScan()
+  local gone, _, _, expired = ns:SellRate(SHORT)
+  T.eq(gone, 0, "under 30 minutes left: not counted as sold")
+  T.eq(expired, 5, "counted as expired")
+  gone, _, _, expired = ns:SellRate(LONG)
+  T.eq(gone, 3, "12 hours or more left: sold")
+  T.eq(expired, 0)
+  rawset(AH, "GetNumReplicateItems", nil)
+  rawset(AH, "GetReplicateItemInfo", nil)
+  rawset(AH, "GetReplicateItemTimeLeft", nil)
+  ns.db.prices[key], ns.db.lastFullListings, ns.db.historySold2 = realMarket, nil, {}
+  if Scan.active then Scan:Stop("test") end
+  wipe(S.timers)
+end)
+
+T.test("Sell speed: old day entries without an expired count still read", function()
+  local key = ns.MarketKey()
+  ns.db.historySold2 = { [key] = { [94062] = ("%d:4:30:30|%d:2:15"):format(ns.LocalDay() - 1, ns.LocalDay()) } }
+  local gone, minutes, close, expired = ns:SellRate(94062)
+  T.eq(gone, 6); T.eq(minutes, 45); T.eq(close, 45); T.eq(expired, 0)
+  ns:RecordSold(94062, 1, 15, true, 2)
+  gone, minutes, close, expired = ns:SellRate(94062)
+  T.eq(gone, 7); T.eq(expired, 2, "a new count joins today's old entry")
+  ns.db.historySold2 = {}
+end)
+
 -- Owner, November 11: /fl perf, kept at logout with /fl debug on, to read after a reload.
 T.test("Perf: the slowest tasks as lines, slowest single moment first", function()
   local real = ns.perf

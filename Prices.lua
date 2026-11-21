@@ -772,6 +772,7 @@ local function compareListings(before, after, gap)
       for i = 1, a - b do
         local band = list[i]
         vanished[#vanished + 1] = { price = tonumber(p), qty = tonumber(q),
+          band = band,
           sure = band >= 2 and MIN_LEFT[band] and gap < MIN_LEFT[band] }
       end
     end
@@ -783,8 +784,12 @@ local function compareListings(before, after, gap)
       for _ = 1, #bands - had do fresh[#fresh + 1] = { price = tonumber(p), qty = tonumber(q) } end
     end
   end
-  local gone, maybe, reposted = 0, 0, 0
+  -- expired: gone from the last band (under 30 minutes left), so most likely ran out of
+  -- time (a sale in its last half hour is counted here too). For the sell chance (Frank,
+  -- November 21: "grab the expires if possible").
+  local gone, maybe, reposted, expired = 0, 0, 0, 0
   for _, v in ipairs(vanished) do
+    if not v.sure and v.band == 1 then expired = expired + v.qty end
     if v.sure then
       local repost
       for k, f in ipairs(fresh) do
@@ -804,7 +809,7 @@ local function compareListings(before, after, gap)
       maybe = maybe + v.qty
     end
   end
-  return gone, maybe, reposted
+  return gone, maybe, reposted, expired
 end
 
 -- Collects one full scan's listings and compares them with the previous full scan.
@@ -818,10 +823,10 @@ local function soldTracker()
   local totGone, totMaybe, totReposted = 0, 0, 0
   local t = {}
   local function note(id, before, after)
-    local gone, maybe, reposted = compareListings(before, after, gap)
+    local gone, maybe, reposted, expired = compareListings(before, after, gap)
     totGone, totMaybe, totReposted = totGone + gone, totMaybe + maybe, totReposted + reposted
     if gone > 0 then top[#top + 1] = { id, gone } end
-    if ns.RecordSold then pcall(ns.RecordSold, ns, id, gone, gap / 60, true) end
+    if ns.RecordSold then pcall(ns.RecordSold, ns, id, gone, gap / 60, true, expired) end
   end
   function t.add(id, units)
     seen[id] = true

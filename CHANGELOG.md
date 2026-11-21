@@ -11,6 +11,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Vendor flips: click **Profit %** to sort by return on cost, or **Profit** to sort by the profit you can make now. Until you choose, the usual order stays. Watched items stay first (thanks to yippp).
 - `ForeverLedgerAPI` for other addons: your own scanned prices, price levels, the cost of buying a number of an item and the usual price (thanks to vulpeep; see docs/DEVELOPING.md).
 
+### Changed
+- Full scans now also count listings that ran out of time, alongside those that sold, so a sell chance can be worked out later from your own scans.
+
 ### Fixed
 - Your auctions: one missing from the game's answer for a moment no longer counts as sold, and one you cancel at the auction house no longer counts as sold either (thanks to vulpeep).
 - Sell speed: when part of a lot was bought between two full scans, only the bought part counts as sold (thanks to vulpeep).

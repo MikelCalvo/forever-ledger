@@ -47,7 +47,7 @@ local DEFAULTS = {
   historyQty = {},    -- [marketKey][itemID] = "day:listed|..." most listed seen each day (last 30 days)
   dungeons = {},      -- [dungeon name] = { runs, secs, coin, drops = { [itemID] = runs it dropped in } } (Dungeons.lua, archived November 14: kept, nothing adds to it)
   ledgerMonths = {},  -- ledger entries older than 30 days, as monthly totals per item: { { t = month start, c, k = "sale" | "buy" | "vsell" | "vbuy", id or n, q, a, cnt, mx } } (History.lua, kept a year)
-  historySold2 = {},  -- [marketKey][itemID] = "day:bought:minutes:minutes|..." units that vanished though they couldn't have expired (sell speed, since October 2)
+  historySold2 = {},  -- [marketKey][itemID] = "day:bought:minutes:closeMinutes:expired|..." units that vanished though they couldn't have expired, and those gone from the last time band (expired) (sell speed, since October 2)
   profiles = {},     -- settings profiles: [name] = { [setting] = value } (Settings.lua; "Default" is settings itself)
   charProfile = {},  -- [charKey] = profile name; none = Default
   quietChars = {},   -- [charKey] = true: quiet mode turned on with /fl quiet there, kept until turned off (Quiet.lua)

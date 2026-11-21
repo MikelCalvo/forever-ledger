@@ -1322,7 +1322,7 @@ function ns.PriceHistoryValues(history, sold, day, changed)
   out.longTerm, out.longTermDays, out.longTermDropped = historyMean(points, day, 60, false, changed)
   local sales = {}
   for e in (type(sold) == "string" and sold or ""):gmatch("[^|]+") do
-    local d, g, m, c = e:match("^(%d+):(%d+):(%d+):?(%d*)$")
+    local d, g, m, c = e:match("^(%d+):(%d+):(%d+):?(%d*):?%d*$")
     d, g, m, c = tonumber(d), tonumber(g), tonumber(m), tonumber(c)
     if d and d >= day - 29 and d <= day and g and g >= 0 and g < math.huge
       and positivePrice(m) and (not c or (c >= 0 and c <= m)) then sales[d] = { g, m } end
@@ -1375,13 +1375,14 @@ end
 
 -- Sell speed (Prices.lua compares full scans): units gone between scans, the minutes
 -- covered, and how many of those minutes came from close ("watched") pairs, summed per
--- day: historySold[market][id] = "day:gone:minutes:closeMinutes|..." (30 days; entries
--- written before the close count was added have three numbers).
+-- day: historySold[market][id] = "day:gone:minutes:closeMinutes:expired|..." (30 days; entries
+-- written before the close count was added have three numbers, before November 21 four:
+-- expired, the units gone from the last time band, for the sell chance).
 local function soldEntry(e)
-  local d, g, m, c = e:match("^(%d+):(%d+):(%d+):?(%d*)$")
+  local d, g, m, c, x = e:match("^(%d+):(%d+):(%d+):?(%d*):?(%d*)$")
   -- Three-number entries came from the first version, which only compared scans within
   -- one session (Live watch), so count them as close.
-  return tonumber(d), tonumber(g), tonumber(m), tonumber(c) or tonumber(m)
+  return tonumber(d), tonumber(g), tonumber(m), tonumber(c) or tonumber(m), tonumber(x) or 0
 end
 
 -- historySold2 since October 2: counted from listings that can't have expired (time
@@ -1389,21 +1390,22 @@ end
 -- dropped in 0.9.0 (Core.lua, schema 2).
 local SOLD_TABLE = "historySold2"
 
-function ns:RecordSold(id, gone, minutes, close)
+function ns:RecordSold(id, gone, minutes, close, expired)
   if not ns.db or minutes <= 0 then return end
   if ns.ForgetSellSpeeds then ns:ForgetSellSpeeds() end
   local sold = marketTable(SOLD_TABLE)
   local d = today()
   local s = sold[id] or ""
   local closeMin = close and minutes or 0
-  local lastDay, lastGone, lastMin, lastClose = soldEntry(s:match("[^|]*$"))
+  expired = expired or 0
+  local lastDay, lastGone, lastMin, lastClose, lastExpired = soldEntry(s:match("[^|]*$"))
   if lastDay == d then
-    gone, minutes, closeMin = gone + lastGone, minutes + lastMin, closeMin + lastClose
+    gone, minutes, closeMin, expired = gone + lastGone, minutes + lastMin, closeMin + lastClose, expired + lastExpired
     s = s:gsub("[^|]*$", "")
   elseif s ~= "" then
     s = s .. "|"
   end
-  s = s .. ("%.0f:%.0f:%.0f:%.0f"):format(d, gone, minutes, closeMin)
+  s = s .. ("%.0f:%.0f:%.0f:%.0f:%.0f"):format(d, gone, minutes, closeMin, expired)
   while s:find("|", 1, true) and tonumber(s:match("^(%d+)")) <= d - COUNT_DAYS do s = s:gsub("^[^|]*|", "") end
   sold[id] = s
 end
@@ -1412,12 +1414,12 @@ end
 -- ("watched") pairs, over a period (today included).
 function ns:SellRate(id, window)
   local from = today() - math.min(ns.PRICE_WINDOWS[window or "all"] or math.huge, COUNT_DAYS)
-  local gone, minutes, close = 0, 0, 0
+  local gone, minutes, close, expired = 0, 0, 0, 0
   for e in (marketTable(SOLD_TABLE)[id] or ""):gmatch("[^|]+") do
-    local day, g, m, c = soldEntry(e)
-    if day and day >= from then gone, minutes, close = gone + g, minutes + m, close + c end
+    local day, g, m, c, x = soldEntry(e)
+    if day and day >= from then gone, minutes, close, expired = gone + g, minutes + m, close + c, expired + x end
   end
-  return gone, minutes, close
+  return gone, minutes, close, expired
 end
 
 ---------------------------------------------------------------------------
