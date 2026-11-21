@@ -117,3 +117,19 @@ T.test("Gold making: shuffles, flips and recipes nobody knows in one list", func
   ns:BuildUsageIndex()
   ns:InvalidateValues(true)
 end)
+
+T.test("Gold making: a new auction house cut or safety margin works the list out again", function()
+  local real, reworked = ns.ReworkGoldMaking, 0
+  ns.ReworkGoldMaking = function() reworked = reworked + 1 end
+  local ok, err = pcall(function()
+    for _, key in ipairs({ "ahCut", "margin" }) do
+      local after = ns._test.DEFS[key].after
+      T.ok(after, key .. " does something after a change")
+      local before = reworked
+      after()
+      T.eq(reworked, before + 1, key)
+    end
+  end)
+  ns.ReworkGoldMaking = real
+  if not ok then error(err, 0) end
+end)
