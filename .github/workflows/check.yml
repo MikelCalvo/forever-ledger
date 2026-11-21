@@ -19,7 +19,7 @@ jobs:
 
       - name: Check every Lua file
         run: |
-          for f in *.lua; do
+          for f in *.lua Libs/*/*.lua; do
             echo "Checking $f"
             luac5.1 -p "$f"
           done
@@ -32,6 +32,11 @@ jobs:
 
       - name: Check the writ data generator
         run: python3 -m unittest discover -s tools -p test_forever_writs.py
+
+      # How much of the addon's text each language file covers (a report, never a failure
+      # for missing translations; it fails only if a language file doesn't load).
+      - name: Translation coverage
+        run: lua5.1 tools/locale-report.lua
 
       # The Discord scripts: they compile, and the announcement turns the change marks
       # into the server's emojis when their codes are set (and keeps the text mark if not).

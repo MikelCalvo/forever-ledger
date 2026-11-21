@@ -387,10 +387,10 @@ local function hoverGraph(g)
   g.marker:Show()
   GameTooltip:SetOwner(g, "ANCHOR_CURSOR")
   local when = p.week and ("Week of " .. date("%b %d", dayTime(p.day))) or (p.day == today() and "Today" or date("%a %b %d", dayTime(p.day)))
-  GameTooltip:AddLine(when, 1, 1, 1)
-  GameTooltip:AddDoubleLine("Cheapest", ns.Money(p.cheapest), 0.7, 0.7, 0.7, GOLD[1], GOLD[2], GOLD[3])
-  if p.typical then GameTooltip:AddDoubleLine("Typical", ns.Money(p.typical), 0.7, 0.7, 0.7, BLUE[1], BLUE[2], BLUE[3]) end
-  if p.listed then GameTooltip:AddDoubleLine(p.week and "Listed, on average" or "Listed", count(p.listed), 0.7, 0.7, 0.7, 1, 1, 1) end
+  ns:TooltipAddLine(when, 1, 1, 1)
+  ns:TooltipAddDoubleLine("Cheapest", ns.Money(p.cheapest), 0.7, 0.7, 0.7, GOLD[1], GOLD[2], GOLD[3])
+  if p.typical then ns:TooltipAddDoubleLine("Typical", ns.Money(p.typical), 0.7, 0.7, 0.7, BLUE[1], BLUE[2], BLUE[3]) end
+  if p.listed then ns:TooltipAddDoubleLine(p.week and "Listed, on average" or "Listed", count(p.listed), 0.7, 0.7, 0.7, 1, 1, 1) end
   GameTooltip:Show()
 end
 
@@ -490,8 +490,8 @@ local function buildFind(f)
   eb:SetScript("OnMouseDown", function() if GetCursorInfo() then drop() end end)
   eb:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("Look up an item", 1, 1, 1)
-    GameTooltip:AddLine("Type two letters or more of any item's name and pick it, or press Enter for the top one. You don't need to have it. A shift-clicked link or an item dragged here works too.", 0.8, 0.8, 0.8, true)
+    ns:TooltipAddLine("Look up an item", 1, 1, 1)
+    ns:TooltipAddLine("Type two letters or more of any item's name and pick it, or press Enter for the top one. You don't need to have it. A shift-clicked link or an item dragged here works too.", 0.8, 0.8, 0.8, true)
     GameTooltip:Show()
   end)
   eb:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -515,7 +515,7 @@ local function buildFind(f)
 end
 
 local function build()
-  win = ns.ThemedWindow("ForeverLedgerPriceWindow", W, 600, T:TitleCode() .. "Price window|r")
+  win = ns.ThemedWindow("ForeverLedgerPriceWindow", W, 600, T:TitleCode() .. ns.LocalizeText("Price window") .. "|r")
   local f = win
   buildFind(f)
 
@@ -534,6 +534,11 @@ local function build()
   f.kind = text(f, 11, T.dim)
   f.kind:SetPoint("TOPLEFT", f.name, "BOTTOMLEFT", 0, -4)
   f.kind:SetWidth(W - 300)
+  -- AHledger's terms: credit where its prices show, here too when a value or craft cost
+  -- below used one (Codex verification, November 18).
+  f.credit = text(f, 10, T.dim)
+  f.credit:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 14, 6)
+  f.credit:Hide()
   f.search = T:Button(f, "Search on the auction house", 200, function()
     if not ns:SearchAuctionHouse(f.id) then ns:Print("Open the auction house first, then click Search again.") end
   end, 24)
@@ -541,8 +546,8 @@ local function build()
   f.search:SetPoint("TOPRIGHT", -12, -46)
   f.search:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("Search on the auction house", 1, 1, 1)
-    GameTooltip:AddLine(ns:IsAHOpen() and "Shows this item on the auction house's Buy tab."
+    ns:TooltipAddLine("Search on the auction house", 1, 1, 1)
+    ns:TooltipAddLine(ns:IsAHOpen() and "Shows this item on the auction house's Buy tab."
       or "Works while the auction house is open.", 0.8, 0.8, 0.8, true)
     GameTooltip:Show()
   end)
@@ -587,8 +592,8 @@ local function build()
   end, 22)
   f.addItem:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("Add to shopping list", 1, 1, 1)
-    GameTooltip:AddLine("Puts this item on the shopping list you're on (or a new one), at your usual price plus the list's allowance. Change Want and Up to there.", 0.8, 0.8, 0.8, true)
+    ns:TooltipAddLine("Add to shopping list", 1, 1, 1)
+    ns:TooltipAddLine("Puts this item on the shopping list you're on (or a new one), at your usual price plus the list's allowance. Change Want and Up to there.", 0.8, 0.8, 0.8, true)
     GameTooltip:Show()
   end)
   f.addItem:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -598,10 +603,10 @@ local function build()
   -- price watches it too.
   local function watchTip(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("Watch this item", 1, 1, 1)
-    GameTooltip:AddLine("Live watch looks for it every time it reads the auction house (about every 20 seconds), and the Buy queue buys it, first under Vendor flips, at or under the price here. \"vendor\": only when a vendor pays more. All of them: the Watched button on the Buy queue.", 0.8, 0.8, 0.8, true)
+    ns:TooltipAddLine("Watch this item", 1, 1, 1)
+    ns:TooltipAddLine("Live watch looks for it every time it reads the auction house (about every 20 seconds), and the Buy queue buys it, first under Vendor flips, at or under the price here. \"vendor\": only when a vendor pays more. All of them: the Watched button on the Buy queue.", 0.8, 0.8, 0.8, true)
     if f.id and ns:IsGearItem(f.id) then
-      GameTooltip:AddLine("Gear: any stat version at or under the price.", 0.7, 0.7, 0.7, true)
+      ns:TooltipAddLine("Gear: any stat version at or under the price.", 0.7, 0.7, 0.7, true)
     end
     GameTooltip:Show()
   end
@@ -642,7 +647,7 @@ local function build()
     r:SetScript("OnEnter", function(self)
       if not self.id then return end
       itemTooltip(self, self.id)
-      GameTooltip:AddLine("Click for this material's price history", 0.5, 0.83, 0.61)
+      ns:TooltipAddLine("Click for this material's price history", 0.5, 0.83, 0.61)
       GameTooltip:Show()
     end)
     r:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -665,8 +670,8 @@ local function build()
   f.addMats:SetPrimary(true)
   f.addMats:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Add materials to shopping list", 1, 1, 1)
-    GameTooltip:AddLine("Everything this many crafts need, added to what the list already wants. Up to starts at your usual price plus the list's allowance; prices you typed stay. What you already have isn't taken off: check Want on the list.", 0.8, 0.8, 0.8, true)
+    ns:TooltipAddLine("Add materials to shopping list", 1, 1, 1)
+    ns:TooltipAddLine("Everything this many crafts need, added to what the list already wants. Up to starts at your usual price plus the list's allowance; prices you typed stay. What you already have isn't taken off: check Want on the list.", 0.8, 0.8, 0.8, true)
     GameTooltip:Show()
   end)
   f.addMats:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -680,6 +685,7 @@ function ns:RefreshPriceWindow()
   if not (f and f:IsShown()) then return end
   f.cover:SetShown(not f.id)
   if not f.id then f:SetHeight(200); return end
+  local ahlBefore = ns.AHledgerUses and ns.AHledgerUses() or 0
   local id = f.id
   local s = ns:ItemPriceSummary(id, state.suffix)
   local card = 0
@@ -967,6 +973,12 @@ function ns:RefreshPriceWindow()
     for _, r in ipairs(f.mats) do r:Hide() end
   end
   T:HideCards(f, card + 1)
+  local credit = ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore
+  f.credit:SetShown(credit and true or false)
+  if credit then
+    f.credit:SetText(ns.AHLEDGER_CREDIT)
+    height = height + 14
+  end
   f:SetHeight(height)
 end
 

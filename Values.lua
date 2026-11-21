@@ -7,6 +7,7 @@ local _, ns = ...
 ---------------------------------------------------------------------------
 local MAX_STEPS = 4     -- crafts, disenchants and conversions in one chain
 local MIN_LISTED = 5    -- inside a chain, ignore auction house prices with fewer listings
+local YOUNG_SPIKE = 3
 
 -- The cut as a fraction: the setting at your faction's auction house, and 15% at a
 -- neutral one (owner's mail from Booty Bay, October 5: 4s 33c sold, cut 64c, 15% rounded
@@ -79,9 +80,10 @@ local function ahSale(id, needListings)
   -- 10: Astral Essence bought out, expensive items shown as profitable disenchants; Frank
   -- chose the lower of the two). A real rise counts once the week's median has caught up,
   -- after about 4 days (the week, not Deals' window: all of history would take weeks).
+  -- With fewer days the median still caps a price more than three times above it.
   if needListings and ns.UsualPrice then
     local ok, usual, points = pcall(ns.UsualPrice, ns, id, "week")
-    if ok and usual and (points or 0) >= 3 and usual < p then p = usual end
+    if ok and usual and usual < p and ((points or 0) >= 3 or p > usual * YOUNG_SPIKE) then p = usual end
   end
   return ns:AuctionSaleValue(id, p)
 end

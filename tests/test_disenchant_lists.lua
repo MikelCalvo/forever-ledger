@@ -182,7 +182,7 @@ T.test("Schema 7 leaves existing typed and automatic entries intact", function()
   fresh(); ForeverLedgerDB = ns.Deserialize(ns.Serialize(ns.db)); ForeverLedgerDB.schema = 6
   ForeverLedgerDB.shopping.lists = { { name = "Old", on = true, items = { { id = A, src = "you", max = 15 }, { id = W, src = "usual", max = 40 } } } }
   T.fire("ADDON_LOADED", "ForeverLedger")
-  T.eq(ns.db.schema, 9); T.eq(ns.db.shopping.lists[1].items[1].max, 15)
+  T.eq(ns.db.schema, 11); T.eq(ns.db.shopping.lists[1].items[1].max, 15)
   T.eq(ns.db.shopping.lists[1].items[1].src, "you"); T.eq(ns.db.shopping.lists[1].items[2].src, "usual")
   T.eq(ns.db.shopping.lists[1].items[1].disenchant, nil)
 end)
@@ -255,4 +255,11 @@ T.test("Finder buttons use shown rows and the selected target; left click still 
   end)
   CreateFrame, ns.Theme, ns.SearchAuctionHouse = savedFrame, savedTheme, savedSearch
   assert(ok, err)
+end)
+
+T.test("Arcane Salvager: its buff found by spell ID or the game's own name, in any language", function()
+  T.ok(ns.IsSalvagerBuff("Тайный утилизатор", 1263999, 1263999, nil, nil), "by spell ID")
+  T.ok(ns.IsSalvagerBuff("Тайный утилизатор", 5, nil, "Тайный утилизатор", nil), "by the item's name in the game's language")
+  T.ok(ns.IsSalvagerBuff("Arcane Salvager", nil, nil, nil, nil), "English fallback")
+  T.ok(not ns.IsSalvagerBuff("Ледяной доспех", 7, 9, "Тайный утилизатор", "Тайный утилизатор"), "another buff")
 end)

@@ -69,6 +69,12 @@ end
 -- Hold the key and click in your bags
 ---------------------------------------------------------------------------
 local over   -- the button over a bag slot
+local DE_BLUE = { 0.35, 0.65, 1 }
+local tipBuild, lineIn = 0, nil   -- (the item tooltip's build count, and the build our line is in)
+local function tipLine(tt)
+  tt:AddLine(("Click to disenchant it (%s held)."):format(keyOf().name), DE_BLUE[1], DE_BLUE[2], DE_BLUE[3], true)
+  lineIn = tipBuild
+end
 
 local function overlay()
   if over then return over end
@@ -77,12 +83,19 @@ local function overlay()
   over:Hide()
   local glow = over:CreateTexture(nil, "OVERLAY")
   glow:SetAllPoints()
-  glow:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.25)
+  glow:SetColorTexture(DE_BLUE[1], DE_BLUE[2], DE_BLUE[3], 0.22)
+  -- "DE" in blue in the slot's bottom left (Frank's AN26, November 19: with EllesmereUI's
+  -- bags he couldn't see the light, nor the tooltip line).
+  over.label = over:CreateFontString(nil, "OVERLAY")
+  over.label:SetFont(T.font or STANDARD_TEXT_FONT, 12, "OUTLINE")
+  over.label:SetPoint("BOTTOMLEFT", 2, 2)
+  over.label:SetTextColor(DE_BLUE[1], DE_BLUE[2], DE_BLUE[3])
+  over.label:SetText("DE")
   over:SetScript("OnEnter", function(self)
     if not self.bag then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetBagItem(self.bag, self.slot)
-    GameTooltip:AddLine(("Click to disenchant it (%s held)."):format(keyOf().name), T.accent[1], T.accent[2], T.accent[3], true)
+    tipLine(GameTooltip)
     GameTooltip:Show()
   end)
   over:SetScript("OnLeave", function(self)
@@ -111,7 +124,7 @@ local function bagSlotOf(owner)
 end
 
 -- Pointing at a bag item with the key held: cover the slot with the disenchant button.
-local function tryArm()
+local function tryArm(fromTooltip)
   local s = S()
   if not s.quickDE or InCombatLockdown() or not keyOf().test() then return end
   if not GameTooltip:IsShown() then return end
@@ -127,10 +140,16 @@ local function tryArm()
   b.bag, b.slot = bag, slot
   b:SetAttribute("macrotext", macro(bag, slot))
   b:Show()
+  -- The line on the tooltip already showing (once per tooltip: the key pressed after the
+  -- tooltip came up adds it with Show, which resizes it).
+  if lineIn ~= tipBuild then
+    tipLine(GameTooltip)
+    if not fromTooltip then GameTooltip:Show() end
+  end
 end
 
 local function onItemTooltip(tt)
-  if tt == GameTooltip then tryArm() end
+  if tt == GameTooltip then tipBuild = tipBuild + 1; tryArm(true) end
 end
 if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
   TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, onItemTooltip)
@@ -232,22 +251,31 @@ local function build()
   win.tickNone:SetPoint("LEFT", win.tickSuggested, "RIGHT", 6, 0)
   win.sf, win.content = T:Scroll(win)
   win.sf:SetPoint("TOPLEFT", win.tickSuggested, "BOTTOMLEFT", 0, -6)
-  win.sf:SetPoint("BOTTOMRIGHT", -10, 56)
+  win.sf:SetPoint("BOTTOMRIGHT", -10, 72)
   win.empty = T:Text(win.content, 12, T.dim)
   win.empty:SetPoint("TOPLEFT", 6, -6)
   win.empty:SetPoint("RIGHT", win.content, "RIGHT", -6, 0)
   win.empty:SetJustifyH("LEFT")
 
   -- Disenchant next: secure, one click per item.
+  -- The item's name on the button, the count and value above it, both kept inside (AN27,
+  -- November 19: one long line ran past both edges of the button).
   local nb = secureButton("ForeverLedgerDisenchantNext", win, 376, 30)
-  nb:SetPoint("BOTTOM", 0, 14)
+  nb:SetPoint("BOTTOMLEFT", 12, 14)
+  nb:SetPoint("BOTTOMRIGHT", -12, 14)
   T:Fill(nb, { T.accent[1], T.accent[2], T.accent[3], 0.18 })
   T:Border(nb)
   nb.hl = nb:CreateTexture(nil, "HIGHLIGHT")
   nb.hl:SetAllPoints()
   nb.hl:SetColorTexture(1, 1, 1, 0.08)
   nb.text = T:Text(nb, 13)
-  nb.text:SetPoint("CENTER")
+  nb.text:SetPoint("LEFT", 8, 0)
+  nb.text:SetPoint("RIGHT", -8, 0)
+  nb.text:SetWordWrap(false)
+  win.summary = T:Text(win, 11, T.dim)
+  win.summary:SetPoint("BOTTOMLEFT", nb, "TOPLEFT", 2, 6)
+  win.summary:SetPoint("BOTTOMRIGHT", nb, "TOPRIGHT", -2, 6)
+  win.summary:SetJustifyH("LEFT")
   nb:SetScript("OnEnter", function(self)
     if not self.item then return end
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -296,11 +324,14 @@ function ns:RefreshDisenchantList()
   nb.item = it
   if it then
     nb:SetAttribute("macrotext", macro(it.bag, it.slot))
-    nb.text:SetText(("Disenchant next: %s  |cff888888(%d ticked, about %s)|r"):format(ns.ItemName(it.id), n, ns.Money(math.floor(total + 0.5))))
+    nb.text:SetText(("Disenchant %s"):format(ns.ItemName(it.id)))
+    win.summary:SetText(("%d ticked, worth about %s disenchanted"):format(n, ns.Money(math.floor(total + 0.5))))
     nb:Enable()
   else
+    win.summary:SetText("")
     nb:SetAttribute("macrotext", nil)
-    nb.text:SetText(can and "|cff888888Tick an item to disenchant it|r" or "|cff888888No Enchanting on this character|r")
+    nb.text:SetText(not can and "|cff888888No Enchanting on this character|r"
+      or #items == 0 and "|cff888888Nothing to disenchant|r" or "|cff888888Tick an item to disenchant it|r")
     nb:Disable()
   end
 end

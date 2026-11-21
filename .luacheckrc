@@ -35,14 +35,14 @@ read_globals = {
   "Ambiguate", "ChatFrame_AddMessageEventFilter", "ChatFrame_SendTell", "ClearCursor",
   "ClearOverrideBindings", "CreateFrame", "date", "debugprofilestop", "debugstack", "geterrorhandler",
   "GetCoinTextureString", "GetCurrentKeyBoardFocus", "GetCursorInfo", "GetCursorPosition",
-  "GetCVar", "GetFileIDFromPath", "GetMoney", "GetMouseFoci", "GetMouseFocus",
+  "GetCVar", "GetLocale", "GetFileIDFromPath", "GetMoney", "GetMouseFoci", "GetMouseFocus",
   "GetNormalizedRealmName", "GetRealmID", "GetRealmName", "GetRealZoneText",
   "GetMinimapZoneText", "GetScreenWidth", "GetSubZoneText", "GetTime", "GetUnitName",
   "GetZoneText", "HandleModifiedItemClick", "HideUIPanel", "hooksecurefunc", "InCombatLockdown",
   "InviteUnit", "IsAltKeyDown", "IsControlKeyDown", "ITEM_QUALITY_COLORS", "BreakUpLargeNumbers", "IsInGroup", "IsInGuild", "IsInInstance", "IsInRaid",
   "IsModifiedClick", "IsMouseButtonDown", "IsPVPTimerRunning", "issecretvalue",
   "IsShiftKeyDown", "PlaySound", "RaidNotice_AddMessage", "ReloadUI", "SendChatMessage",
-  "SetCVar", "StaticPopup_Show", "time", "tinsert", "wipe",
+  "SetCVar", "StaticPopup_Show", "StaticPopup_Hide", "time", "tinsert", "wipe",
   "UnitBuff", "UnitClass", "UnitExists", "UnitFactionGroup", "UnitFullName", "UnitGUID",
   "UnitIsDead", "UnitLevel", "UnitName", "UnitReaction",
 
@@ -51,7 +51,7 @@ read_globals = {
   "UpdateAddOnMemoryUsage", "GetChannelDisplayInfo", "GetChannelName",
   "EnumerateServerChannels", "GetNumDisplayChannels", "GetInboxHeaderInfo",
   "GetInboxInvoiceInfo", "GetInboxItem", "GetInboxNumItems", "GetInstanceInfo",
-  "GetItemCount", "GetItemIcon", "GetItemInfo", "GetItemInfoInstant", "GetLootSlotInfo",
+  "GetItemCount", "GetItemIcon", "GetItemInfo", "GetItemInfoInstant", "GetItemSpell", "IsQuestFlaggedCompleted", "GetLootSlotInfo",
   "GetLootSlotLink", "GetLootSourceInfo", "GetNumLootItems", "GetMerchantItemCostInfo",
   "GetMerchantItemCostItem", "GetMerchantItemID", "GetMerchantItemInfo",
   "GetMerchantNumItems", "GetNumCompanions", "GetNumSkillLines", "GetNumSpellTabs",
@@ -74,6 +74,11 @@ globals = { "StaticPopupDialogs", "SlashCmdList", "UISpecialFrames", "ColorPicke
 -- Only Core owns these global registrations. Other files must use the namespace.
 files["Core.lua"] = {
   globals = { "ForeverLedgerDB", "SLASH_FOREVERLEDGER1", "SLASH_FOREVERLEDGER2" },
+}
+
+-- API.lua hands prices to other addons, the one global they read.
+files["API.lua"] = {
+  globals = { "ForeverLedgerAPI" },
 }
 
 -- AHTabs.lua clears AuctionHouseFrame.displayMode after emptying Blizzard's content for

@@ -144,11 +144,12 @@ function ns.CraftPlan(need, sourceOf, opts)
         -- buying the 49c one, then making a whole batch for the other, came to 1s 49c).
         -- So the rest of what's needed is worked out both ways and the cheaper kept.
         if not simple and canMake and how ~= "craft" and n - i >= 1 then
+          local ahead = math.min(n - i, math.max(2 * makes, 10))
           local a, b = copy(st), copy(st)
           local ca = takeOne(a, id, how, depth, true)
-          local ra = ca and take(a, id, n - i, depth, true)
+          local ra = ca and take(a, id, ahead, depth, true)
           local cb = takeOne(b, id, "craft", depth, true)
-          local rb = cb and take(b, id, n - i, depth, true)
+          local rb = cb and take(b, id, ahead, depth, true)
           if cb and rb and not (ca and ra and ca + ra <= cb + rb) then how = "craft" end
         end
         local c = takeOne(st, id, how, depth, simple)

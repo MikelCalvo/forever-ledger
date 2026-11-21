@@ -7,7 +7,13 @@
 ## X-Curse-Project-ID: 1720193
 ## X-Wago-ID: qGYBBzNg
 
+Libs\LibStub\LibStub.lua
+Libs\LibAHTab\LibAHTab.lua
+Locale.lua
+Locales\zhCN.lua
+Locales\ruRU.lua
 Core.lua
+LocaleHooks.lua
 Prices.lua
 Sweep.lua
 Quiet.lua
@@ -60,4 +66,5 @@ WritsData.lua
 Writs.lua
 QuickDisenchant.lua
 PriceWindow.lua
+API.lua
 Probe.lua

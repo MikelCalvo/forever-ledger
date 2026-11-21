@@ -118,7 +118,7 @@ T.test("Watched: a find at your price is announced as a watched item", function(
     ns:CheckDeals()
     T.runTimers()   -- (the check goes a few hundred items a frame)
   end)
-  T.ok(out:find("Watched item: Test Silk, 12 at 2s or less", 1, true), "chat line: " .. out)
+  T.ok(out:find("Watched item: Test Silk, 12 at " .. ns.Money(200) .. " or less", 1, true), "chat line: " .. out)
   ns:UnwatchItem(SILK)
   m[SILK], S.money = nil, 0
   T.runTimers()
@@ -143,7 +143,7 @@ T.test("Deal check: a few hundred items a frame, and a find announced once", fun
     T.runTimers()
   end)
   ns.WatchedFind = real
-  local _, n = out:gsub("Watched item: Test Silk, 12 at 2s or less", "")
+  local _, n = out:gsub(("Watched item: Test Silk, 12 at " .. ns.Money(200) .. " or less"):gsub("%p", "%%%0"), "")
   T.eq(n, 1, "announced once: " .. out)
   out = printed(function() ns:CheckDeals(); T.runTimers() end)
   T.eq(out:find("Test Silk", 1, true), nil, "and not again at the same price")
@@ -301,4 +301,26 @@ T.test("Buy queue logs: routine replies and errors with nothing being bought are
   T.ok(ns.db.buyTrace and #ns.db.buyTrace == 1, "other notices just after a purchase still are")
   ns.db.settings.debug, ns.db.buyTrace, ns.db.buyErrors, Q.buyAt = false, nil, nil, nil
   T.runTimers()
+end)
+
+T.test("Deal check: costly items yield on elapsed budget before the count limit", function()
+  local m = market()
+  for id = 95000, 95999 do m[id] = { m = 100, a = 100, q = 1, t = time(), src = "scan" } end
+  local oldClock, real = debugprofilestop, ns.WatchedFind
+  local clock, looked = 0, 0
+  debugprofilestop = function() return clock end
+  ns.WatchedFind = function(self, id)
+    clock, looked = clock + 3, looked + 1
+    return real(self, id)
+  end
+  local ok, err = pcall(function()
+    ns:CheckDeals()
+    T.ok(looked > 0 and looked <= 2, "elapsed budget, not 400 costly items: " .. looked)
+    T.runTimers()
+    T.ok(looked >= 1000, "all remaining items processed in later parts")
+  end)
+  debugprofilestop, ns.WatchedFind = oldClock, real
+  for id = 95000, 95999 do m[id] = nil end
+  T.runTimers()
+  assert(ok, err)
 end)

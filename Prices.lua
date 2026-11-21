@@ -373,7 +373,11 @@ function ns:LearnVersionName(id, suffix, link)
   local base = (ns.db.itemNames or {})[id] or getItemInfo(id)
   if not (shown and base and shown:sub(1, #base + 1) == base .. " ") then return end
   local vname = shown:sub(#base + 2)
-  if not vname:match("^of .") then return end
+  -- English names say "of the Bear"; other languages word it their own way, so there
+  -- anything after the item's own name counts.
+  local english = (GetLocale and GetLocale() or "enUS"):sub(1, 2) == "en"
+  if english and not vname:match("^of .") then return end
+  if vname:gsub("%s", "") == "" then return end
   if ns.db.suffixNames[vname] == nil then
     ns.db.suffixNames[vname] = suffix
     ns:ForgetVersionNames()
@@ -658,7 +662,9 @@ local function record(id, units, src, liveSince)
       s.q = s.q + u[2]
     end
   end
-  for suffix, s in pairs(bySuffix) do sx[#sx + 1] = ("%d:%d:%d"):format(suffix, s.m, s.q) end
+  -- (Not %d: the game's %d stops at about 214,748g, and a listing at 1,500,000g stopped every
+  -- full scan short of done; GitHub #22, November 19. Plain numbers write any price.)
+  for suffix, s in pairs(bySuffix) do sx[#sx + 1] = math.floor(suffix) .. ":" .. math.floor(s.m) .. ":" .. math.floor(s.q) end
   -- Only full scans see versions. A search or quick check keeps the last full scan's
   -- version prices (sxt says when they're from) instead of wiping them.
   local old, sxt = ns.db.prices[key][id], nil
@@ -788,7 +794,11 @@ local function compareListings(before, after, gap)
         table.remove(fresh, repost)
         reposted = reposted + v.qty
       else
-        gone = gone + v.qty
+        local rest
+        for k, f in ipairs(fresh) do
+          if f.price == v.price and f.qty < v.qty and (not rest or f.qty > fresh[rest].qty) then rest = k end
+        end
+        gone = gone + v.qty - (rest and table.remove(fresh, rest).qty or 0)
       end
     else
       maybe = maybe + v.qty
@@ -869,8 +879,7 @@ ns.Scan = Scan
 -- "45s" or "2m 5s" since the scan started.
 local function took()
   local s = math.floor(GetTime() - (Scan.started or GetTime()) + 0.5)
-  if s < 60 then return s .. "s" end
-  return ("%dm %ds"):format(math.floor(s / 60), s % 60)
+  return ns.FormatElapsed(s)
 end
 
 local SORTS
@@ -1406,13 +1415,13 @@ ns:On("REPLICATE_ITEM_LIST_UPDATE", function()
         showProgress(n, n)
         local secs = math.floor(GetTime() - started + 0.5)
         if mine then
-          ns:Print(("Full scan done: %d listings across %d items in %s."):format(n, items, took()))
+          ns:Print(ns.LocalizeText("Full scan done: %d listings across %d items in %s."):format(n, items, took()))
         elseif waited then
           -- Says when, not whose: another addon may have asked meanwhile, and the results
           -- don't say who asked (Codex review, November 7).
-          ns:Print(("Full scan done: %d listings across %d items, about %d min after Forever Ledger asked for one."):format(n, items, math.max(1, math.floor(waited / 60 + 0.5))))
+          ns:Print(ns.LocalizeText("Full scan done: %d listings across %d items, about %d min after Forever Ledger asked for one."):format(n, items, math.max(1, math.floor(waited / 60 + 0.5))))
         else
-          ns:Print(("Another addon ran a full scan; Forever Ledger read it too: %d listings across %d items in %ds."):format(n, items, secs))
+          ns:Print(ns.LocalizeText("Another addon ran a full scan; Forever Ledger read it too: %d listings across %d items in %ds."):format(n, items, secs))
         end
         -- ns.fullScanDone: alerts from this check may open the Buy queue (Shuffles.lua).
         if ns.CheckDeals then
@@ -1431,6 +1440,7 @@ ns:On("REPLICATE_ITEM_LIST_UPDATE", function()
       -- market stays this scan's meanwhile (readingFull), and a price looked up or bought
       -- meanwhile stays as it is (liveAt).
       local ids, k = {}, 0
+      local saveErr   -- (an error saving one item: reported once)
       for id in pairs(byItem) do ids[#ids + 1] = id end
       local save
       save = ns.Timed("Full scan: saving", function()
@@ -1439,7 +1449,11 @@ ns:On("REPLICATE_ITEM_LIST_UPDATE", function()
           k = k + 1
           local id = ids[k]
           local units = byItem[id]
-          record(id, units, "full", liveSince); items = items + 1
+          -- One item's error mustn't stop the scan from finishing (GitHub #22: it stopped at
+          -- 304,000 of 304,584, every time): reported once, and the rest carry on.
+          local ok, err = pcall(record, id, units, "full", liveSince)
+          if not ok and not saveErr then saveErr = true; geterrorhandler()(err) end
+          items = items + 1
           sold.add(id, units)
           local has = false
           for _, u in ipairs(units) do if u[3] then versions = versions + 1; has = true end end
@@ -1462,7 +1476,8 @@ ns:On("AUCTION_HOUSE_SHOW", function()
   -- Another market and another cut (15% at a neutral one): work values out again.
   if (was and true or false) ~= (ns.neutralAH and true or false) and ns.InvalidateValues then ns:InvalidateValues(true) end
   -- For checking which auction houses are neutral (/fl debug).
-  ns:Debug("Auction house:", GetSubZoneText() or "?", "/", GetZoneText() or "?", "auctioneer faction:",
+  ns:Debug("Auction house:", GetSubZoneText() or "?", "/", GetZoneText() or "?",
+    "map:", tostring(C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")), "auctioneer faction:",
     tostring(UnitFactionGroup("npc")), ns.neutralAH and "neutral" or "faction")
   if ns.neutralAH then
     ns:Print("Neutral auction house: prices seen here are kept separate from your faction's.")
@@ -1605,11 +1620,11 @@ local function showCountdown(untilTime, held)
     if held == "page" then
       ns:SetStatusText("Live watch: waiting for the item page")
     elseif held then
-      ns:SetStatusText(("Live watch: your search, list in %ds"):format(left))
+      ns:SetStatusText(ns.LocalizeText("Live watch: your search, list in %ds"):format(left))
     else
       local full = Scan:FullWait()
-      ns:SetStatusText(("Live watch: next check in %ds%s"):format(left,
-        full > 0 and full < math.huge and (", full scan in %d min"):format(math.ceil(full / 60)) or ""))
+      ns:SetStatusText(ns.LocalizeText("Live watch: next check in %ds%s"):format(left,
+        full > 0 and full < math.huge and ns.LocalizeText(", full scan in %d min"):format(math.ceil(full / 60)) or ""))
     end
   end)
 end

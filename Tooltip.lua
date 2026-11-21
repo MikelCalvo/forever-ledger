@@ -17,7 +17,7 @@ local debugLinks = {}   -- tooltip links already shown in debug
 local function historyLines(tt, id)
   local days = ns.PriceHistory and ns:PriceHistory(id) or {}
   if #days == 0 then
-    tt:AddLine("No price history yet: it builds up with each scan", 0.5, 0.5, 0.5, true)
+    ns:AddTooltipLine(tt, "No price history yet: it builds up with each scan", 0.5, 0.5, 0.5, true)
     return
   end
   -- The range of each day's typical price (the average of the cheapest 20): the very
@@ -27,8 +27,8 @@ local function historyLines(tt, id)
   for _, d in ipairs(days) do
     lo, hi = math.min(lo or d[3], d[3]), math.max(hi or d[3], d[3])
   end
-  tt:AddLine("Price history", LR, LG, LB)
-  tt:AddDoubleLine("  typical, last " .. #days .. (#days == 1 and " day" or " days"),
+  ns:AddTooltipLine(tt, "Price history", LR, LG, LB)
+  ns:AddTooltipDoubleLine(tt, "  typical, last " .. #days .. (#days == 1 and " day" or " days"),
     lo == hi and ns.Money(lo) or (ns.Money(lo) .. " to " .. ns.Money(hi)), 0.7, 0.7, 0.7, 1, 1, 1)
   -- Trend: the last 3 days' typical price against the days before them.
   if #days >= 5 then
@@ -40,13 +40,13 @@ local function historyLines(tt, id)
     local text, r, g, b = "steady", 0.7, 0.7, 0.7
     if change >= 0.1 then text, r, g, b = ("rising, %d%% up"):format(change * 100 + 0.5), 0.5, 0.83, 0.61
     elseif change <= -0.1 then text, r, g, b = ("falling, %d%% down"):format(-change * 100 + 0.5), 1, 0.5, 0.4 end
-    tt:AddDoubleLine("  heading", text, 0.7, 0.7, 0.7, r, g, b)
+    ns:AddTooltipDoubleLine(tt, "  heading", text, 0.7, 0.7, 0.7, r, g, b)
   end
   local stats = ns.PriceStats and ns:PriceStats(id, "month")
   if stats then
-    tt:AddDoubleLine("  usual this month", ns.Money(stats.usual), 0.7, 0.7, 0.7, 1, 1, 1)
+    ns:AddTooltipDoubleLine(tt, "  usual this month", ns.Money(stats.usual), 0.7, 0.7, 0.7, 1, 1, 1)
     if stats.listed then
-      tt:AddDoubleLine("  usually listed", tostring(math.floor(stats.listed + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
+      ns:AddTooltipDoubleLine(tt, "  usually listed", tostring(math.floor(stats.listed + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
     end
   end
   -- Lowest ever: the all-time record only gets finished days, so today's (and the
@@ -56,7 +56,7 @@ local function historyLines(tt, id)
   for _, d in ipairs(days) do allLow = math.min(allLow or d[2], d[2]) end
   local rec = (ns.db.prices[ns.MarketKey()] or {})[id]
   if rec and rec.m and not rec.none then allLow = math.min(allLow or rec.m, rec.m) end
-  if allLow then tt:AddDoubleLine("  lowest ever seen", ns.Money(allLow), 0.7, 0.7, 0.7, 1, 1, 1) end
+  if allLow then ns:AddTooltipDoubleLine(tt, "  lowest ever seen", ns.Money(allLow), 0.7, 0.7, 0.7, 1, 1, 1) end
 end
 
 ---------------------------------------------------------------------------
@@ -65,7 +65,11 @@ end
 -- so you buy the cheapest space first. Plain bags only (not profession bags).
 ---------------------------------------------------------------------------
 local bagSlots = {}   -- [itemID] = slots, or false (not a plain bag / unknown), this session
-local SLOTS_PATTERN = (CONTAINER_SLOTS or "%d Slot %s"):gsub("%%d", "(%%d+)"):gsub("%%s", ".+")
+local function slotsPattern(format)
+  local p = format:gsub("|4[^;]*;", "\1"):gsub("%%%d+%$", "%%"):gsub("([%(%)%.%-%+%*%?%[%]%^%$])", "%%%1")
+  return (p:gsub("\1", ".-"):gsub("%%d", "(%%d+)"):gsub("%%s", ".+"))
+end
+local SLOTS_PATTERN = slotsPattern(CONTAINER_SLOTS or "%d Slot %s")
 local instant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
 
 local function slotsOf(id)
@@ -124,16 +128,16 @@ function ns:AddDisenchantLines(tt, id)
     for _, y in ipairs(ns:DisenchantYield(id)) do
       names[#names + 1] = ("%.2f %s"):format(y[2], ns:DisenchantMaterialName(y[1]))
     end
-    tt:AddLine("Disenchants to about " .. table.concat(names, ", "), LR, LG, LB, true)
+    ns:AddTooltipLine(tt, "Disenchants to about " .. table.concat(names, ", "), LR, LG, LB, true)
     return true
   end
-  tt:AddDoubleLine("Disenchants to, average after the cut", ns.Money(total), LR, LG, LB, 1, 1, 1)
+  ns:AddTooltipDoubleLine(tt, "Disenchants to, average after the cut", ns.Money(total), LR, LG, LB, 1, 1, 1)
   for _, p in ipairs(parts) do
     local amount = p.low == p.high and tostring(p.low) or (p.low .. "-" .. p.high)
-    tt:AddDoubleLine(("  %d%%: %s %s at %s"):format(p.chance, amount, ns:DisenchantMaterialName(p.id), ns.Money(p.each)),
+    ns:AddTooltipDoubleLine(tt, ns.LocalizeText("  %d%%: %s %s at %s"):format(p.chance, amount, ns:DisenchantMaterialName(p.id), ns.Money(p.each)),
       ns.Money(p.when), 0.7, 0.7, 0.7, 0.7, 0.7, 0.7)
   end
-  tt:AddLine("  You get one of these each time.", 0.5, 0.5, 0.5)
+  ns:AddTooltipLine(tt, "  You get one of these each time.", 0.5, 0.5, 0.5)
   return true
 end
 
@@ -143,13 +147,13 @@ local function bagLines(tt, id)
   local market = ns.db.prices[ns.MarketKey()] or {}
   local cost = bagCost(id, market)
   if not cost then return end
-  tt:AddDoubleLine(("Per slot (%d slots)"):format(slots), ns.Money(math.floor(cost / slots + 0.5)), LR, LG, LB, 1, 1, 1)
+  ns:AddTooltipDoubleLine(tt, ns.LocalizeText("Per slot (%d slots)"):format(slots), ns.Money(math.floor(cost / slots + 0.5)), LR, LG, LB, 1, 1, 1)
   local best = cheapestPerSlot()
   if best and best.id ~= id and best.per < cost / slots then
-    tt:AddDoubleLine("  cheapest per slot now", ("%s, %s"):format(ns.ItemName(best.id) or "?", ns.Money(math.floor(best.per + 0.5))),
+    ns:AddTooltipDoubleLine(tt, "  cheapest per slot now", ns.LocalizeText("%s, %s"):format(ns.ItemName(best.id) or "?", ns.Money(math.floor(best.per + 0.5))),
       0.7, 0.7, 0.7, 0.5, 0.83, 0.61)
   elseif best and best.id == id then
-    tt:AddLine("  the cheapest bag per slot right now", 0.5, 0.83, 0.61)
+    ns:AddTooltipLine(tt, "  the cheapest bag per slot right now", 0.5, 0.83, 0.61)
   end
 end
 
@@ -162,20 +166,20 @@ local function summaryLines(tt, id, s)
   if s.tipQuest ~= false and ns.QuestSummary then
     local n, keep = ns:QuestSummary(id)
     if n then
-      if keep > 0 then tt:AddLine(("Quests (%d): keep it"):format(n), 1, 0.82, 0)
-      else tt:AddLine(("Quests (%d)"):format(n), ORANGE[1], ORANGE[2], ORANGE[3]) end
+      if keep > 0 then ns:AddTooltipLine(tt, ns.LocalizeText("Quests (%d): keep it"):format(n), 1, 0.82, 0)
+      else ns:AddTooltipLine(tt, ns.LocalizeText("Quests (%d)"):format(n), ORANGE[1], ORANGE[2], ORANGE[3]) end
     end
   end
   if s.tipUsedBy ~= false and ns.CraftsUsingSummary then
     local line = ns:CraftsUsingSummary(id)
-    if line then tt:AddLine(line, ORANGE[1], ORANGE[2], ORANGE[3], true) end
+    if line then ns:AddTooltipLine(tt, line, ORANGE[1], ORANGE[2], ORANGE[3], true) end
   end
 end
 local function listLines(tt, id, s)
   if s.tipQuest ~= false and ns.QuestLines then
     for _, q in ipairs(ns:QuestLines(id, false) or {}) do
-      if q.keep then tt:AddLine(q.text .. ": keep it", 1, 0.82, 0, true)
-      else tt:AddLine(q.text, LR, LG, LB, true) end
+      if q.keep then ns:AddTooltipLine(tt, q.text .. ": keep it", 1, 0.82, 0, true)
+      else ns:AddTooltipLine(tt, q.text, LR, LG, LB, true) end
     end
   end
   if s.tipUsedBy == false or not ns.CraftsUsingByProfession then return end
@@ -184,16 +188,16 @@ local function listLines(tt, id, s)
   -- (Two calls: "a and f()" keeps only f's first value, which made the count 0.)
   local order, total = ns:CraftsUsingByProfession(id)
   if not order then return end
-  tt:AddLine(("Used to craft (%d):"):format(total), 1, 0.82, 0)
+  ns:AddTooltipLine(tt, ns.LocalizeText("Used to craft (%d):"):format(total), 1, 0.82, 0)
   for i, p in ipairs(order) do
-    if i > 5 then tt:AddLine(("  and %d more professions"):format(#order - 5), 0.6, 0.6, 0.6); break end
-    tt:AddLine("  " .. p.prof, ORANGE[1], ORANGE[2], ORANGE[3])
+    if i > 5 then ns:AddTooltipLine(tt, ns.LocalizeText("  and %d more professions"):format(#order - 5), 0.6, 0.6, 0.6); break end
+    ns:AddTooltipLine(tt, "  " .. p.prof, ORANGE[1], ORANGE[2], ORANGE[3])
     for j, c in ipairs(p.crafts) do
-      if j > 10 then tt:AddLine(("   - and %d more"):format(#p.crafts - 10), 0.6, 0.6, 0.6); break end
+      if j > 10 then ns:AddTooltipLine(tt, ns.LocalizeText("   - and %d more"):format(#p.crafts - 10), 0.6, 0.6, 0.6); break end
       local mine = ns.KnowsRecipe and ns:KnowsRecipe(p.prof, c.rid)
       local skill = c.skill and (" |cff999999(%d)|r"):format(c.skill) or ""
-      if mine then tt:AddLine("   - " .. (c.n or "?") .. skill, 0.5, 0.83, 0.61)
-      else tt:AddLine("   - " .. (c.n or "?") .. skill, 1, 1, 1) end
+      if mine then ns:AddTooltipLine(tt, "   - " .. (c.n or "?") .. skill, 0.5, 0.83, 0.61)
+      else ns:AddTooltipLine(tt, "   - " .. (c.n or "?") .. skill, 1, 1, 1) end
     end
   end
 end
@@ -214,13 +218,15 @@ local function addLines(tt, id, forceFull, copyPrice)
   local function credit()
     if credited then return end
     credited = true
-    tt:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5)
+    ns:AddTooltipLine(tt, ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5)
   end
   local function usedAHledger() return ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore end
+  local lapMem = ns.MemKB and ns.MemKB()
   local function lap(label)
     local now = clock()
-    if ns.PerfNote then ns.PerfNote("Tooltip: " .. label, now - lapAt, true) end
-    lapAt = now
+    local mem = ns.MemKB and ns.MemKB()
+    if ns.PerfNote then ns.PerfNote("Tooltip: " .. label, now - lapAt, true, mem and lapMem and mem - lapMem) end
+    lapAt, lapMem = now, mem
   end
   ns:RememberItem(id)
   if tt == GameTooltip then
@@ -261,7 +267,7 @@ local function addLines(tt, id, forceFull, copyPrice)
     -- "something noticeable"). Not again when Shift adds the rest to a compact tooltip.
     if not forceFull and on("tipDarkmoon") and ns.DarkmoonLine then
       local dmf = ns:DarkmoonLine(id)
-      if dmf then tt:AddLine(dmf, 1, 0.45, 0.4) end
+      if dmf then ns:AddTooltipLine(tt, dmf, 1, 0.45, 0.4) end
     end
     if expanded then
       listLines(tt, id, s)
@@ -282,7 +288,7 @@ local function addLines(tt, id, forceFull, copyPrice)
     if not o then return end
     local today = ns:AfterCut(rec.m) - (o.deposit or 0)
     if o.value < today - 1 then
-      tt:AddLine("  Auction house value is below today's cheapest: with few listed it uses this month's usual price, so a sudden rise doesn't count yet.", 0.5, 0.5, 0.5, true)
+      ns:AddTooltipLine(tt, "  Auction house value is below today's cheapest: with few listed it uses this month's usual price, so a sudden rise doesn't count yet.", 0.5, 0.5, 0.5, true)
     end
   end
 
@@ -298,7 +304,7 @@ local function addLines(tt, id, forceFull, copyPrice)
     local shownCheapest
     if price and on("tipPrice") and rec and rec.m and not rec.none and not ns.EXTERNAL_NAMES[src or ""] then
       local age = t and ns.Age(t) or ""
-      tt:AddDoubleLine("Auction, cheapest", ns.Money(rec.m) .. (age ~= "" and (" |cff999999" .. age .. "|r") or ""), LR, LG, LB, 1, 1, 1)
+      ns:AddTooltipDoubleLine(tt, "Auction, cheapest", ns.Money(rec.m) .. (age ~= "" and (" |cff999999" .. age .. "|r") or ""), LR, LG, LB, 1, 1, 1)
       shownCheapest = true
     end
     local best, options = ns:GetValue(id, true)
@@ -306,13 +312,13 @@ local function addLines(tt, id, forceFull, copyPrice)
     lap("worth to you")
     if best then
       local how = options and options[1] and options[1].label
-      tt:AddDoubleLine("Worth to you" .. (how and (" |cff999999(" .. how .. ")|r") or ""), ns.Money(best), LR, LG, LB, 1, 1, 1)
+      ns:AddTooltipDoubleLine(tt, "Worth to you" .. (how and (" |cff999999(" .. how .. ")|r") or ""), ns.Money(best), LR, LG, LB, 1, 1, 1)
       whyLower(best, options)
     elseif price then
       -- (Not again when "Auction, cheapest" above already says it: owner's screenshot,
       -- October 22, Small Glimmering Shard showed 3s 4c twice.)
       if not (shownCheapest and price == rec.m) then
-        tt:AddDoubleLine("Auction price", ns.Money(price), LR, LG, LB, 1, 1, 1)
+        ns:AddTooltipDoubleLine(tt, "Auction price", ns.Money(price), LR, LG, LB, 1, 1, 1)
       end
     elseif not shownCheapest then
       return
@@ -320,7 +326,7 @@ local function addLines(tt, id, forceFull, copyPrice)
     if withHistory then historyLines(tt, id) end
     -- AHledger's terms: credit wherever its prices show (Prices.lua).
     if src == "AHledger" or usedAHledger() then credit() end
-    tt:AddLine((on("tipHistory") and "Hold Shift for Forever Ledger details, Ctrl for price history"
+    ns:AddTooltipLine(tt, ns.LocalizeText(on("tipHistory") and "Hold Shift for Forever Ledger details, Ctrl for price history"
       or "Hold Shift for Forever Ledger details") .. (on("priceWindow") and (", " .. ns:PriceClickName() .. " for a graph") or ""), 0.5, 0.5, 0.5, true)
     return
   end
@@ -334,10 +340,10 @@ local function addLines(tt, id, forceFull, copyPrice)
     local own = rec and rec.m and not ns.EXTERNAL_NAMES[src or ""]
     if own then
       local listed = rec.q and (" |cff999999" .. rec.q .. " listed|r") or ""
-      tt:AddDoubleLine("Auction, cheapest", ns.Money(rec.m) .. listed .. age, LR, LG, LB, 1, 1, 1)
+      ns:AddTooltipDoubleLine(tt, "Auction, cheapest", ns.Money(rec.m) .. listed .. age, LR, LG, LB, 1, 1, 1)
       if rec.a and rec.a ~= rec.m then
         -- With 20 or fewer listed it's the average of all of them, so say so (Magic, October 3).
-        tt:AddDoubleLine((rec.q and rec.q <= 20) and ("  avg of all " .. rec.q) or "  avg of cheapest 20",
+        ns:AddTooltipDoubleLine(tt, (rec.q and rec.q <= 20) and ("  avg of all " .. rec.q) or "  avg of cheapest 20",
           ns.Money(rec.a), 0.7, 0.7, 0.7, 1, 1, 1)
       end
     else
@@ -345,18 +351,18 @@ local function addLines(tt, id, forceFull, copyPrice)
       local label = src or "?"
       if src == "AHledger" then
         local p = ns.AHledgerInfo(id)
-        if p and p.snapshot then label = "AHledger, packaged copy" end
+        if p and p.snapshot then label = ns.LocalizeText("AHledger, packaged copy") end
       end
-      tt:AddDoubleLine("Auction price (" .. label .. ")", ns.Money(price) .. age, LR, LG, LB, 1, 1, 1)
+      ns:AddTooltipDoubleLine(tt, ns.LocalizeText("Auction price (%s)"):format(label), ns.Money(price) .. age, LR, LG, LB, 1, 1, 1)
     end
   elseif rec and rec.none and on("tipPrice") then
-    tt:AddDoubleLine("Auction, cheapest", "none listed " .. ns.Age(rec.t), LR, LG, LB, 0.7, 0.7, 0.7)
+    ns:AddTooltipDoubleLine(tt, "Auction, cheapest", "none listed " .. ns.Age(rec.t), LR, LG, LB, 0.7, 0.7, 0.7)
   end
 
   -- How fast it sells, once there are enough scans to say (History.lua SellSpeed).
   if on("tipSpeed") and ns.SellSpeed then
     local ok, sp = pcall(ns.SellSpeed, ns, id)
-    if ok and sp then tt:AddDoubleLine("Sells", ns:SellSpeedText(sp), LR, LG, LB, 1, 1, 1) end
+    if ok and sp then ns:AddTooltipDoubleLine(tt, ns.LocalizeText("Sells"), ns:SellSpeedText(sp), LR, LG, LB, 1, 1, 1) end
     if (src == "AHledger" and on("tipPrice")) or (ok and sp and sp.from == "AHledger") then
       credit()
     end
@@ -378,10 +384,10 @@ local function addLines(tt, id, forceFull, copyPrice)
       local m, q = ns:SuffixPrice(id, suffix)
       local vname = ns:VersionName(suffix) or "these stats"
       if m and m > 0 then
-        tt:AddDoubleLine("  this version (" .. vname .. ")", ns.Money(m) .. " |cff999999" .. q .. " listed|r",
+        ns:AddTooltipDoubleLine(tt, "  this version (" .. vname .. ")", ns.Money(m) .. " |cff999999" .. q .. " listed|r",
           0.7, 0.7, 0.7, 1, 1, 1)
       elseif m == 0 then
-        tt:AddDoubleLine("  this version (" .. vname .. ")", "none listed", 0.7, 0.7, 0.7, 0.7, 0.7, 0.7)
+        ns:AddTooltipDoubleLine(tt, "  this version (" .. vname .. ")", "none listed", 0.7, 0.7, 0.7, 0.7, 0.7, 0.7)
       end
     elseif rec and rec.sx then
       local list = {}
@@ -390,10 +396,10 @@ local function addLines(tt, id, forceFull, copyPrice)
       end
       table.sort(list, function(a, b) return a.m < b.m end)
       if #list > 0 then
-        tt:AddDoubleLine("  versions on sale", tostring(#list), 0.7, 0.7, 0.7, 0.7, 0.7, 0.7)
+        ns:AddTooltipDoubleLine(tt, "  versions on sale", tostring(#list), 0.7, 0.7, 0.7, 0.7, 0.7, 0.7)
         for i = 1, math.min(3, #list) do
           local v = list[i]
-          tt:AddDoubleLine("    " .. (ns:VersionName(v.s) or "other stats"), ns.Money(v.m) .. " |cff999999" .. v.q .. " listed|r",
+          ns:AddTooltipDoubleLine(tt, "    " .. (ns:VersionName(v.s) or "other stats"), ns.Money(v.m) .. " |cff999999" .. v.q .. " listed|r",
             0.7, 0.7, 0.7, 1, 1, 1)
         end
       end
@@ -413,7 +419,7 @@ local function addLines(tt, id, forceFull, copyPrice)
   if s.tipNeutral and not ns.neutralAH and ns.NeutralCompare then
     local c = ns:NeutralCompare(id)
     if c and c.gain > 0 and c.pct >= 0.25 then
-      tt:AddDoubleLine("Booty Bay (15% cut)", ("%s, |cff7fd39c+%d%%|r %s"):format(ns.Money(c.there),
+      ns:AddTooltipDoubleLine(tt, "Booty Bay (15% cut)", ns.LocalizeText("%s, |cff7fd39c+%d%%|r %s"):format(ns.Money(c.there),
         math.floor(c.pct * 100 + 0.5), "|cff999999" .. ns.Age(c.t) .. "|r"), LR, LG, LB, 1, 1, 1)
     end
   end
@@ -424,7 +430,7 @@ local function addLines(tt, id, forceFull, copyPrice)
     local standing = buy.rep and buy.rep > 4 and (_G["FACTION_STANDING_LABEL" .. buy.rep] or ("standing " .. buy.rep))
     -- Under a copper each (ammo): the stack price, "1c for 5".
     local shown = (buy.p < 1 and buy.n) and (ns.Money(math.floor(buy.p * buy.n + 0.5)) .. " for " .. buy.n) or ns.Money(buy.p)
-    tt:AddDoubleLine("Vendor sells it for", shown .. (buy.lim and " |cff999999limited|r" or "")
+    ns:AddTooltipDoubleLine(tt, "Vendor sells it for", shown .. (buy.lim and " |cff999999limited|r" or "")
       .. (standing and (" |cff999999at " .. standing .. "|r") or ""), LR, LG, LB, 1, 1, 1)
   end
   lap("Booty Bay and vendor")
@@ -433,18 +439,18 @@ local function addLines(tt, id, forceFull, copyPrice)
   best, options = ns:WorthOfCopy(best, options, copyPrice)
   lap("worth to you")
   if best and on("tipWorth") then
-    tt:AddDoubleLine("Worth to you", ns.Money(best), LR, LG, LB, 1, 1, 1)
+    ns:AddTooltipDoubleLine(tt, "Worth to you", ns.Money(best), LR, LG, LB, 1, 1, 1)
     whyLower(best, options)
     local limit = s.tipOptions or 3
     for i, o in ipairs(options) do
       if i > limit then
-        tt:AddLine(("  and %d more ways"):format(#options - limit), 0.5, 0.5, 0.5)
+        ns:AddTooltipLine(tt, ns.LocalizeText("  and %d more ways"):format(#options - limit), 0.5, 0.5, 0.5)
         break
       end
       if i == 1 then
-        tt:AddDoubleLine("  " .. o.label, ns.Money(o.value), 0.5, 0.83, 0.61, 0.5, 0.83, 0.61)
+        ns:AddTooltipDoubleLine(tt, "  " .. o.label, ns.Money(o.value), 0.5, 0.83, 0.61, 0.5, 0.83, 0.61)
       else
-        tt:AddDoubleLine("  " .. o.label, ns.Money(o.value), 0.7, 0.7, 0.7, 0.7, 0.7, 0.7)
+        ns:AddTooltipDoubleLine(tt, "  " .. o.label, ns.Money(o.value), 0.7, 0.7, 0.7, 0.7, 0.7, 0.7)
       end
     end
   end
@@ -455,18 +461,18 @@ local function addLines(tt, id, forceFull, copyPrice)
   local maxBuy = on("tipBuy") and ns:BuyAtOrBelow(id, true)
   if maxBuy then
     if price and price <= maxBuy then
-      tt:AddDoubleLine("Buy at or below", ns.Money(maxBuy), LR, LG, LB, 0.5, 0.83, 0.61)
+      ns:AddTooltipDoubleLine(tt, "Buy at or below", ns.Money(maxBuy), LR, LG, LB, 0.5, 0.83, 0.61)
     else
-      tt:AddDoubleLine("Buy at or below", ns.Money(maxBuy), LR, LG, LB, 1, 1, 1)
+      ns:AddTooltipDoubleLine(tt, "Buy at or below", ns.Money(maxBuy), LR, LG, LB, 1, 1, 1)
     end
   end
 
   lap("buy at or below")
   local crateLine = on("tipCrate") and ns.CrateTooltipLine and ns:CrateTooltipLine(id)
-  if crateLine then tt:AddLine(crateLine, LR, LG, LB, true) end
+  if crateLine then ns:AddTooltipLine(tt, crateLine, LR, LG, LB, true) end
   -- Craftsman's Writs: what the order asks for and costs (Writs.lua; the same setting).
   local writLines = on("tipCrate") and ns.WritTooltipLines and ns:WritTooltipLines(id)
-  for _, l in ipairs(writLines or {}) do tt:AddLine(l, LR, LG, LB, true) end
+  for _, l in ipairs(writLines or {}) do ns:AddTooltipLine(tt, l, LR, LG, LB, true) end
   lap("crates and writs")
 
   if on("tipBagSlot") then bagLines(tt, id) end
@@ -485,17 +491,17 @@ local function addLines(tt, id, forceFull, copyPrice)
     local quests = on("tipQuest") and ns.QuestSummary and ns:QuestSummary(id)
     local crafts = on("tipUsedBy") and ns.CraftsUsing and ns:CraftsUsing(id)
     local what = (crafts and quests and "crafts and quests") or (crafts and "crafts") or (quests and "quests") or nil
-    if what then hints[#hints + 1] = "Shift for the " .. what end
+    if what then hints[#hints + 1] = ns.LocalizeText("Shift for the ") .. ns.LocalizeText(what) end
   end
   if withHistory then
     historyLines(tt, id)
   elseif not had and on("tipHistory") and price and #(ns:PriceHistory(id)) > 1 then
-    hints[#hints + 1] = "Ctrl for price history"
+    hints[#hints + 1] = ns.LocalizeText("Ctrl for price history")
   end
-  local click = not had and on("priceWindow") and price and (ns:PriceClickName() .. (#hints > 0 and " for a graph" or " for a price graph"))
-  local text = #hints > 0 and ("Hold " .. table.concat(hints, ", ")) or ""
+  local click = not had and on("priceWindow") and price and (ns:PriceClickName() .. ns.LocalizeText(#hints > 0 and " for a graph" or " for a price graph"))
+  local text = #hints > 0 and (ns.LocalizeText("Hold ") .. table.concat(hints, ", ")) or ""
   if click then text = text .. (text ~= "" and ", " or "") .. click end
-  if text ~= "" then tt:AddLine(text, 0.5, 0.5, 0.5, true) end
+  if text ~= "" then ns:AddTooltipLine(tt, text, 0.5, 0.5, 0.5, true) end
   lap("hints and history")
 end
 

@@ -56,6 +56,24 @@ T.test("Freeze watch: the slowest part of our share is named", function()
   ns.db.freezeLog = nil
 end)
 
+T.test("Freeze watch: leftovers made, and memory cleared in a freeze", function()
+  -- (Frank's AN30, November 19: 148 MB before clearing against 44 MB in use.)
+  local saved = ns.perf
+  ns.perf = {}
+  T.eq(ns.LeftoverLine(4), nil, "none yet")
+  ns.PerfNote("Tooltip: crates", 3, true, 3 * 1024)
+  ns.PerfNote("CHAT_MSG_ADDON", 1, false, 10 * 1024)
+  ns.PerfNote("Tiny", 1, false, 10)
+  local line = ns.LeftoverLine(4)
+  T.ok(line:find("CHAT_MSG_ADDON 10.0 MB, Tooltip: crates 3.0 MB", 1, true), line)
+  T.ok(not line:find("Tiny", 1, true), "under 1 MB isn't named")
+  T.ok(ns.PerfLines(3)[1]:find("MB of leftovers", 1, true) or ns.PerfLines(3)[2]:find("MB of leftovers", 1, true))
+  ns.perf = saved
+  ns.db.freezeLog = { { t = 1, ms = 600, ours = 2, slow = {}, clearedMB = 95 } }
+  T.ok(table.concat(ns.FreezeLines(8), "\n"):find("cleared 95 MB of leftover memory", 1, true))
+  ns.db.freezeLog = nil
+end)
+
 T.test("Freeze watch: a timed step inside a timed task isn't counted twice", function()
   -- (Codex review, November 17: 100 ms outer with an 80 ms inner showed as 180 ms.)
   local realClock = debugprofilestop
@@ -73,4 +91,25 @@ T.test("Freeze watch: a timed step inside a timed task isn't counted twice", fun
   T.ok(before == nil)
   T.eq(added, 100, "the frame's share: the outer task once")
   ns.perf["Test outer"], ns.perf["Test inner"] = nil, nil
+end)
+
+T.test("Freeze watch: a timed task that stops with an error doesn't hide the rest of the frame", function()
+  -- (Codex verification, November 18: an 80 ms task that threw left the count raised, so the
+  -- next 20 ms handler and a later 50 ms task counted as parts, and the frame showed 0 ms ours.)
+  local realClock, realHandler = debugprofilestop, geterrorhandler
+  local now = 0
+  debugprofilestop = function() return now end
+  geterrorhandler = function() return function() end end
+  local broken = ns.Timed("Test broken", function() now = now + 80; error("test") end)
+  ns:On("FL_TEST_DEPTH", function() broken() end)
+  ns:On("FL_TEST_DEPTH", function() now = now + 20 end)
+  local later = ns.Timed("Test later", function() now = now + 50 end)
+  local share = ns.FrameShare()
+  T.fire("FL_TEST_DEPTH")
+  later()
+  local added = ns.FrameShare() - share
+  debugprofilestop, geterrorhandler = realClock, realHandler
+  -- (Near, not equal: the frame's running total before it can carry a fraction.)
+  T.ok(math.abs(added - 150) < 0.001, "the event's 100 ms and the later task's 50, got " .. tostring(added))
+  ns.perf["Test broken"], ns.perf["Test later"], ns.perf.FL_TEST_DEPTH = nil, nil, nil
 end)

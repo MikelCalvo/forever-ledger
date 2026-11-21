@@ -12,6 +12,7 @@ local T = ns.Theme
 ---------------------------------------------------------------------------
 local function recalc() ns:InvalidateValues(true) end
 local function ads() ns:UpdateCustomerAds() end
+local function rework() ns:ReworkGoldMaking() end
 
 -- A setting: key, label, kind (check, number, money, choice), help; numbers have min,
 -- max and suffix, money a plainUnit, choices their options; after runs after a change.
@@ -23,9 +24,9 @@ local PAGES = {
     tabs = {
       { name = "Prices", rows = {
         { sub = "How items are valued" },
-        { key = "ahCut", label = "Auction house cut", kind = "number", suffix = "%", min = 0, max = 99, after = recalc,
+        { key = "ahCut", label = "Auction house cut", kind = "number", suffix = "%", min = 0, max = 99, after = function() recalc(); rework() end,
           help = "Taken off every auction house sale in values and shuffles, at your faction's auction house. Neutral ones (Booty Bay, Gadgetzan, Everlook) take 15%, counted by themselves." },
-        { key = "margin", label = "Safety margin", kind = "number", suffix = "%", min = 0, max = 99,
+        { key = "margin", label = "Safety margin", kind = "number", suffix = "%", min = 0, max = 99, after = rework,
           help = "Shuffles and \"buy at or below\" keep this much below an item's worth." },
         { key = "actionSeconds", label = "Seconds per craft", kind = "number", suffix = "seconds", min = 1, max = 60,
           help = "Used for the rough profit per hour." },
@@ -86,6 +87,9 @@ local PAGES = {
         help = "How big Forever Ledger's windows are, from 75% to 150%. Drag, then let go." },
       { key = "accent", label = "Accent color", kind = "accent", after = function() ns:OfferReload() end,
         help = "The color of what's active: the chosen tab, switches that are on, highlights. Auto uses EllesmereUI's color when it's installed." },
+      { key = "moneyStyle", label = "Show money as", kind = "choice", after = function() ns:OfferReload() end, options = {
+          { "coins", "Coins" }, { "letters", "Colored letters" } },
+        help = "Coins: the game's gold, silver and copper coins, as in your bags. Colored letters: 12g 50s 3c with the g in gold, the s in silver and the c in copper, calmer where there are many amounts." },
     } },
 
   { group = "Gold making" },
@@ -116,7 +120,7 @@ local PAGES = {
         { sub = "Post tab" },
         { key = "postUndercut", label = "Always undercut by", kind = "money", plainUnit = "c",
           after = function() if ns.RefreshPost and AuctionHouseFrame and AuctionHouseFrame:IsShown() then ns:RefreshPost() end end,
-          help = "The Post tab prices everything this much under the cheapest listing that isn't yours. Type 1 for 1 copper. \"off\": the same price as the cheapest. When the cheapest is yours, yours is matched, never undercut. A group with its own post rule (Groups tab) keeps its own undercut." },
+          help = "The Post tab prices everything this much under the cheapest listing that isn't yours, and so does Blizzard's Sell tab while the price helper is on (it fills the price box once the listings are in; you can still change it). Type 1 for 1 copper. \"off\": the same price as the cheapest. When the cheapest is yours, yours is matched, never undercut. A group with its own post rule (Groups tab) keeps its own undercut." },
         { sub = "Sell tab" },
         { key = "priceHelper", label = "Price helper on the Sell tab", kind = "check",
           help = "Under the Create Auction button: the usual price and the cheapest now, and buttons to fill in 1 copper under the cheapest or the usual price. Says when the cheapest is well below usual." },
@@ -317,7 +321,7 @@ if StaticPopupDialogs then
 end
 function ns:OfferReload()
   local T = ns.Theme
-  if T and T.NeedsReload and T:NeedsReload() and StaticPopup_Show then StaticPopup_Show("FLEDGER_RELOAD") end
+  if T and T.NeedsReload and T:NeedsReload() and StaticPopup_Show then ns:ShowPopup("FLEDGER_RELOAD") end
 end
 
 -- The accent colours on offer ("" = auto: EllesmereUI's, else the theme's teal).
@@ -535,16 +539,16 @@ local function defaultText(d)
   local v = ns.DEFAULT_SETTINGS and ns.DEFAULT_SETTINGS[d.key]
   if v == nil then return end
   if d.kind == "choice" then
-    for _, o in ipairs(d.options) do if o[1] == v then return "Default: " .. o[2] .. "." end end
+    for _, o in ipairs(d.options) do if o[1] == v then return ns.LocalizeText("Default: %s."):format(ns.LocalizeText(o[2])) end end
   elseif d.kind == "number" then
-    local s = d.suffix or ""
-    return ("Default: %g%s."):format(v, s == "" and "" or ((s:sub(1, 1) == "%" and "" or " ") .. s))
+    local s = ns.LocalizeText(d.suffix or "")
+    return ns.LocalizeText("Default: %g%s."):format(v, s == "" and "" or ((s:sub(1, 1) == "%" and "" or " ") .. s))
   elseif d.kind == "money" then
-    return "Default: " .. ((v > 0) and ns.MoneyPlain(v) or "off") .. "."
+    return ns.LocalizeText("Default: %s."):format((v > 0) and ns.LocalizeText(ns.MoneyPlain(v)) or ns.LocalizeText("off"))
   elseif d.kind == "accent" then
-    return "Default: Auto."
+    return ns.LocalizeText("Default: Auto.")
   elseif d.kind == "slider" then
-    return ("Default: %d%s."):format(v, d.suffix or "")
+    return ns.LocalizeText("Default: %d%s."):format(v, ns.LocalizeText(d.suffix or ""))
   end
 end
 
@@ -556,7 +560,8 @@ local function makeRow(box, d)
   r.label:SetText((d.label:gsub("^%s+", "")))
   r.indent = d.label:find("^%s") and 18 or 0   -- a sub-option of the one above
   local dflt = defaultText(d)
-  local helpText = d.help and dflt and (d.help .. " " .. dflt) or d.help or dflt
+  local help = d.help and ns.LocalizeText(d.help)
+  local helpText = help and dflt and (help .. " " .. dflt) or help or dflt
   if helpText then
     r.help = T:Text(box, 11, T.dim)
     r.help:SetPoint("TOPLEFT", r.label, "BOTTOMLEFT", 0, -3)
@@ -626,7 +631,7 @@ end
 
 local function rowMatches(r, q)
   local d = r.def
-  return d and ((d.label or ""):lower():find(q, 1, true) or (d.help or ""):lower():find(q, 1, true)) and true or false
+  return d and ((d.label or ""):lower():find(q, 1, true) or (d.help or ""):lower():find(q, 1, true) or ns.LocalizeText(d.label or ""):lower():find(q, 1, true) or ns.LocalizeText(d.help or ""):lower():find(q, 1, true)) and true or false
 end
 
 -- (Cards: T:PlaceCard / T:HideCards in Theme.lua, shared with Help.)
@@ -791,8 +796,8 @@ local function buildProfiles(box)
   for _, b in ipairs({ P.reset, P.delete }) do
     b:HookScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_TOP")
-      GameTooltip:AddLine(self == P.reset and "Reset to defaults" or "Delete profile", 1, 1, 1)
-      GameTooltip:AddLine(self == P.reset and "Puts every setting in this profile back to Forever Ledger's default. Global settings aren't touched. Click twice."
+      ns:TooltipAddLine(self == P.reset and "Reset to defaults" or "Delete profile", 1, 1, 1)
+      ns:TooltipAddLine(self == P.reset and "Puts every setting in this profile back to Forever Ledger's default. Global settings aren't touched. Click twice."
         or "Deletes the profile this character uses; characters on it go back to Default. Default can't be deleted. Click twice.", nil, nil, nil, true)
       GameTooltip:Show()
     end)
@@ -896,7 +901,7 @@ local function refreshProfiles(P)
   P.pick:SetOptions(opts)
   P.pick:SetValue(cur)
   local users = usersOf(cur)
-  P.users:SetText(#users > 0 and ("Used by: " .. table.concat(users, ", ")) or "")
+  P.users:SetText(#users > 0 and ns.LocalizeText("Used by: %s"):format(table.concat(users, ", ")) or "")
   P.rename:SetEnabled(cur ~= ns.DEFAULT_PROFILE)
   P.delete:SetEnabled(cur ~= ns.DEFAULT_PROFILE)
 end
@@ -1028,8 +1033,8 @@ local function layoutChars(C, width)
     local from = (c.via and ("from your sync partner " .. c.via))
       or (ns:IsOwnChar(key) and "this account") or "from an import or an earlier sync"
     local seen = lastSeen(key)
-    r.info:SetText(("%s %s, %s, %s"):format(c.realm or "?", c.faction or "", from,
-      me and "playing now" or (seen and ("last seen " .. ns.Age(seen)) or "never seen here")))
+    r.info:SetText(("%s %s, %s, %s"):format(c.realm or "?", ns.LocalizeText(c.faction or ""), ns.LocalizeText(from),
+      me and ns.LocalizeText("playing now") or (seen and ns.LocalizeText("last seen %s"):format(ns.Age(seen)) or ns.LocalizeText("never seen here"))))
     r.remove:SetShown(not me)
     r.you:SetShown(me)
     r:Show()

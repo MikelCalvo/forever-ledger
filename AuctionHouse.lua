@@ -113,7 +113,7 @@ local function tint(row, on, badge)
     row.flBar:SetPoint("BOTTOMLEFT")
     row.flBar:SetWidth(4)
     row.flBar:SetColorTexture(BUY_GREEN[1], BUY_GREEN[2], BUY_GREEN[3], 1)
-    row.flBadge = row:CreateFontString(nil, "OVERLAY")
+    row.flBadge = ns.LocalizeFontString(row:CreateFontString(nil, "OVERLAY"))
     row.flBadge:SetFont(T.font, 12, "OUTLINE")
     row.flBadge:SetTextColor(BUY_GREEN[1], BUY_GREEN[2], BUY_GREEN[3], 1)
     row.flBadge:SetPoint("LEFT", row, "LEFT", 12, 0)
@@ -149,7 +149,8 @@ local function altClickRow(row)
 end
 
 -- Watch one page: "commodity" or "item" buy pages (one item, with a line above the
--- list), or "browse" (search results, each row a different item).
+-- list on a commodity page and on the item box on an item page), or "browse" (search
+-- results, each row a different item).
 local function watch(page, kind)
   if not page or page.flWatcher then return end
   local commodity, browse = kind == "commodity", kind == "browse"
@@ -175,8 +176,11 @@ local function watch(page, kind)
       openAt(id)
     end)
   end
-  w.note = T:Text(page, 12, T.accent, "OVERLAY")
-  if list then
+  local onItem = kind == "item" and display
+  w.note = T:Text(onItem or page, 12, T.accent, "OVERLAY")
+  if onItem then
+    w.note:SetPoint("BOTTOMRIGHT", display, "BOTTOMRIGHT", -12, 8)
+  elseif list then
     -- Commodity pages have "N Available" just above the list, so go above that line.
     w.note:SetPoint("BOTTOMLEFT", list, "TOPLEFT", 4, commodity and 40 or 6)
   else
@@ -631,12 +635,12 @@ local function finderRow(i)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     ns.disenchantLinesFor = nil
     GameTooltip:SetItemByID(self.id)
-    if self.locked then GameTooltip:AddLine(("Needs Enchanting %d to disenchant."):format(self.locked), 1, 0.4, 0.4) end
+    if self.locked then ns:TooltipAddLine(("Needs Enchanting %d to disenchant."):format(self.locked), 1, 0.4, 0.4) end
     -- How Worth adds up, unless the item's own tooltip just showed it.
     if ns.disenchantLinesFor ~= self.id then ns:AddDisenchantLines(GameTooltip, self.id) end
-    if self.item.max then GameTooltip:AddLine("Up to for disenchanting: " .. ns.Money(self.item.max), 1, 0.82, 0) end
-    GameTooltip:AddLine("Right-click to add one to the shopping list picked above. Any stat version will do.", 0.8, 0.8, 0.8, true)
-    GameTooltip:AddLine("Click to search the auction house for it.", T.accent[1], T.accent[2], T.accent[3])
+    if self.item.max then ns:TooltipAddLine("Up to for disenchanting: " .. ns.Money(self.item.max), 1, 0.82, 0) end
+    ns:TooltipAddLine("Right-click to add one to the shopping list picked above. Any stat version will do.", 0.8, 0.8, 0.8, true)
+    ns:TooltipAddLine("Click to search the auction house for it.", T.accent[1], T.accent[2], T.accent[3])
     GameTooltip:Show()
   end)
   r:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -683,7 +687,9 @@ function ns:RefreshDisenchantFinder()
   if next(finderSettings().bands) == nil then
     finder.count:SetText("No item levels picked: choose some under Item levels.")
   else
-    finder.count:SetText(("%d items%s%s"):format(#items, #items > n and (", first %d shown/added"):format(n) or "", waiting > 0 and (", %d still loading"):format(waiting) or ""))
+    finder.count:SetText(ns.LocalizeFormatted("%d items", #items)
+      .. (#items > n and ns.LocalizeText((", first %d shown/added"):format(n)) or "")
+      .. (waiting > 0 and ns.LocalizeText((", %d still loading"):format(waiting)) or ""))
   end
 end
 
@@ -752,8 +758,8 @@ ns:On("AUCTION_HOUSE_SHOW", function()
       b:SetScript("OnClick", function() ns:ToggleSidePanel() end)
       b:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("Buy queue, shopping lists and disenchant finder", 1, 1, 1)
-        GameTooltip:AddLine("A panel beside the auction house. The buy queue lines up everything worth buying; each mouse wheel tick (or click) buys the next one.", nil, nil, nil, true)
+        ns:TooltipAddLine("Buy queue, shopping lists and disenchant finder", 1, 1, 1)
+        ns:TooltipAddLine("A panel beside the auction house. The buy queue lines up everything worth buying; each mouse wheel tick (or click) buys the next one.", nil, nil, nil, true)
         GameTooltip:Show()
       end)
       b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -769,8 +775,8 @@ ns:On("AUCTION_HOUSE_SHOW", function()
       w:SetScript("OnClick", function() ns:ToggleFlipWatch() end)
       w:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("Live watch", 1, 1, 1)
-        GameTooltip:AddLine("Keeps looking for items below vendor price while the auction house stays open: a full scan every 15 minutes, and the whole auction house list read about every 20 seconds in between. Chimes as soon as it finds one, and new flips join the Buy queue straight away.", nil, nil, nil, true)
+        ns:TooltipAddLine("Live watch", 1, 1, 1)
+        ns:TooltipAddLine("Keeps looking for items below vendor price while the auction house stays open: a full scan every 15 minutes, and the whole auction house list read about every 20 seconds in between. Chimes as soon as it finds one, and new flips join the Buy queue straight away.", nil, nil, nil, true)
         GameTooltip:Show()
       end)
       w:SetScript("OnLeave", function() GameTooltip:Hide() end)

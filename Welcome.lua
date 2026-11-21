@@ -1,4 +1,5 @@
 local _, ns = ...
+local print = ns.LocalizedPrint
 local T = ns.Theme
 
 ---------------------------------------------------------------------------
@@ -172,11 +173,14 @@ end
 -- { ..., fix = true } a fix (a wrench). The small ones share one card.
 ---------------------------------------------------------------------------
 ns.WHATS_NEW = {
-  version = "0.26.0",
+  version = "0.28.1",
   lines = {
-    { "Sessions are back: brought back at the request of flikera in the CurseForge comments. Ctrl-click the minimap button (or type /fl session start) and a small tracker counts gold an hour, gold in and out and what you loot. Stopped sessions are in the Ledger's Sessions sub-tab." },
+    { "Your prices are back: since the game changes on November 21 the game can give an empty realm name in some zones, which hid prices, sell speeds and Worth to you from tooltips. Forever Ledger now remembers each character's realm, and anything saved meanwhile moves back where it belongs. Nothing was lost.", fix = true },
+    { "Sessions: a Reset popup left open can no longer clear a newer session.", fix = true },
+    { "Price window: credits AHledger when its prices are used there.", fix = true },
   },
 }
+
 
 -- The kinds: icon (media/icons, drawn by tools/make-icons.ps1), colour, what a hover says.
 local KINDS = {
@@ -211,7 +215,7 @@ local function kindIcon(parent, kind, size)
   f:EnableMouse(true)
   f:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:AddLine(k[3], 1, 1, 1)
+    ns:TooltipAddLine(k[3], 1, 1, 1)
     GameTooltip:Show()
   end)
   f:SetScript("OnLeave", function() GameTooltip:Hide() end)

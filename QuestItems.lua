@@ -18,7 +18,7 @@ local QUESTS = {
   { "Gathering Leather", "Thunder Bluff", 8, "H", { "Light Leather", 12 } },
   { "Kodo Hide Bag", "Thunder Bluff", 10, "H", { "Light Leather", 4, "Coarse Thread", 4 } },
   { "Wild Hearts", "Silverpine Forest", 11, "H", { "Discolored Worg Heart", 6 } },
-  { "Thelsamar Blood Sausage", "Loch Modan", 11, "A", { "Boar Intestines", 3, "Bear Meat", 3, "Spider Ichor", 3 } },
+  { "Thelsamar Blood Sausages", "Loch Modan", 11, "A", { "Boar Intestines", 3, "Bear Meat", 3, "Spider Ichor", 3 } },
   { "Goretusk Liver Pie", "Westfall", 12, "A", { "Goretusk Liver", 10 } },
   { "Easy Strider Living", "Darkshore", 12, "A", { "Strider Meat", 5 } },
   { "A Donation of Wool", "a capital city", 12, "B", { "Wool Cloth", 60 } },
@@ -37,7 +37,7 @@ local QUESTS = {
   { "Search for Incendicite", "Loch Modan", 22, "A", { "Incendicite Ore", 6 } },
   { "Rethban Ore", "Redridge Mountains", 24, "A", { "Rethban Ore", 5 } },
   { "Seasoned Wolf Kabobs", "Duskwood", 25, "A", { "Lean Wolf Flank", 10, "Stormwind Seasoning Herbs", 1 } },
-  { "Look to the Stars", "Duskwood", 25, "A", { "Bronze Tube", 1 } },
+  { "Look To The Stars", "Duskwood", 25, "A", { "Bronze Tube", 1 } },
   { "A Donation of Silk", "a capital city", 26, "B", { "Silk Cloth", 60 } },
   { "Warsong Supplies", "Ashenvale", 27, "H", { "Deadly Blunderbuss", 1 } },
   { "Elixir of Agony", "Hillsbrad Foothills", 30, "H", { "Strong Troll's Blood Elixir", 1 } },
@@ -61,7 +61,7 @@ local QUESTS = {
   { "Cyclonian", "Alterac Mountains", 40, "B", { "Liferoot", 8 }, "WARRIOR" },
   { "Lore for a Price", "Ironforge", 41, "A", { "Silver Bar", 5 } },
   { "Stone Is Better than Cloth", "Badlands", 42, "B", { "Patterned Bronze Bracers", 1 } },
-  { "Wastewander Water Pouch", "Tanaris", 44, "B", { "Wastewander Water Pouch", 5 } },
+  { "Water Pouch Bounty", "Tanaris", 44, "B", { "Wastewander Water Pouch", 5 } },
   { "Sweet Amber", "Westfall", 44, "A", { "Truesilver Bar", 1 } },
   { "Caught!", "Searing Gorge", 45, "B", { "Silk Cloth", 15 } },
   { "Clamlette Surprise", "Tanaris", 45, "B", { "Giant Egg", 12, "Zesty Clam Meat", 10, "Alterac Swiss", 20 } },
@@ -74,15 +74,112 @@ local QUESTS = {
   { "Chasing A-Me 01", "Un'Goro Crater", 53, "B", { "Mithril Casing", 1 } },
   { "Bungle in the Jungle", "Tanaris", 53, "B", { "Un'Goro Soil", 5 } },
   { "The Love Potion", "Blackrock Depths", 54, "B", { "Gromsblood", 4 } },
-  { "Spectral Chalice", "Blackrock Depths", 55, "B", { "Star Ruby", 2, "Gold Bar", 20, "Truesilver Bar", 10 } },
+  { "The Spectral Chalice", "Blackrock Depths", 55, "B", { "Star Ruby", 2, "Gold Bar", 20, "Truesilver Bar", 10 } },
   { "Salve via Disenchanting", "Felwood", 55, "B", { "Lesser Nether Essence", 1 } },
   { "Sacred Cloth", "Felwood", 55, "B", { "Mooncloth", 2 } },
   { "Runecloth", "Felwood", 55, "B", { "Runecloth", 30 } },
   { "Fragments of the Past", "Eastern Plaguelands", 57, "A", { "Enchanted Thorium Bar", 1 } },
   { "Fire Plume Forged", "Un'Goro Crater", 57, "A", { "Thorium Bar", 2 } },
   { "Kitchen Assistance", "Silithus", 57, "B", { "Smoked Desert Dumplings", 10 } },
-  { "That's Asking a Lot", "Eastern Plaguelands", 58, "B", { "Unstable Trigger", 8, "Hi-Explosive Bomb", 8, "Thorium Bar", 2, "Golden Rod", 1 } },
+  { "That's Asking A Lot", "Eastern Plaguelands", 58, "B", { "Unstable Trigger", 8, "Hi-Explosive Bomb", 8, "Thorium Bar", 2, "Golden Rod", 1 } },
 }
+
+ns.QUEST_LIST = QUESTS
+
+-- Quest IDs (Classic's, from the Questie quest list as published in Carbonite's QuestName.lua,
+-- read November 19): a quest is done when any of them is (the cloth donations have one per
+-- city; some are steps of a chain with the same name), and its title is the game's own in
+-- the player's language. The Blasted Lands entry is five quests: done when all are.
+local QUEST_IDS = {
+  ["Stocking Jetsteam"] = { 317 }, ["Pie for Billy"] = { 86 }, ["Beer Basted Boar Ribs"] = { 384 },
+  ["Recipe of the Kaldorei"] = { 4161 }, ["Elixirs for the Bladeleafs"] = { 1581 }, ["Gathering Leather"] = { 768 },
+  ["Kodo Hide Bag"] = { 769 }, ["Wild Hearts"] = { 429 }, ["Thelsamar Blood Sausages"] = { 418 },
+  ["Goretusk Liver Pie"] = { 22 }, ["Easy Strider Living"] = { 2178 },
+  ["A Donation of Wool"] = { 7791, 7792, 7802, 7807, 7813, 7820, 7826, 7833 },
+  ["Westfall Stew"] = { 36, 38 }, ["The Family and the Fishing Pole"] = { 1141 }, ["Gathering the Cure"] = { 6123, 6128 },
+  ["Crocolisk Hunting"] = { 385 }, ["Gathering Materials"] = { 1921, 1961 }, ["Keeper of the Flame"] = { 103 },
+  ["Redridge Goulash"] = { 92 }, ["Dusky Crab Cakes"] = { 93 }, ["Murloc Poachers"] = { 150 },
+  ["The Touch of Zanzil"] = { 2607, 2608, 2609 }, ["Ineptitude + Chemicals = Fun"] = { 1073, 1074 },
+  ["Blood Shards of Agamaggan"] = { 5052 }, ["Search for Incendicite"] = { 466 }, ["Rethban Ore"] = { 347 },
+  ["Seasoned Wolf Kabobs"] = { 90 }, ["Look To The Stars"] = { 174, 175, 177, 181 },
+  ["A Donation of Silk"] = { 7793, 7798, 7803, 7808, 7814, 7821, 7827, 7834 },
+  ["Warsong Supplies"] = { 6571 }, ["Elixir of Agony"] = { 509, 513, 515, 517, 524 },
+  ["Items of Some Consequence"] = { 2746 }, ["Soothing Turtle Bisque"] = { 555, 7321 },
+  ["Barbaric Battlements"] = { 2751 }, ["Bad Medicine"] = { 204 }, ["Bartolo's Yeti Fur Cloak"] = { 565 },
+  ["Gnome Improvement"] = { 2948 }, ["Gizmo for Warug"] = { 1371 }, ["Stranglethorn Fever"] = { 348, 349 },
+  ["Catch of the Day"] = { 5386 }, ["Pearl Diving"] = { 705 }, ["Favor for Krazek"] = { 627 },
+  ["Gyro... What?"] = { 714 }, ["Liquid Stone"] = { 715 }, ["Coolant Heads Prevail"] = { 713 },
+  ["Barbecued Buzzard Wings"] = { 703 },
+  ["A Donation of Mageweave"] = { 7794, 7799, 7804, 7809, 7817, 7822, 7831, 7835 },
+  ["Items of Power"] = { 1948 }, ["Cyclonian"] = { 1712 }, ["Lore for a Price"] = { 2199 },
+  ["Stone Is Better than Cloth"] = { 716 }, ["Water Pouch Bounty"] = { 1707, 1878 }, ["Sweet Amber"] = { 48, 49, 50, 51, 53 },
+  ["Caught!"] = { 4449 }, ["Clamlette Surprise"] = { 6610 }, ["A Short Incubation"] = { 3842 },
+  ["Another Message to the Wildhammer"] = { 7842 },
+  ["Blasted Lands quests (five)"] = { 2581, 2583, 2585, 2601, 2603, all = true },   -- (the five deliveries, not their follow-ups: Codex review)
+  ["Un'Goro Soil"] = { 3761, 3764 }, ["Morrowgrain Research"] = { 3781, 3782, 3785, 3786 },
+  ["A Donation of Runecloth"] = { 7795, 7800, 7805, 7811, 7818, 7823, 7824, 7836 },
+  ["Chasing A-Me 01"] = { 4243, 4244, 4245 }, ["Bungle in the Jungle"] = { 4496 }, ["The Love Potion"] = { 4201 },
+  ["The Spectral Chalice"] = { 4083 }, ["Salve via Disenchanting"] = { 4107, 4112, 5886, 5891 },
+  ["Sacred Cloth"] = { 6032 }, ["Runecloth"] = { 6031 }, ["Fragments of the Past"] = { 5246, 5247 },
+  ["Fire Plume Forged"] = { 5801, 5802 }, ["Kitchen Assistance"] = { 8317 }, ["That's Asking A Lot"] = { 6026 },
+}
+ns.QUEST_IDS = QUEST_IDS
+
+-- Zones by map (Classic's map numbers; Stormwind 1453 and Elwynn 1429 seen in saved
+-- vendors), for the zone's name in the player's language.
+local ZONE_MAPS = {
+  ["Dun Morogh"] = 1426, ["Elwynn Forest"] = 1429, ["Teldrassil"] = 1438, ["Thunder Bluff"] = 1456,
+  ["Silverpine Forest"] = 1421, ["Loch Modan"] = 1432, ["Westfall"] = 1436, ["Darkshore"] = 1439,
+  ["Stormwind"] = 1453, ["Redridge Mountains"] = 1433, ["Duskwood"] = 1431, ["Stonetalon Mountains"] = 1442,
+  ["The Barrens"] = 1413, ["Ashenvale"] = 1440, ["Hillsbrad Foothills"] = 1424, ["Orgrimmar"] = 1454,
+  ["Stranglethorn Vale"] = 1434, ["Ironforge"] = 1455, ["Desolace"] = 1443, ["Badlands"] = 1418,
+  ["Dustwallow Marsh"] = 1445, ["Alterac Mountains"] = 1416, ["Tanaris"] = 1446, ["Searing Gorge"] = 1427,
+  ["Thousand Needles"] = 1441, ["The Hinterlands"] = 1425, ["Blasted Lands"] = 1419, ["Darnassus"] = 1457,
+  ["Un'Goro Crater"] = 1449, ["Felwood"] = 1448, ["Eastern Plaguelands"] = 1423, ["Silithus"] = 1451,
+}
+ns.QUEST_ZONE_MAPS = ZONE_MAPS
+
+local english = (GetLocale and GetLocale() or "enUS"):sub(1, 2) == "en"
+
+-- Whether a quest is done by its IDs: any of them, or all for a group (nil if unknown).
+function ns.QuestDoneByID(ids, isDone)
+  if not ids or #ids == 0 then return nil end
+  for _, id in ipairs(ids) do
+    local done = isDone(id)
+    if ids.all and not done then return false end
+    if not ids.all and done then return true end
+  end
+  return ids.all and true or false
+end
+local function completed(id)
+  local f = C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted or IsQuestFlaggedCompleted
+  if not f then return false end
+  local ok, r = pcall(f, id)
+  return ok and r and true or false
+end
+
+-- What to show: the game's title and zone name in the player's language; English as is.
+local function questTitle(q)
+  local ids = QUEST_IDS[q.quest]
+  if english or not ids or ids.all then return q.quest end
+  local get = C_QuestLog and C_QuestLog.GetTitleForQuestID
+  local ok, title = pcall(get or error, ids[1])
+  if ok and type(title) == "string" and title ~= "" then return title end
+  if C_QuestLog and C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, ids[1]) end
+  return q.quest
+end
+local function zoneName(where)
+  local map = not english and ZONE_MAPS[where]
+  if map and C_Map and C_Map.GetMapInfo then
+    local ok, info = pcall(C_Map.GetMapInfo, map)
+    if ok and info and type(info.name) == "string" and info.name ~= "" then return info.name end
+  end
+  return where
+end
+local function className(class)
+  local names = not english and LOCALIZED_CLASS_NAMES_MALE
+  return (names and names[class]) or (class:sub(1, 1) .. class:sub(2):lower())
+end
 
 -- itemID -> { { quest, where, level, faction, count, class }, ... }, built once.
 local byItem
@@ -213,7 +310,7 @@ function ns:QuestNeeds(id)
     if q.faction == "B" or q.faction == mine then
       local copy = {}
       for k, v in pairs(q) do copy[k] = v end
-      copy.done = done[q.quest:lower()] or false
+      copy.done = done[q.quest:lower()] or ns.QuestDoneByID(QUEST_IDS[q.quest], completed) or false
       copy.grey = q.level <= grey
       copy.otherClass = q.class ~= nil and q.class ~= class
       copy.mine = not (copy.done or copy.grey or copy.otherClass)
@@ -235,8 +332,8 @@ function ns:QuestLines(id, compact)
     if (not compact or q.keep) and (q.mine or not onlyMine) then
       if #lines < 3 then
         lines[#lines + 1] = {
-          text = ("Quest: %s (%s, level %d%s), needs %d%s"):format(q.quest, q.where, q.level,
-            q.class and (", " .. q.class:sub(1, 1) .. q.class:sub(2):lower()) or "", q.count,
+          text = ("Quest: %s (%s, level %d%s), needs %d%s"):format(questTitle(q), zoneName(q.where), q.level,
+            q.class and (", " .. className(q.class)) or "", q.count,
             q.done and " |cff888888(done)|r" or q.grey and " |cff888888(too low)|r"
               or q.otherClass and " |cff888888(other class)|r" or ""),
           keep = q.keep,

@@ -7,9 +7,12 @@ local _, ns = ...
 -- How: tabs made from the game's own auction house tab template sit after Browse, Sell
 -- and Auctions. Picking one empties Blizzard's content area (SetDisplayMode with an
 -- empty mode) and shows ours in its place; a hook on SetDisplayMode hides ours again
--- when a Blizzard tab is picked. When Auctionator or TradeSkillMaster are loaded they
--- bring the shared LibAHTab library, and our tabs go through it so all of them line up
--- in one row.
+-- when a Blizzard tab is picked. Our tabs go through the shared LibAHTab library (plusmouse,
+-- MIT, in Libs\; also brought by Auctionator and TradeSkillMaster), so every addon's tabs
+-- line up in one row and picking one hides the others' views. It ships with Forever Ledger
+-- since November 20 (Frank's screenshot: Cheap Upgrades made its own tab row too, both
+-- after Blizzard's last tab, so its tab sat on our Buy tab and neither view closed when
+-- the other's tab was picked). Our own row below is only the fallback if it's missing.
 --
 -- For now the tabs hold the existing panel (BuyQueue.lua): Buy = the Buy queue with
 -- Shopping lists and the Disenchant finder; My auctions = your auctions. Post follows in
@@ -91,7 +94,7 @@ local function selectTab(key)
   deselectOurs()
   PanelTemplates_SelectTab(buttons[key])
   for _, t in ipairs(TABS) do
-    if t.key == key and ah.SetTitle then ah:SetTitle(t.title) end
+    if t.key == key and ah.SetTitle then ah:SetTitle(ns.LocalizeText(t.title)) end
   end
   host.key, chosen = key, key
   if host:IsShown() then host:GetScript("OnShow")(host) else host:Show() end
@@ -113,14 +116,15 @@ local function makeOwn()
   root:SetPoint("TOPLEFT", last, "TOPRIGHT", 0, 0)
   local prev
   for _, t in ipairs(TABS) do
-    local b = CreateFrame("Button", "ForeverLedgerAHTab_" .. t.key, root, "AuctionHouseFrameDisplayModeTabTemplate")
-    b:SetText(t.label)
+    local key, label = t.key, t.label
+    local b = CreateFrame("Button", "ForeverLedgerAHTab_" .. key, root, "AuctionHouseFrameDisplayModeTabTemplate")
+    b:SetText(ns.LocalizeText(label))
     PanelTemplates_TabResize(b, 20, nil, 70)
     if prev then b:SetPoint("TOPLEFT", prev, "TOPRIGHT", overlap, 0)
     else b:SetPoint("TOPLEFT", root, "TOPLEFT", overlap, 0) end
     PanelTemplates_DeselectTab(b)
-    b:SetScript("OnClick", function() selectTab(t.key) end)
-    buttons[t.key] = b
+    b:SetScript("OnClick", function() selectTab(key) end)
+    buttons[key] = b
     prev = b
   end
   hooksecurefunc(ah, "SetDisplayMode", function(_, mode)
@@ -135,22 +139,23 @@ end
 -- Through LibAHTab: one frame per tab, each showing our host when it opens.
 local function makeShared()
   for _, t in ipairs(TABS) do
+    local key, label, title = t.key, t.label, t.title
     local holder = CreateFrame("Frame", nil, AuctionHouseFrame)
     holder:SetAllPoints(host)
     holder:Hide()
     holder:SetScript("OnShow", function()
-      host.key, chosen = t.key, t.key
+      host.key, chosen = key, key
       if host:IsShown() then host:GetScript("OnShow")(host) else host:Show() end
     end)
     holder:SetScript("OnHide", function()
       -- Another tab picked while the window stays open: no longer chosen. The window
       -- itself hiding (closing the auction house) keeps the choice for next visit.
-      if chosen == t.key and AuctionHouseFrame:IsVisible() then chosen = nil end
-      if host.key == t.key then host:Hide() end
+      if chosen == key and AuctionHouseFrame:IsVisible() then chosen = nil end
+      if host.key == key then host:Hide() end
     end)
-    local id = "ForeverLedger_" .. t.key
-    lib:CreateTab(id, holder, t.label, t.title)
-    buttons[t.key] = lib:GetButton(id)
+    local id = "ForeverLedger_" .. key
+    lib:CreateTab(id, holder, ns.LocalizeText(label), ns.LocalizeText(title))
+    buttons[key] = lib:GetButton(id)
   end
 end
 
@@ -224,7 +229,7 @@ end
 function ns:MarkAHTab(n)
   local b = buttons.buy
   if not b then return end
-  if n and n > 0 then b:SetText(("Buy (%d)"):format(n)) else b:SetText("Buy") end
+  if n and n > 0 then b:SetText(ns.LocalizeText("Buy (%d)"):format(n)) else b:SetText(ns.LocalizeText("Buy")) end
   if PanelTemplates_TabResize then PanelTemplates_TabResize(b, 20, nil, 70) end
 end
 

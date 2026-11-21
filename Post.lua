@@ -145,7 +145,7 @@ local function groupFor(id)
     local info = ns:GroupInfo(gid)
     if info and info.kind == "builtin" then
       local parent = info.parent and ns:GroupInfo(info.parent)
-      return gid, parent and (parent.name .. " · " .. info.name) or info.name
+      return gid, parent and (ns.LocalizeText(parent.name) .. " · " .. ns.LocalizeText(info.name)) or ns.LocalizeText(info.name)
     end
   end
   return "misc", "Miscellaneous"
@@ -463,12 +463,12 @@ local function postCurrent()
     end
     local ok, err = pcall(p.fn, unpack(p.args))
     if not ok then
-      say("Couldn't confirm: " .. tostring(err))
+      say(ns.LocalizeText("Couldn't confirm: %s"):format(tostring(err)))
       if refresh then refresh() end
       return
     end
     posted[p.key] = true
-    say(("Posted %d %s at %s each."):format(p.qty, ns.ItemName(e.id), ns.MoneyPlain(p.price)))
+    say(ns.LocalizeText("Posted %d %s at %s each."):format(p.qty, ns.ItemName(e.id), ns.MoneyPlain(p.price)))
     cur = nextUsable(cur, 1)
     if refresh then refresh() end
     return
@@ -508,7 +508,7 @@ local function postCurrent()
   end
   if not fn then say("This game client can't post from here: use Blizzard's Sell tab."); return end
   local ok, needsConfirm = pcall(fn, unpack(args))
-  if not ok then say("Couldn't post: " .. tostring(needsConfirm)); return end
+  if not ok then say(ns.LocalizeText("Couldn't post: %s"):format(tostring(needsConfirm))); return end
   if needsConfirm == true and confirmFn then
     pending = { fn = confirmFn, args = args, key = k, price = e.price, qty = e.qty, hours = e.hours, bag = e.bag, slot = e.slot }
     say("The auction house asks you to confirm this one: click Confirm post (or tick the wheel).")
@@ -516,7 +516,7 @@ local function postCurrent()
     return
   end
   posted[k] = true
-  say(("Posted %d %s at %s each."):format(e.qty, ns.ItemName(e.id), ns.MoneyPlain(e.price)))
+  say(ns.LocalizeText("Posted %d %s at %s each."):format(e.qty, ns.ItemName(e.id), ns.MoneyPlain(e.price)))
   cur = nextUsable(cur, 1)
   if refresh then refresh() end
 end
@@ -581,8 +581,8 @@ local function row(i)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     local e = entries[self.index]
     if e.link then GameTooltip:SetHyperlink(e.link) else GameTooltip:SetItemByID(e.id) end
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("Click to post this one next. Middle-click to skip it this visit (again to bring it back).", 0.7, 0.7, 0.7, true)
+    ns:TooltipAddLine(" ")
+    ns:TooltipAddLine("Click to post this one next. Middle-click to skip it this visit (again to bring it back).", 0.7, 0.7, 0.7, true)
     GameTooltip:Show()
   end)
   r:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -623,7 +623,9 @@ local function drawList()
       r.name:SetText(ns.ItemName(e.id) .. (e.count > 1 and (" x" .. e.count) or ""))
       r.price:SetText(e.price and ns.MoneyPlain(e.price) or "|cff888888-|r")
       local c = MARK_COLOR[label] or MARK_COLOR.Post
-      r.mark:SetText(label:upper())
+      local language = ns.GetLocaleData()
+      local mark = language and language.postMarks and language.postMarks[label]
+      r.mark:SetText(mark or label:upper())
       r.mark:SetTextColor(c[1], c[2], c[3])
       local dim = posted[k] or skipped[k]
       r.name:SetAlpha(dim and 0.45 or 1)
@@ -720,8 +722,8 @@ local function drawItem()
   if not e then return end
   f.icon:SetTexture(ns:ItemIcon(e.id))
   f.name:SetText(ns.ItemName(e.id))
-  local bits = { ("%d in your bags"):format(e.count) }
-  if e.usual then bits[#bits + 1] = "usual " .. ns.Money(e.usual) end
+  local bits = { ns.LocalizeText("%d in your bags"):format(e.count) }
+  if e.usual then bits[#bits + 1] = ns.LocalizeText("usual %s"):format(ns.Money(e.usual)) end
   f.sub:SetText(table.concat(bits, " · "))
   if not f.qty:HasFocus() then f.qty:SetText(tostring(e.qty or 0)) end
   f.price:SetValue(e.price)
@@ -736,9 +738,13 @@ local function drawItem()
   local k = keyOf(e)
   local l = liveFor(k)
   local why = e.why or ""
-  if e.price and e.suggested and e.price ~= e.suggested then why = "your price (suggested " .. ns.MoneyPlain(e.suggested) .. ")"
-  elseif not e.live and e.cheapest then why = why .. ", at the last scan" end
-  f.why:SetText(("%s%s. |cff9fe8dcRule from: %s.|r"):format(why:sub(1, 1):upper(), why:sub(2), e.ruleFrom or "Default"))
+  why = ns.LocalizeText(why:sub(1, 1):upper() .. why:sub(2))
+  if e.price and e.suggested and e.price ~= e.suggested then
+    why = ns.LocalizeText("Your price (suggested %s)"):format(ns.MoneyPlain(e.suggested))
+  elseif not e.live and e.cheapest then
+    why = why .. ns.LocalizeText(", at the last scan")
+  end
+  f.why:SetText(ns.LocalizeText("%s. |cff9fe8dcRule from: %s.|r"):format(why, ns.LocalizeText(e.ruleFrom or "Default")))
   f.post:SetText(pending and "Confirm post" or not l and "Checking..." or "Post")
   f.post:SetEnabled(pending ~= nil or (l ~= nil and not posted[k] and not skipped[k] and e.price ~= nil and (e.qty or 0) > 0))
   local left = 0
@@ -812,8 +818,8 @@ local function build(host)
   frame.scrollSwitch.label:SetText("Scroll to post")
   frame.scrollSwitch:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Scroll to post", 1, 1, 1)
-    GameTooltip:AddLine("While it's on, each mouse wheel tick over your bag list posts the highlighted item at the price shown, then moves to the next. Off, or Esc: the wheel just scrolls. It starts off every visit. Middle-click a row to skip it.", nil, nil, nil, true)
+    ns:TooltipAddLine("Scroll to post", 1, 1, 1)
+    ns:TooltipAddLine("While it's on, each mouse wheel tick over your bag list posts the highlighted item at the price shown, then moves to the next. Off, or Esc: the wheel just scrolls. It starts off every visit. Middle-click a row to skip it.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   frame.scrollSwitch:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1004,7 +1010,7 @@ local function build(host)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
       local e = entries[cur]
       local under = (e and e.rule and e.rule.undercut) or 0
-      GameTooltip:AddLine(under > 0 and ("Click to price yours %s under this one."):format(ns.MoneyPlain(under))
+      ns:TooltipAddLine(under > 0 and ("Click to price yours %s under this one."):format(ns.MoneyPlain(under))
         or "Click to price yours the same as this one.", 1, 1, 1, true)
       GameTooltip:Show()
     end)

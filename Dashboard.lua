@@ -173,7 +173,7 @@ local function totals(keys, from, to)
   }
 end
 
-local function money(v) return (v < 0 and "-" or "") .. ns.Money(math.abs(v)) end
+local function money(v) return (v < 0 and "-" or "") .. ns.MoneyBrief(math.abs(v)) end
 
 ---------------------------------------------------------------------------
 -- The graph
@@ -302,7 +302,7 @@ local function drawGraph(g, pts, from, to, rangeKey)
     local label = nextLabel()
     label:ClearAllPoints()
     label:SetPoint("TOP", g, "BOTTOMLEFT", PAD_LEFT + plotW * i / 3, PAD_BOTTOM - 4)
-    label:SetText(date(fmt, t))
+    label:SetText(ns.LocalizeText(date(fmt, t)))
   end
 
   doneCols(); doneLines(); doneLabels(); doneGrid()
@@ -321,8 +321,8 @@ local function hoverGraph(g)
   g.marker:SetHeight(plot.h)
   g.marker:Show()
   GameTooltip:SetOwner(g, "ANCHOR_CURSOR")
-  GameTooltip:AddLine(date("%b %d %H:%M", p.t), 1, 1, 1)
-  GameTooltip:AddLine(p.v and ns.Money(p.v) or "No record yet", 0.85, 0.85, 0.85)
+  ns:TooltipAddLine(date("%b %d %H:%M", p.t), 1, 1, 1)
+  ns:TooltipAddLine(p.v and ns.Money(p.v) or "No record yet", 0.85, 0.85, 0.85)
   GameTooltip:Show()
 end
 
@@ -357,7 +357,21 @@ function ns:BuildDashboard(parent)
 
   -- Headline tiles
   f.tiles = {}
-  for i = 1, 4 do f.tiles[i] = { label = text(f, 11, T.dim), value = text(f, 18), sub = text(f, 11, T.dim) } end
+  for i = 1, 4 do
+    local t = { label = text(f, 11, T.dim), value = text(f, 18), sub = text(f, 11, T.dim) }
+    -- The tiles show two coins; the hover has the exact amounts (Frank, November 21).
+    t.hit = CreateFrame("Frame", nil, f)
+    t.hit:EnableMouse(true)
+    t.hit:SetScript("OnEnter", function(self)
+      if not self.exact then return end
+      GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+      ns:TooltipAddLine(self.title or "", 1, 1, 1)
+      for _, line in ipairs(self.exact) do ns:TooltipAddDoubleLine(line[1], line[2], 0.7, 0.7, 0.7, 1, 1, 1) end
+      GameTooltip:Show()
+    end)
+    t.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    f.tiles[i] = t
+  end
 
   -- Riding fund (owner, October 5): a strip under the tiles until the character knows
   -- riding, then epic riding. Global setting, and Hide here per character.
@@ -376,8 +390,8 @@ function ns:BuildDashboard(parent)
   f.fundHide:GetFontString():SetFont(T.font, 11, "")
   f.fundHide:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Hide the riding fund on this character", 1, 1, 1)
-    GameTooltip:AddLine("Other characters keep it. /fl fund shows it here again; Settings, Global settings, Modules turns it off everywhere.", 0.8, 0.8, 0.8, true)
+    ns:TooltipAddLine("Hide the riding fund on this character", 1, 1, 1)
+    ns:TooltipAddLine("Other characters keep it. /fl fund shows it here again; Settings, Global settings, Modules turns it off everywhere.", 0.8, 0.8, 0.8, true)
     GameTooltip:Show()
   end)
   f.fundHide:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -387,16 +401,16 @@ function ns:BuildDashboard(parent)
     local r = self.fund
     if not r then return end
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine(r.name, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Training", ns.Money(r.training) .. (r.seen and "" or " |cff999999(not seen at a trainer yet)|r"), 0.7, 0.7, 0.7, 1, 1, 1)
-    GameTooltip:AddDoubleLine("A mount", "about " .. ns.Money(r.mount), 0.7, 0.7, 0.7, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Together", ns.Money(r.cost), 0.7, 0.7, 0.7, 1, 1, 1)
-    GameTooltip:AddDoubleLine("From level", tostring(r.level), 0.7, 0.7, 0.7, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Gold now (the characters above)", ns.Money(r.gold), 0.7, 0.7, 0.7, 1, 1, 1)
+    ns:TooltipAddLine(r.name, 1, 1, 1)
+    ns:TooltipAddDoubleLine("Training", ns.Money(r.training) .. (r.seen and "" or " |cff999999(not seen at a trainer yet)|r"), 0.7, 0.7, 0.7, 1, 1, 1)
+    ns:TooltipAddDoubleLine("A mount", "about " .. ns.Money(r.mount), 0.7, 0.7, 0.7, 1, 1, 1)
+    ns:TooltipAddDoubleLine("Together", ns.Money(r.cost), 0.7, 0.7, 0.7, 1, 1, 1)
+    ns:TooltipAddDoubleLine("From level", tostring(r.level), 0.7, 0.7, 0.7, 1, 1, 1)
+    ns:TooltipAddDoubleLine("Gold now (the characters above)", ns.Money(r.gold), 0.7, 0.7, 0.7, 1, 1, 1)
     if r.perDay and r.perDay > 0 then
-      GameTooltip:AddDoubleLine("Your pace", ns.Money(math.floor(r.perDay)) .. " a day", 0.7, 0.7, 0.7, 1, 1, 1)
+      ns:TooltipAddDoubleLine("Your pace", ns.LocalizeText("%s a day"):format(ns.Money(math.floor(r.perDay))), 0.7, 0.7, 0.7, 1, 1, 1)
     end
-    GameTooltip:AddLine("Goes away once this character knows it. Settings, Global settings, Modules turns it off everywhere; Hide here on this character.", 0.6, 0.6, 0.6, true)
+    ns:TooltipAddLine("Goes away once this character knows it. Settings, Global settings, Modules turns it off everywhere; Hide here on this character.", 0.6, 0.6, 0.6, true)
     GameTooltip:Show()
   end)
   f.fundHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -470,7 +484,7 @@ function ns:CharacterOptions()
   table.sort(own, byName)
   table.sort(other, byName)
   local opts = { { value = "all", label = ("All %s characters"):format(mine) } }
-  if ns.db.chars[me] then opts[#opts + 1] = { value = me, label = "  " .. name(me) .. " |cff888888(this one)|r" } end
+  if ns.db.chars[me] then opts[#opts + 1] = { value = me, label = "  " .. name(me) .. " |cff888888" .. ns.LocalizeText("(this one)") .. "|r" } end
   for _, k in ipairs(own) do opts[#opts + 1] = { value = k, label = "  " .. name(k) } end
   if #other > 0 then
     opts[#opts + 1] = { heading = true, label = "" }
@@ -492,8 +506,8 @@ local function charChoice(f)
   f.charChoice:SetOptions(ns:CharacterOptions())
 end
 
-local function signed(v, colour)
-  local s = (v > 0 and "+" or (v < 0 and "-" or "")) .. ns.Money(math.abs(v))
+local function signed(v, colour, exact)
+  local s = (v > 0 and "+" or (v < 0 and "-" or "")) .. (exact and ns.Money or ns.MoneyBrief)(math.abs(v))
   if not colour or v == 0 then return s end
   return (v > 0 and "|cff7fd39c" or "|cffee8597") .. s .. "|r"
 end
@@ -538,11 +552,14 @@ function ns:RefreshDashboard(f)
   -- Headline tiles
   local tileY, tileH = 32, 64
   local tw = math.floor((W - 3 * gap) / 4)
+  local perDay = math.floor(n.profit / n.days)
   local tiles = {
-    { "Gold now", last and ns.Money(last) or dim("no record yet"), first and last and (signed(last - first, true) .. " " .. phrase) or "" },
-    { "Profit " .. phrase, signed(n.profit, true), money(math.floor(n.profit / n.days)) .. " a day" },
-    { "Sales", ns.Money(n.sales), n.topSold and ("top: " .. n.topSold) or "" },
-    { "Expenses", ns.Money(n.expenses), n.topBought and ("top: " .. n.topBought) or "" },
+    { "Gold now", last and ns.MoneyBrief(last) or dim("no record yet"), first and last and (signed(last - first, true) .. " " .. phrase) or "",
+      last and { { "Gold now", ns.Money(last) }, first and { ns.LocalizeText(phrase), signed(last - first, true, true) } or nil } },
+    { ns.LocalizeText("Profit %s"):format(ns.LocalizeText(phrase)), signed(n.profit, true), ns.LocalizeText("%s a day"):format(money(perDay)),
+      { { "Profit", signed(n.profit, true, true) }, { "A day", (perDay < 0 and "-" or "") .. ns.Money(math.abs(perDay)) } } },
+    { "Sales", ns.MoneyBrief(n.sales), n.topSold and ns.LocalizeText("top: %s"):format(n.topSold) or "", { { "Sales", ns.Money(n.sales) } } },
+    { "Expenses", ns.MoneyBrief(n.expenses), n.topBought and ns.LocalizeText("top: %s"):format(n.topBought) or "", { { "Expenses", ns.Money(n.expenses) } } },
   }
   for i, t in ipairs(f.tiles) do
     local x = (i - 1) * (tw + gap)
@@ -553,6 +570,10 @@ function ns:RefreshDashboard(f)
     t.label:SetText(tiles[i][1])
     t.value:SetText(tiles[i][2])
     t.sub:SetText(tiles[i][3])
+    t.hit:ClearAllPoints()
+    t.hit:SetPoint("TOPLEFT", f, "TOPLEFT", x, -tileY)
+    t.hit:SetSize(tw, tileH)
+    t.hit.title, t.hit.exact = tiles[i][1], tiles[i][4]
   end
 
   -- Riding fund strip (the graph gives up its height while it shows)
@@ -582,7 +603,7 @@ function ns:RefreshDashboard(f)
     elseif fund.perDay and fund.perDay > 0 then
       eta = dim(("  about %d days at your pace"):format(math.ceil((fund.cost - fund.gold) / fund.perDay)))
     end
-    f.fundText:SetText(("%s: %s of %s (%d%%)%s"):format(fund.short, ns.Money(math.max(fund.gold, 0)), ns.Money(fund.cost),
+    f.fundText:SetText(("%s: %s of %s (%d%%)%s"):format(fund.short, ns.MoneyBrief(math.max(fund.gold, 0)), ns.MoneyBrief(fund.cost),
       math.floor(pct * 100), eta))
     f.fundHide:ClearAllPoints()
     f.fundHide:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 8, -(fTop + 6))
@@ -598,11 +619,11 @@ function ns:RefreshDashboard(f)
   local gTop = tileY + tileH + gap + (fund and (fundH + gap) or 0)
   local gBottom = dTop - gap
   nextCard(gTop, gBottom, 0, W)
-  T:StyleHeading(f.graphHead, "Gold over " .. (OVER[s.range] or "the week"))
+  T:StyleHeading(f.graphHead, ns.LocalizeText("Gold over %s"):format(ns.LocalizeText(OVER[s.range] or "the week")))
   place(f.graphHead, 12, gTop + 9)
   f.graphNote:ClearAllPoints()
   f.graphNote:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 12, -(gTop + 9))
-  f.graphNote:SetText(hi and ("high %s,  low %s"):format(ns.Money(hi), ns.Money(lo)) or "")
+  f.graphNote:SetText(hi and ns.LocalizeText("high %s,  low %s"):format(ns.MoneyBrief(hi), ns.MoneyBrief(lo)) or "")
   f.graph:ClearAllPoints()
   f.graph:SetPoint("TOPLEFT", 4, -(gTop + 26))
   f.graph:SetSize(W - 8, gBottom - gTop - 30)
@@ -626,13 +647,13 @@ function ns:RefreshDashboard(f)
   end
   detail(f.bestHead, f.best, 0, "Best and biggest", {
     { "Most profitable", n.topProfit or dim("none yet") },
-    { "Biggest sale", n.bigSale and (ns.Money(n.bigSale.a) .. "  " .. dim(n.bigSale.n)) or dim("none yet") },
-    { "Biggest purchase", n.bigBuy and (ns.Money(n.bigBuy.a) .. "  " .. dim(n.bigBuy.n)) or dim("none yet") },
+    { "Biggest sale", n.bigSale and (ns.MoneyBrief(n.bigSale.a) .. "  " .. dim(n.bigSale.n)) or dim("none yet") },
+    { "Biggest purchase", n.bigBuy and (ns.MoneyBrief(n.bigBuy.a) .. "  " .. dim(n.bigBuy.n)) or dim("none yet") },
   })
   detail(f.actHead, f.act, hw + gap, "Activity", {
     { "Auction sales a day", tostring(math.floor(n.nSales / n.days + 0.5)) },
     { "Auction purchases a day", tostring(math.floor(n.nBuys / n.days + 0.5)) },
-    { "Sales a day", ns.Money(math.floor(n.sales / n.days)) },
+    { "Sales a day", ns.MoneyBrief(math.floor(n.sales / n.days)) },
   })
   T:HideCards(f, card + 1)
 end

@@ -870,6 +870,44 @@ T.test("Full scan: one stopped while saving leaves a scan started in its place a
   wipe(S.timers)
 end)
 
+T.test("Full scan: a lot bought in part counts only the part bought as sold", function()
+  local Scan = ns.Scan
+  local key = ns.MarketKey()
+  local realMarket, realSold = ns.db.prices[key], ns.RecordSold
+  ns.db.prices[key] = {}
+  wipe(S.timers)
+  local PART, WHOLE = 94050, 94051
+  local listings
+  rawset(AH, "GetNumReplicateItems", function() return #listings end)
+  rawset(AH, "GetReplicateItemInfo", function(idx)
+    local l = listings[idx + 1]
+    return nil, nil, l[2], nil, nil, nil, nil, l[1] * l[2], nil, l[1] * l[2], nil, nil, nil, nil, nil, nil, l[3]
+  end)
+  rawset(AH, "GetReplicateItemTimeLeft", function() return 4 end)
+  local function fullScan()
+    Scan.active, Scan.full, Scan.started = true, true, GetTime()
+    S.now = S.now + 20
+    T.fire("REPLICATE_ITEM_LIST_UPDATE")
+    T.runTimers()
+  end
+  listings = { { 900, 20, PART }, { 500, 10, WHOLE } }
+  fullScan()
+  local sold = {}
+  ns.RecordSold = function(_, id, n) sold[id] = n end
+  S.now = S.now + 900
+  listings = { { 900, 12, PART } }
+  fullScan()
+  T.eq(sold[PART], 8, "20 listed, 12 of them still there")
+  T.eq(sold[WHOLE], 10, "all gone")
+  ns.RecordSold = realSold
+  rawset(AH, "GetNumReplicateItems", nil)
+  rawset(AH, "GetReplicateItemInfo", nil)
+  rawset(AH, "GetReplicateItemTimeLeft", nil)
+  ns.db.prices[key], ns.db.lastFullListings = realMarket, nil
+  if Scan.active then Scan:Stop("test") end
+  wipe(S.timers)
+end)
+
 -- Owner, November 11: /fl perf, kept at logout with /fl debug on, to read after a reload.
 T.test("Perf: the slowest tasks as lines, slowest single moment first", function()
   local real = ns.perf

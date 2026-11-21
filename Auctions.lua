@@ -109,23 +109,11 @@ end
 
 local ahOpen = false
 local firstRead = false   -- the first read of the list after opening the auction house
-local emptyRetried = false
+local GONE_CONFIRM = 10
+local confirmAsked = false
 local function readOwned()
   if not (AH and AH.GetNumOwnedAuctions and AH.GetOwnedAuctionInfo) then return false end
   local n = AH.GetNumOwnedAuctions() or 0
-  -- No auctions on the first answer, when some were up last time: the game can answer
-  -- empty for a moment (after a reload), which would look like they all sold. Ask once
-  -- more; a second empty answer is believed.
-  if n == 0 and firstRead and not emptyRetried then
-    for _, e in ipairs((mine() or {}).list or {}) do
-      if not e.sold then
-        emptyRetried = true
-        ns:Debug("Your auctions: the list came back empty; asking again before believing it.")
-        C_Timer.After(2, function() query() end)
-        return false
-      end
-    end
-  end
   local list, now = {}, time()
   local sold = Enum and Enum.AuctionStatus and Enum.AuctionStatus.Sold or 1
   -- What we knew before: when each sold, and sold ones whose gold has gone to the mail.
@@ -171,35 +159,55 @@ local function readOwned()
   end
   -- Sold before and gone from the list now: its gold was sent to the mailbox.
   -- Not sold before, gone now, with time still left on it when last seen: it sold while
-  -- you were away and its gold has gone to the mail already (it can't have expired yet,
-  -- and cancelling needs the auction house open, which updates this list).
+  -- you were away and its gold has gone to the mail already (it can't have expired yet).
+  -- The game can leave an auction out of an answer for a few seconds, so it counts only
+  -- when an answer GONE_CONFIRM seconds later still lacks it. Gone while you're here, it
+  -- was cancelled.
   local last = (mine() or {}).t or now
   local newlySold = {}
+  local awaySold = {}
   for _, e in ipairs(list) do
     local b = before[e.a]
     if e.sold and not (b and b.sold) then
       newlySold[#newlySold + 1] = e
+      if firstRead then awaySold[#awaySold + 1] = e end
     elseif not e.sold and b and not b.sold and (b.q or 1) > (e.q or 1) then
       -- Part of a stack bought (materials sell a few at a time; owner's test, October 5:
       -- "A buyer has been found" for Strange Dust, and no line at the auction house).
       newlySold[#newlySold + 1] = { id = e.id, q = (b.q or 1) - (e.q or 1), each = e.each }
+      if firstRead then awaySold[#awaySold + 1] = newlySold[#newlySold] end
     end
   end
+  local confirming = false
   for a, e in pairs(before) do
-    if not seen[a] and not e.sold and (e.left or 0) > (now - last) + 300 then
-      e.sold, e.mailed, e.soldAt = true, true, now
-      newlySold[#newlySold + 1] = e
+    if not seen[a] and not e.sold then
+      if not e.gone and (e.left or 0) > (now - last) + 300 then
+        e.gone, e.goneAway = now, firstRead or nil
+      end
+      if e.gone and now - e.gone < GONE_CONFIRM then
+        confirming = true
+        list[#list + 1] = e
+      elseif e.gone and e.goneAway then
+        e.gone, e.goneAway = nil, nil
+        e.sold, e.mailed, e.soldAt = true, true, now
+        newlySold[#newlySold + 1] = e
+        awaySold[#awaySold + 1] = e
+      end
     end
     if not seen[a] and e.sold and now - (e.soldAt or now) < KEEP_SOLD_SECONDS then
       e.mailed = true
       list[#list + 1] = e
     end
   end
+  if confirming and not confirmAsked then
+    confirmAsked = true
+    C_Timer.After(GONE_CONFIRM + 1, function() confirmAsked = false; query() end)
+  end
   -- What sold since the last look, found on the first read after opening: it waits in
   -- unseen for the chat line. Sales while you're there get the game's own message.
   local unseen = (mine() or {}).unseen or {}
-  if mine() and firstRead then
-    for _, e in ipairs(newlySold) do
+  if mine() then
+    for _, e in ipairs(awaySold) do
       unseen[#unseen + 1] = { id = e.id, q = e.q, each = e.each, dep = e.dep }
     end
   end
@@ -279,7 +287,7 @@ end
 -- recent price: an old one may have sold, and Cancel would take down an auction that was
 -- fine and lose its deposit (gold audit, November 9).
 local function undercutBy(e)
-  if e.sold or not e.each then return end
+  if e.sold or e.gone or not e.each then return end
   local now, rec = cheapestNow(e)
   if now and now < e.each and priceFresh(rec) then return now end
 end
@@ -287,7 +295,7 @@ end
 -- The cheapest, but well under the usual price: you could ask more (owner's mockup,
 -- November 15). Returns the usual price.
 local function couldAskMore(e)
-  if e.sold or not e.each or undercutBy(e) then return end
+  if e.sold or e.gone or not e.each or undercutBy(e) then return end
   local now, rec = cheapestNow(e)
   if not (now and priceFresh(rec)) then return end
   local stats = ns.PriceStats and ns:PriceStats(e.id, "month")
@@ -354,18 +362,16 @@ ns:On("OWNED_AUCTIONS_UPDATED", function()
   -- which would look like everything sold or vanished.
   if not ahOpen then return end
   if readOwned() == false then return end
-  if firstRead then
-    firstRead = false
-    local m = mine()
-    if m and m.unseen then
-      soldSummary(m.unseen)
-      m.unseen = nil
-    end
+  firstRead = false
+  local m = mine()
+  if m and m.unseen and #m.unseen > 0 then
+    soldSummary(m.unseen)
+    m.unseen = nil
   end
   checkAlerts()
   if refresh then refresh() end
 end)
-ns:On("AUCTION_HOUSE_SHOW", function() ahOpen, firstRead, emptyRetried = true, true, false end)
+ns:On("AUCTION_HOUSE_SHOW", function() ahOpen, firstRead = true, true end)
 ns:On("AUCTION_HOUSE_CLOSED", function() ahOpen, firstRead = false, false end)
 -- A sale or a cancel changes the list: ask again.
 ns:On("AUCTION_CANCELED", function() C_Timer.After(0.5, query) end)
@@ -441,7 +447,7 @@ end)
 local ROW = 22
 -- The status gets the rest (it was cut off); Yours and Cheapest apart (they touched on
 -- Gilded, owner's screenshot, October 5).
-local X = { name = 24, q = 178, each = 238, now = 312 }
+local X = { name = 24, q = 170, each = 240, now = 312 }   -- (Frank's screenshot, November 19: "4g 99s 99c" ran over Qty)
 local VIEWS = { { "all", "All" }, { "up", "Up" }, { "undercut", "Undercut" }, { "sold", "Sold" } }
 local view = "all"
 local cancelState     -- nil, "asking" (first click, until asked = time), or "on" (each click cancels one)
@@ -500,7 +506,7 @@ local function getRow(i)
   r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
   r.name = T:Text(r, 11)
   r.name:SetPoint("LEFT", X.name, 0)
-  r.name:SetWidth(X.q - X.name - 34)
+  r.name:SetWidth(X.q - X.name - 26)
   r.name:SetJustifyH("LEFT")
   r.name:SetWordWrap(false)
   r.q, r.each, r.now = T:Text(r, 11), T:Text(r, 11), T:Text(r, 11)
@@ -527,8 +533,8 @@ local function getRow(i)
   r.cancel:GetFontString():SetFont(T.font, 11, "")
   r.cancel:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:AddLine("Cancel this auction", 1, 1, 1)
-    GameTooltip:AddLine("Click twice: the items come back by mail and the deposit is lost. Cancel next undercut at the bottom does them one after another.", nil, nil, nil, true)
+    ns:TooltipAddLine("Cancel this auction", 1, 1, 1)
+    ns:TooltipAddLine("Click twice: the items come back by mail and the deposit is lost. Cancel next undercut at the bottom does them one after another.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   r.cancel:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -544,17 +550,17 @@ local function getRow(i)
     if not e then return end
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     if e.link then GameTooltip:SetHyperlink(e.link) else GameTooltip:SetItemByID(e.id) end
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddDoubleLine("Yours", e.each and (ns.Money(e.each) .. " each") or "?", 0.7, 0.7, 0.7, 1, 1, 1)
+    ns:TooltipAddLine(" ")
+    ns:TooltipAddDoubleLine("Yours", e.each and (ns.Money(e.each) .. " each") or "?", 0.7, 0.7, 0.7, 1, 1, 1)
     if e.sold then
-      GameTooltip:AddDoubleLine("You get", ns.Money(proceeds(e)), 0.7, 0.7, 0.7, 0.5, 0.83, 0.61)
-      GameTooltip:AddLine(e.dep and ("The sale after the cut, plus your %s deposit back."):format(ns.Money(e.dep))
+      ns:TooltipAddDoubleLine("You get", ns.Money(proceeds(e)), 0.7, 0.7, 0.7, 0.5, 0.83, 0.61)
+      ns:TooltipAddLine(e.dep and ("The sale after the cut, plus your %s deposit back."):format(ns.Money(e.dep))
         or "The sale after the cut (plus the deposit, if it was posted before this was counted).", 0.6, 0.6, 0.6, true)
-      GameTooltip:AddDoubleLine("Gold", mailText(e), 0.7, 0.7, 0.7, 1, 1, 1)
+      ns:TooltipAddDoubleLine("Gold", mailText(e), 0.7, 0.7, 0.7, 1, 1, 1)
     else
       local _, rec = cheapestNow(e)
-      if rec and rec.t then GameTooltip:AddDoubleLine("Prices checked", ns.Age(rec.t), 0.7, 0.7, 0.7, 1, 1, 1) end
-      if e.left then GameTooltip:AddDoubleLine("Time left (when read)", shortLeft(e.left), 0.7, 0.7, 0.7, 1, 1, 1) end
+      if rec and rec.t then ns:TooltipAddDoubleLine("Prices checked", ns.Age(rec.t), 0.7, 0.7, 0.7, 1, 1, 1) end
+      if e.left then ns:TooltipAddDoubleLine("Time left (when read)", shortLeft(e.left), 0.7, 0.7, 0.7, 1, 1, 1) end
     end
     GameTooltip:Show()
   end)
@@ -634,7 +640,7 @@ refresh = function()
       local stale = now and not priceFresh(rec)
       r.now:SetText(now and ((stale and "|cff888888" or by and "|cffee8597" or "|cff7fd39c") .. ns.MoneyPlain(now) .. "|r") or "|cff888888?|r")
       if e.a and pending[e.a] then r.status:SetText("|cff888888canceling...|r")
-      elseif e.a and skipCancel[e.a] then r.status:SetText("|cff888888skipped (middle-click to undo)|r")
+      elseif e.a and skipCancel[e.a] then r.status:SetText("|cff888888skipped (middle-click)|r")
       elseif by then r.status:SetText("|cffee8597undercut|r")
       elseif couldAskMore(e) then r.status:SetText("|cffffd100cheapest: could ask more|r")
       elseif stale then r.status:SetText("|cff888888check prices|r")
@@ -678,12 +684,13 @@ refresh = function()
   if box and box.money and box.money > 0 then gold[#gold + 1] = ("In your mailbox: |cff7fd39c%s|r (%s)"):format(ns.MoneyPlain(box.money), ns.Age(box.t)) end
   frame.gold:SetText(table.concat(gold, "   "))
   if cancelState == "asking" then
-    frame.info:SetText(("|cffffd100Cancel %d undercut %s and lose %s?|r Click again."):format(
-      #todo, #todo == 1 and "auction" or "auctions", #todo == 1 and "its deposit" or "their deposits"))
+    frame.info:SetText(ns.LocalizeFormatted("|cffffd100Cancel %d undercut %s and lose %s?|r Click again.",
+      #todo, #todo == 1 and "auction" or "auctions",
+      ns.LocalizeText(#todo == 1 and "its deposit" or "their deposits")))
   elseif #todo > 0 then
     local e = todo[1]
-    frame.info:SetText(("Next: %s x%d, yours %s, cheapest %s.%s"):format(ns.ItemName(e.id), e.q or 1, ns.MoneyPlain(e.each), ns.MoneyPlain(undercutBy(e) or cheapestNow(e) or e.each),
-      cancelState == "on" and "" or " |cff888888(First click asks, then one click each.)|r"))
+    -- (The "first click asks" hint is in the button's hover: it ran off the panel, November 19.)
+    frame.info:SetText(("Next: %s%s, yours %s, cheapest %s"):format(ns.ItemName(e.id), (e.q or 1) > 1 and (" x" .. e.q) or "", ns.MoneyPlain(e.each), ns.MoneyPlain(undercutBy(e) or cheapestNow(e) or e.each)))
   elseif counts.up > 0 then
     frame.info:SetText(("%d up, none undercut at the last check%s."):format(counts.up, m and m.t and (" (" .. ns.Age(m.t) .. ")") or ""))
   else
@@ -782,8 +789,8 @@ function ns:YourAuctionsFrame(side)
   frame.scrollSwitch.label:SetText("Scroll to cancel")
   frame.scrollSwitch:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Scroll to cancel", 1, 1, 1)
-    GameTooltip:AddLine("While it's on, each mouse wheel tick over the list cancels the next undercut auction (the one the line below names): the items come back by mail and the deposit is lost. Off, or Esc: the wheel scrolls the list. It starts off every visit. Middle-click a row to skip it.", nil, nil, nil, true)
+    ns:TooltipAddLine("Scroll to cancel", 1, 1, 1)
+    ns:TooltipAddLine("While it's on, each mouse wheel tick over the list cancels the next undercut auction (the one the line below names): the items come back by mail and the deposit is lost. Off, or Esc: the wheel scrolls the list. It starts off every visit. Middle-click a row to skip it.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   frame.scrollSwitch:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -792,8 +799,8 @@ function ns:YourAuctionsFrame(side)
   frame.askMore.label:SetText("Also cancel ones I could ask more for")
   frame.askMore:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Also cancel ones I could ask more for", 1, 1, 1)
-    GameTooltip:AddLine("Adds your auctions that are the cheapest but at least 10% under the usual price, to repost higher. Off each visit.", nil, nil, nil, true)
+    ns:TooltipAddLine("Also cancel ones I could ask more for", 1, 1, 1)
+    ns:TooltipAddLine("Adds your auctions that are the cheapest but at least 10% under the usual price, to repost higher. Off each visit.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   frame.askMore:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -806,8 +813,8 @@ function ns:YourAuctionsFrame(side)
   frame.check:SetPoint("BOTTOMLEFT", 10, 8)
   frame.check:HookScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Check prices", 1, 1, 1)
-    GameTooltip:AddLine("Looks up everything you have listed on the auction house now, one item at a time, and marks the ones that have been undercut. Full scans and Live watch check them too.", nil, nil, nil, true)
+    ns:TooltipAddLine("Check prices", 1, 1, 1)
+    ns:TooltipAddLine("Looks up everything you have listed on the auction house now, one item at a time, and marks the ones that have been undercut. Full scans and the Live watch check them too.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   frame.check:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -833,15 +840,15 @@ function ns:YourAuctionsFrame(side)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     -- Short lines under headings (owner's test, October 4: one block was hard to read).
     local A = T.accent
-    GameTooltip:AddLine("Cancel next undercut", 1, 1, 1)
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("How it works", A[1], A[2], A[3])
-    GameTooltip:AddLine("First click asks to confirm. After that, each click cancels one.", 0.9, 0.9, 0.9, true)
-    GameTooltip:AddLine("The line above says which one is next.", 0.9, 0.9, 0.9, true)
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("What happens", A[1], A[2], A[3])
-    GameTooltip:AddLine("The items come back by mail. Each loses its deposit.", 0.9, 0.9, 0.9, true)
-    GameTooltip:AddLine("Repost them just under the cheapest.", 0.9, 0.9, 0.9, true)
+    ns:TooltipAddLine("Cancel next undercut", 1, 1, 1)
+    ns:TooltipAddLine(" ")
+    ns:TooltipAddLine("How it works", A[1], A[2], A[3])
+    ns:TooltipAddLine("First click asks to confirm. After that, each click cancels one.", 0.9, 0.9, 0.9, true)
+    ns:TooltipAddLine("The line above says which one is next.", 0.9, 0.9, 0.9, true)
+    ns:TooltipAddLine(" ")
+    ns:TooltipAddLine("What happens", A[1], A[2], A[3])
+    ns:TooltipAddLine("The items come back by mail. Each loses its deposit.", 0.9, 0.9, 0.9, true)
+    ns:TooltipAddLine("Repost them just under the cheapest.", 0.9, 0.9, 0.9, true)
     GameTooltip:Show()
   end)
   frame.cancelNext:HookScript("OnLeave", function() GameTooltip:Hide() end)

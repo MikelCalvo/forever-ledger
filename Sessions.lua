@@ -153,12 +153,49 @@ end
 -- the same item off), and its name may carry random stats ("Short Bastard Sword of
 -- Strength" for the looted Short Bastard Sword). Copies are alike, so what's sold during
 -- the session comes off its loot first: never counted twice, at worst a little under.
+-- And the sale's mail must have come after the post (Codex verification, November 18: an
+-- old auction's mail, collected while this session's loot of the same item was still
+-- listed, took that loot off): arrived = when the mail came (History.lua, from its days
+-- left), and only posts made by then count. A little slack for the days-left rounding.
 local function nameMatches(sale, base)
   if not (sale and base) then return false end
   if sale == base then return true end
   return sale:sub(1, #base + 4) == base .. " of "
 end
-function ns:SessionSold(item, qty)
+local MAIL_SLACK = 300
+-- How many of this session's posts of id a sale whose mail came at arrived can be.
+-- Posts from before their times were kept (a session running across that update): what
+-- posted counts beyond the timed batches. They stay usable once a timed one is added
+-- (Codex verification, November 19: the first new post made the older ones vanish), and
+-- as the oldest they are used first.
+local function batchSum(batches)
+  local m = 0
+  for _, b in ipairs(batches or {}) do m = m + b[2] end
+  return m
+end
+local function untimed(s, id)
+  return math.max(0, ((s.posted or {})[id] or 0) - batchSum(s.postedAt and s.postedAt[id]))
+end
+local function postsBefore(s, id, arrived)
+  local n = (s.posted or {})[id] or 0
+  local batches = s.postedAt and s.postedAt[id]
+  if not (arrived and batches) then return n end   -- (no mail time, or no timed posts)
+  local m = untimed(s, id)
+  for _, b in ipairs(batches) do if b[1] <= arrived + MAIL_SLACK then m = m + b[2] end end
+  return math.min(n, m)
+end
+local function usePosts(s, id, qty)
+  local old = untimed(s, id)
+  s.posted[id] = s.posted[id] - qty
+  qty = qty - math.min(qty, old)
+  local batches = s.postedAt and s.postedAt[id]
+  while batches and qty > 0 and batches[1] do   -- the oldest first
+    local take = math.min(qty, batches[1][2])
+    batches[1][2], qty = batches[1][2] - take, qty - take
+    if batches[1][2] <= 0 then table.remove(batches, 1) end
+  end
+end
+function ns:SessionSold(item, qty, arrived)
   local s = live()
   if not (s and item) or s.char ~= ns.CharKey() then return end
   qty = tonumber(qty) or 1
@@ -166,8 +203,8 @@ function ns:SessionSold(item, qty)
   if not id then
     -- The posted item it was: the exact name first, then a version with random stats.
     local loose
-    for postedID, n in pairs(s.posted or {}) do
-      if n > 0 and s.loot[postedID] then
+    for postedID in pairs(s.posted or {}) do
+      if postsBefore(s, postedID, arrived) > 0 and s.loot[postedID] then
         local base = ns.ItemName(postedID)
         if base == item then id = postedID; break end
         if not loose and nameMatches(item, base) then loose = postedID end
@@ -175,8 +212,8 @@ function ns:SessionSold(item, qty)
     end
     id = id or loose
     if not id then return end
-    qty = math.min(qty, s.posted[id])
-    s.posted[id] = s.posted[id] - qty
+    qty = math.min(qty, postsBefore(s, id, arrived))
+    usePosts(s, id, qty)
   end
   if not (id and s.loot[id]) then return end
   s.sold = s.sold or {}
@@ -188,8 +225,13 @@ end
 function ns:SessionPosted(id, qty)
   local s = live()
   if not (s and id) or s.char ~= ns.CharKey() then return end
+  qty = tonumber(qty) or 1
   s.posted = s.posted or {}
-  s.posted[id] = (s.posted[id] or 0) + (tonumber(qty) or 1)
+  s.posted[id] = (s.posted[id] or 0) + qty
+  -- When, so a sale's mail from before it can't be this post's (postsBefore above).
+  s.postedAt = s.postedAt or {}
+  s.postedAt[id] = s.postedAt[id] or {}
+  table.insert(s.postedAt[id], { time(), qty })
 end
 ns:OnReady(function()
   local AH = C_AuctionHouse
@@ -254,7 +296,7 @@ local tracker, ticker
 -- under it (settings.sessionFull; Frank, November 17: "a mini version... then the full
 -- version that lets people see all the data live"): gold by where it came from, every
 -- item looted with its worth (hover one for its tooltip), and your usual pace.
-local W_MINI, W_SMALL = 224, 210
+local W_MINI, W_SMALL = 244, 210   -- (wider for Reset, November 18: four icons and the time with "paused")
 local FLASH_SECONDS = 4   -- (new loot shows on the tracker and is lit in the window this long)
 local LOOT_NOTE = "Loot counts at the better of the auction house (after the cut) and a vendor (Settings, Sessions: vendor only), and only while you still have it: what you sell during the session counts once, as the gold it brought."
 local function fullView() return ns.SessionWindowShown and ns.SessionWindowShown() end   -- (SessionWindow.lua)
@@ -278,8 +320,8 @@ local function iconButton(parent, icon, name, what, onClick)
   b:SetScript("OnEnter", function(self)
     tint(true)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine(self.name, 1, 1, 1)
-    if self.what then GameTooltip:AddLine(self.what, 0.7, 0.7, 0.7, true) end
+    ns:TooltipAddLine(self.name, 1, 1, 1)
+    if self.what then ns:TooltipAddLine(self.what, 0.7, 0.7, 0.7, true) end
     GameTooltip:Show()
   end)
   b:SetScript("OnLeave", function() tint(false); GameTooltip:Hide() end)
@@ -298,6 +340,7 @@ local function layoutTracker(f)
   f.loot:SetShown(not small)
   f.stop:SetShown(not small)
   f.pause:SetShown(not small)
+  f.reset:SetShown(not small)
   f.more:SetShown(not small)
   f.more:SetIcon(fullView() and "less" or "more", fullView() and "Less" or "More",
     fullView() and "Closes the session window." or "Opens the session window: a graph of your pace, every item looted (sort by any column), gold by where it came from and your past sessions.")
@@ -364,8 +407,10 @@ local function buildTracker()
   -- counted until Carry on (the play icon).
   f.pause = iconButton(f, "pause", "Pause", "The clock stops and nothing is counted until you carry on.", function() ns:PauseGeneralSession() end)
   f.pause:SetPoint("RIGHT", f.stop, "LEFT", -2, 0)
+  f.reset = iconButton(f, "reset", "Reset", "Clears what this session has counted and starts its clock again from zero. Asks first.", function() ns:ResetGeneralSession() end)
+  f.reset:SetPoint("RIGHT", f.pause, "LEFT", -2, 0)
   f.more = iconButton(f, "more", "More", "", function() ns:ToggleSessionWindow() end)
-  f.more:SetPoint("RIGHT", f.pause, "LEFT", -2, 0)
+  f.more:SetPoint("RIGHT", f.reset, "LEFT", -2, 0)
   layoutTracker(f)
   f:SetScript("OnEnter", function(self)
     local ahlBefore = ns.AHledgerUses and ns.AHledgerUses() or 0
@@ -373,9 +418,9 @@ local function buildTracker()
     -- (The full view shows all of it already.)
     if not st or fullView() then return end
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("Session", 1, 1, 1)
-    GameTooltip:AddDoubleLine("Gold in", ns.Money(st.earned), 0.8, 0.8, 0.8, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Gold out", ns.Money(st.spent), 0.8, 0.8, 0.8, 1, 1, 1)
+    ns:TooltipAddLine("Session", 1, 1, 1)
+    ns:TooltipAddDoubleLine("Gold in", ns.Money(st.earned), 0.8, 0.8, 0.8, 1, 1, 1)
+    ns:TooltipAddDoubleLine("Gold out", ns.Money(st.spent), 0.8, 0.8, 0.8, 1, 1, 1)
     -- Where it came from and went (owner's test, October 3: "+1g 84s, I don't think
     -- that's right"): auction sales, vendor, mail, loot..., biggest first.
     local by = {}
@@ -383,18 +428,18 @@ local function buildTracker()
     table.sort(by, function(a, b) return math.abs(a[2]) > math.abs(b[2]) end)
     for _, x in ipairs(by) do
       local label = (ns.MONEY_LABELS and ns.MONEY_LABELS[x[1]]) or x[1]
-      GameTooltip:AddDoubleLine("  " .. label, (x[2] < 0 and "|cffee8597-|r" or "|cff7fd39c+|r") .. ns.Money(math.abs(x[2])),
+      ns:TooltipAddDoubleLine("  " .. label, (x[2] < 0 and "|cffee8597-|r" or "|cff7fd39c+|r") .. ns.Money(math.abs(x[2])),
         0.7, 0.7, 0.7, 1, 1, 1)
     end
-    GameTooltip:AddDoubleLine("Looted, worth about", ns.Money(st.loot), 0.8, 0.8, 0.8, 1, 1, 1)
+    ns:TooltipAddDoubleLine("Looted, worth about", ns.Money(st.loot), 0.8, 0.8, 0.8, 1, 1, 1)
     for k = 1, math.min(5, #st.items) do
       local it = st.items[k]
-      GameTooltip:AddDoubleLine(("  %d x %s"):format(it.n, ns.ItemName(it.id) or "?"), ns.Money(it.value), 0.7, 0.7, 0.7, 1, 1, 1)
+      ns:TooltipAddDoubleLine(("  %d x %s"):format(it.n, ns.ItemName(it.id) or "?"), ns.Money(it.value), 0.7, 0.7, 0.7, 1, 1, 1)
     end
-    if #st.items > 5 then GameTooltip:AddLine(("  and %d more: the arrow (More) shows them all"):format(#st.items - 5), 0.6, 0.6, 0.6) end
-    GameTooltip:AddLine(LOOT_NOTE, 0.6, 0.6, 0.6, true)
-    if ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore then GameTooltip:AddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5) end
-    GameTooltip:AddLine(ns.db.settings.sessionSmall and "Drag to move. Right-click for the bigger view, with More (the arrow), Pause and Stop."
+    if #st.items > 5 then ns:TooltipAddLine(("  and %d more: the arrow (More) shows them all"):format(#st.items - 5), 0.6, 0.6, 0.6) end
+    ns:TooltipAddLine(LOOT_NOTE, 0.6, 0.6, 0.6, true)
+    if ns.AHledgerUses and ns.AHledgerUses() ~= ahlBefore then ns:TooltipAddLine(ns.AHLEDGER_CREDIT, 0.5, 0.5, 0.5) end
+    ns:TooltipAddLine(ns.db.settings.sessionSmall and "Drag to move. Right-click for the bigger view, with More (the arrow), Reset, Pause and Stop."
       or "Drag to move. Right-click to fold it to one line. The arrow shows everything as it comes in.", 0.6, 0.6, 0.6, true)
     GameTooltip:Show()
   end)
@@ -443,6 +488,34 @@ function ns:PauseGeneralSession(on)
   if drawTracker then drawTracker() end
 end
 
+-- Start over (Frank, November 18: a reset button, with a confirm): what this session
+-- counted goes, not kept in your sessions, and the clock starts again from zero. A paused
+-- one carries on. Asks first unless sure is true.
+StaticPopupDialogs["FOREVER_LEDGER_SESSION_RESET"] = {
+  text = "Reset the session?\n\nWhat it has counted so far (%s) is cleared and the clock starts again from zero. It isn't kept in your sessions.",
+  button1 = "Reset", button2 = CANCEL or "Cancel",
+  -- The session it described, never a newer one started while it stayed open (Codex
+  -- verification, November 19: stop, start again, then Accept cleared the new one).
+  OnAccept = function(_, which) ns:ResetGeneralSession(true, which) end,
+  timeout = 0, whileDead = true, hideOnEscape = true, showAlert = true,
+}
+function ns:ResetGeneralSession(sure, which)
+  local s = live()
+  if not s or s.char ~= ns.CharKey() then ns:Print("No session is running here. /fl session start begins one."); return end
+  if which and which ~= s then ns:Print("That session has ended, so nothing was reset."); return end
+  if not sure then
+    local st = ns:SessionTotals(s)
+    local popup = StaticPopup_Show("FOREVER_LEDGER_SESSION_RESET", ns.LocalizeText("%s, gold %s, loot %s"):format(duration(st.secs), signed(st.gained), ns.Money(st.loot)))
+    if popup then popup.data = s end
+    return
+  end
+  if StaticPopup_Hide then StaticPopup_Hide("FOREVER_LEDGER_SESSION_RESET") end
+  ns.db.liveSession = { t = time(), resume = time(), active = 0, char = s.char, money = {}, loot = {} }
+  ns.sessionLastLoot = nil
+  ns:Print("Session reset: counting again from now.")
+  if drawTracker then drawTracker() end
+end
+
 local function showTracker()
   if not tracker then tracker = buildTracker() end
   tracker:Show()
@@ -476,6 +549,7 @@ function ns:StartGeneralSession()
     ns:Print(("Ended the session left running on %s (%s)."):format((c and c.name) or s.char,
       kept and "it's in your sessions" or "nothing happened in it, so it isn't kept"))
   end
+  if StaticPopup_Hide then StaticPopup_Hide("FOREVER_LEDGER_SESSION_RESET") end
   ns.db.liveSession = { t = time(), resume = time(), active = 0, char = ns.CharKey(), money = {}, loot = {} }
   ns:Print("Session started: gold in and out and what you loot are counted. /fl session stop (or Stop on the tracker) ends it.")
   showTracker()
@@ -489,6 +563,7 @@ function ns:StopGeneralSession(quiet)
   if not s then ns:Print("No session is running. /fl session start begins one."); return end
   local st = ns:SessionTotals(s)
   ns.db.liveSession = nil
+  if StaticPopup_Hide then StaticPopup_Hide("FOREVER_LEDGER_SESSION_RESET") end
   hideTracker()
   -- Started and stopped with nothing happening (a misclick, a test): not kept (owner's
   -- test, October 3: the Dashboard listed several "0 min, gold 0c" sessions).
