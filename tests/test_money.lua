@@ -109,3 +109,22 @@ T.test("Money rounded for narrow columns: no copper from 1g, no silver from 100g
   T.eq(ns.MoneyRound(1234567), 1230000)
   T.eq(ns.MoneyRound(nil), nil)
 end)
+
+T.test("Money: colored letters when Show money as is set to them", function()
+  local saved = ns.db.settings.moneyStyle
+  ns.db.settings.moneyStyle = "letters"
+  local ok, out = pcall(ns.Money, 12345)
+  ns.db.settings.moneyStyle = saved
+  T.ok(ok, out)
+  T.eq(out, "1|cffffd100g|r 23|cffc7c7cfs|r 45|cffeda55fc|r")
+  T.eq(ns.Money(12345), coins("1g 23s 45c"), "back to coins")
+end)
+
+T.test("MoneyBrief: two coins from 1 gold, exact under it", function()
+  T.eq(ns.MoneyBrief(3297061), coins("329g 71s"), "rounded to the silver")
+  T.eq(ns.MoneyBrief(3299961), coins("330g"), "rounding up past a gold")
+  T.eq(ns.MoneyBrief(9999), coins("99s 99c"), "under a gold every coin stays")
+  T.eq(ns.MoneyBrief(10049), coins("1g"))
+  T.eq(ns.MoneyBrief(0), coins("0c"))
+  T.eq(ns.MoneyBrief(nil), "?")
+end)

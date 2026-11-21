@@ -64,7 +64,7 @@ local DEFAULTS = {
     buyQueue = { flips = true, disenchant = true, deals = false, lists = true, wheel = true, tab = "queue" },
     tipMode = "full", tipOptions = 3, tipPrice = true, tipSpeed = true, tipSell = true, tipQuest = true, tipQuestMine = true, tipDarkmoon = true, tipHistory = true, priceWindow = true, priceClick = "alt", tipWorth = true, tipBuy = true, tipDisenchant = true, tipUsedBy = true, tipCrate = true, tipBagSlot = true, tipNeutral = false, worthAH = true, worthVendor = true, worthDisenchant = true, worthCraft = true, ridingFund = true,
     -- theme: FL Gilded for new installs (owner, October 22); "default" is FL Bronze now.
-    theme = "gilded", accent = "", uiScale = 100, syncMoney = false, quietWatch = false },
+    theme = "gilded", accent = "", uiScale = 100, moneyStyle = "coins", syncMoney = false, quietWatch = false },
 }
 -- For Settings: "Default: Auto." under each choice (UI.lua).
 ns.DEFAULT_SETTINGS = DEFAULTS.settings
@@ -97,18 +97,35 @@ function ns.ItemCount(id, includeBank)
   return id and count and count(id, includeBank and true or false) or 0
 end
 
+-- Money as the game's coin icons, or as colored letters (Settings, Appearance, Show money
+-- as; Frank, November 21: the icons are fine but busy, letters to compare in game).
 local COIN = "|TInterface\\MoneyFrame\\UI-%sIcon:0:0:2:0|t"
-local GOLD, SILVER, COPPER = COIN:format("Gold"), COIN:format("Silver"), COIN:format("Copper")
+local UNITS = {
+  coins = { COIN:format("Gold"), COIN:format("Silver"), COIN:format("Copper") },
+  letters = { "|cffffd100g|r", "|cffc7c7cfs|r", "|cffeda55fc|r" },
+}
 
 function ns.Money(copper)
   if not copper then return "?" end
   copper = math.floor(copper + 0.5)
+  local style = ns.db and ns.db.settings and ns.db.settings.moneyStyle
+  local u = UNITS[style] or UNITS.coins
   local g, s, c = math.floor(copper / 10000), math.floor(copper % 10000 / 100), copper % 100
   local out = {}
-  if g > 0 then out[#out + 1] = g .. GOLD end
-  if s > 0 then out[#out + 1] = s .. SILVER end
-  if c > 0 or #out == 0 then out[#out + 1] = c .. COPPER end
+  if g > 0 then out[#out + 1] = g .. u[1] end
+  if s > 0 then out[#out + 1] = s .. u[2] end
+  if c > 0 or #out == 0 then out[#out + 1] = c .. u[3] end
   return table.concat(out, " ")
+end
+
+-- The two biggest coins, for summaries where the change doesn't matter (Frank, November
+-- 21: the Dashboard was busy with three coins on every amount): copper goes from 1 gold,
+-- rounded to the nearest silver. Exact amounts stay in hovers and wherever a price is used.
+function ns.MoneyBrief(copper)
+  if not copper then return "?" end
+  copper = math.floor(copper + 0.5)
+  if copper >= 10000 then copper = math.floor(copper / 100 + 0.5) * 100 end
+  return ns.Money(copper)
 end
 
 -- Money rounded for a narrow column: no copper from 1 gold, no silver from 100 gold

@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **Coins**: money shows the game's gold, silver and copper coins, as in your bags (thanks to vulpeep). Settings, Appearance, **Show money as** switches to colored letters instead. The Dashboard shows the two biggest coins; hover a tile for the exact amount.
 - **Russian**: the addon's text in Russian, with the right word forms for numbers (1 предмет, 2 предмета, 5 предметов; thanks to zergzorg). Other languages load nothing extra.
 - Vendor flips: click **Profit %** to sort by return on cost, or **Profit** to sort by the profit you can make now. Until you choose, the usual order stays. Watched items stay first (thanks to yippp).
 - `ForeverLedgerAPI` for other addons: your own scanned prices, price levels, the cost of buying a number of an item and the usual price (thanks to vulpeep; see docs/DEVELOPING.md).

@@ -87,6 +87,9 @@ local PAGES = {
         help = "How big Forever Ledger's windows are, from 75% to 150%. Drag, then let go." },
       { key = "accent", label = "Accent color", kind = "accent", after = function() ns:OfferReload() end,
         help = "The color of what's active: the chosen tab, switches that are on, highlights. Auto uses EllesmereUI's color when it's installed." },
+      { key = "moneyStyle", label = "Show money as", kind = "choice", after = function() ns:OfferReload() end, options = {
+          { "coins", "Coins" }, { "letters", "Colored letters" } },
+        help = "Coins: the game's gold, silver and copper coins, as in your bags. Colored letters: 12g 50s 3c with the g in gold, the s in silver and the c in copper, calmer where there are many amounts." },
     } },
 
   { group = "Gold making" },

@@ -2071,13 +2071,30 @@ local function buildLane(v, d)
   L.sortHeaders = {}
   for _, c in ipairs(columns) do
     if c[4] then
+      -- A column name like the others, clickable: the sorted one in the accent color with
+      -- " v", as the Ledger's headings (Frank, November 21: boxed buttons looked out of
+      -- place and the Profit box covered Total).
       local mode = c[4]
-      local button = T:Button(header, c[1], mode == "listedProfit" and 80 or 48, function()
+      local button = CreateFrame("Button", nil, header)
+      button:SetSize(mode == "listedProfit" and 64 or 52, 14)
+      button.fs = T:Text(button, 10, T.dim)
+      button.fs:SetAllPoints()
+      button.fs:SetJustifyH("RIGHT")
+      button:SetScript("OnClick", function()
         if flipSortMode() == mode then return end
         S().flipSort = mode
         sortFlips()
         refreshQueue()
-      end, 14)
+      end)
+      button:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        ns:TooltipAddLine(mode == "roi" and "Sort by Profit %" or "Sort by Profit", 1, 1, 1)
+        ns:TooltipAddLine(mode == "roi" and "Best return on what you spend first: 50% means you get 1.5 times what you pay."
+          or "The most gold you can make now first.", 0.8, 0.8, 0.8, true)
+        ns:TooltipAddLine("Both count only the listings your gold covers. Watched items always come first.", 0.6, 0.6, 0.6, true)
+        GameTooltip:Show()
+      end)
+      button:SetScript("OnLeave", function() GameTooltip:Hide() end)
       button:SetPoint("RIGHT", header, "RIGHT", c[2], 0)
       L.sortHeaders[#L.sortHeaders + 1] = { button = button, mode = mode, label = c[1] }
     else
@@ -2339,7 +2356,10 @@ local function fillLane(L)
   local d, armed = L.def, Q.armed == L.def.key
   for _, head in ipairs(L.sortHeaders or {}) do
     local mode = flipSortMode()
-    head.button:SetSelected(mode == head.mode or (mode == "profit" and head.mode == "listedProfit"))
+    local on = mode == head.mode or (mode == "profit" and head.mode == "listedProfit")
+    head.button.fs:SetText(ns.LocalizeText(head.label) .. (on and " v" or ""))
+    local color = on and T.accent or T.dim
+    head.button.fs:SetTextColor(color[1], color[2], color[3], 1)
   end
   -- Shown in order, but what you can't afford yet goes to the bottom (Magic, October 3).
   local list = {}
