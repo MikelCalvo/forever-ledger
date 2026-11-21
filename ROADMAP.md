@@ -27,6 +27,8 @@ What's already in the addon is in the [changelog](CHANGELOG.md). Download: [Rele
 - **Vendor or auction house?**: in the addon since 0.24.0 as the sell suggestion in your bags' tooltips (keep, vendor, auction house, or disenchant). Next: the same on the Sell tab for everything in your bags at once, with a one-click list to vendor the rest.
 - **Deals per stat version**: judge "of the Monkey" against other Monkey versions, not the item as a whole.
 - **Which recipes are worth buying**: a recipe's cost (gold or Merchant's Favor) against its profit per craft and how often you'd make it.
+- **Price gaps**: materials whose cheapest few listings sit far below the next price, to buy and relist just under it, in their own view in the Buy window.
+- **Sell chance**: how likely an item is to sell rather than expire, worked out from your own scans (no app or account), and your own sale rate: of what you posted in the last week, how much sold, expired or was cancelled.
 - **Market movers**: items whose price jumped or crashed since the last patch.
 - **More for deals**: sell speed in item tooltips too, a restock planner and named watch lists.
 - **"Post at" hint**: the price helper on the Sell tab is in the addon since 0.13.0 (usual price, cheapest now, Undercut and Usual buttons), and since 0.27.0 the Post tab prices everything in your bags from the listings and each group's post rule (match the cheapest, or always undercut by your amount). Next: suggest matching the cheapest for materials (the newest listing at a price sells first) and undercutting for gear.
