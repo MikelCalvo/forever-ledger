@@ -173,18 +173,18 @@ end
 -- { ..., fix = true } a fix (a wrench). The small ones share one card.
 ---------------------------------------------------------------------------
 ns.WHATS_NEW = {
-  version = "0.27.0",
+  version = "0.28.0",
   lines = {
-    { "Gold making: every way to make gold in one list (crafts that sell, conversions, vendor flips, deals, disenchanting, Booty Bay) with what it costs, brings and how many times you could do it. Click a craft for the cheapest way to get its materials. Replaces the Shuffles and Deals tabs.", major = true },
-    { "Auction house tabs: Forever Ledger's own Buy, Post and My auctions tabs in the auction house window. Post prices everything in your bags from the listings and your rules (match the cheapest, or always undercut by your amount); Post, Skip, or scroll to post the next one.", major = true },
-    { "Groups: built-in groups that sort themselves by item type (cloth, herbs, gear by level...) and your own, each with rules for posting, buying, vendoring and crafting." },
-    { "Professions and Writs: every recipe of your professions, even ones you haven't seen yet, with Trainers, Crates and all 150 Craftsman's Writ orders beside them (the cheapest way to fill each, and the cost per reputation)." },
-    { "Session window: a pace graph, every item looted and your past sessions. Pause and Reset on the tracker, and loot you sell during a session counts once." },
-    { "AHledger prices: with the AHledger addon installed, its prices fill in where your own scans are missing or old." },
-    { "Quick disenchant: hold Ctrl+Alt and click gear in your bags to disenchant it, or tick items in the Disenchant window (/fl disenchant) and click once per item." },
-    { "Full scans finish again: a piece of gear listed for over 214,748 gold stopped them just short of done.", fix = true },
+    { "Translations: Forever Ledger can show its text in your game's language, Simplified Chinese first (thanks to yippp). Professions, quests, riding and the Trade channel now work on game clients in every language.", major = true },
+    { "Writs: every column fits, and Per rep shows in green what the coin pouch pays you for each point.", change = true },
+    { "Disenchant window and Auctions tab: the button names the next item, and prices and lines fit.", change = true },
+    { "Booty Bay in every language: neutral auction house prices are kept apart on French, German and other clients too.", fix = true },
+    { "No hitch on crates and writs: hovering them no longer makes the game load thousands of items at once.", fix = true },
+    { "Other addons' auction house tabs: Cheap Upgrades, Auctionator and TSM tabs line up with ours in one row, each showing only its own view.", fix = true },
+    { "Always undercut: works on Blizzard's Sell tab too.", fix = true },
   },
 }
+
 
 -- The kinds: icon (media/icons, drawn by tools/make-icons.ps1), colour, what a hover says.
 local KINDS = {

@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-11-20
+
+### Highlights
+- Δ **Translations**: Forever Ledger can show its text in your game's language, Simplified Chinese first (thanks to yippp). Professions, quests, riding and the Trade channel now work on game clients in every language.
+- ✓ **Booty Bay in every language**: neutral auction house prices are kept apart on French, German and other clients too.
+- ✓ **No hitch on crates and writs**: hovering them no longer makes the game load thousands of items at once.
+- ✓ **Other addons' auction house tabs**: Cheap Upgrades, Auctionator and TSM tabs line up with ours in one row, each showing only its own view.
+- ~ **Writs**: every column fits, and Per rep shows in green what the coin pouch pays you for each point.
+- ~ **Disenchant window and Auctions tab**: the button names the next item, and prices and lines fit.
+- ✓ **Always undercut** works on Blizzard's Sell tab too.
+
 ### Added
 - **Translations**: the addon can show its text in other languages. Simplified Chinese is the first (thanks to yippp), with its own font; English stays the fallback for anything not translated yet. `/fl api`, `/fl perf` and debug lines stay English.
 
