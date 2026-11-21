@@ -228,3 +228,47 @@ T.test("Empty realm name: synced data is placed by both sides' records", functio
   T.eq(data.chars["Other Person-Hardcore"].level, 30)
   T.eq(data.sales[1].c, "Other Person-Hardcore")
 end)
+
+-- Codex review, November 21: markets went by already-known characters only.
+T.test("Empty realm name: a side's prices stay put when its characters are on two rulesets", function()
+  local me = ns.FullName()
+  local db = {
+    chars = { [me .. "-"] = { realm = "", faction = "Alliance" }, ["Other Person-Hardcore"] = { realm = "Hardcore", faction = "Alliance" } },
+    prices = { ["|Alliance"] = { [2589] = { m = 123, t = 1 } } },
+    history = { ["|Alliance"] = { [2589] = "20778:123:123" } },
+  }
+  ns.FixBlankRealm(db, "PvE")
+  T.ok(db.chars[me .. "-PvE"], "the logged-in character is placed")
+  T.eq(db.prices["Hardcore|Alliance"], nil, "prices not moved to Hardcore")
+  T.eq(db.history["Hardcore|Alliance"], nil, "nor the history")
+  T.ok(db.prices["|Alliance"] and db.history["|Alliance"], "they stay where they are")
+end)
+
+T.test("Empty realm name: a remembered alt on another ruleset makes its side ambiguous too", function()
+  local db = {
+    chars = { ["Main Person-PvE"] = { realm = "PvE", faction = "Alliance" }, ["Other Person-"] = { realm = "", faction = "Alliance" } },
+    charRealm = { ["Other Person"] = "Hardcore" },
+    prices = { ["|Alliance"] = { [2589] = { m = 123, t = 1 } } },
+  }
+  ns.FixBlankRealm(db, "PvE")
+  T.ok(db.chars["Other Person-Hardcore"], "the alt goes to Hardcore")
+  T.eq(db.prices["PvE|Alliance"], nil, "its prices aren't mixed into PvE")
+  T.ok(db.prices["|Alliance"])
+  -- The same through sync: the receiver remembers the alt.
+  local mine = { chars = { ["Main Person-PvE"] = { realm = "PvE", faction = "Alliance" } }, charRealm = { ["Other Person"] = "Hardcore" } }
+  local data = { chars = { ["Other Person-"] = { realm = "", faction = "Alliance" } }, prices = { ["|Alliance"] = { [2589] = { m = 9, t = 1 } } } }
+  ns.FixBlankRealm(data, "PvE", mine)
+  T.ok(data.chars["Other Person-Hardcore"])
+  T.eq(data.prices["PvE|Alliance"], nil, "sync: not mixed into PvE either")
+end)
+
+T.test("Empty realm name: one ruleset, its side's prices go back", function()
+  local me = ns.FullName()
+  local db = {
+    chars = { [me .. "-"] = { realm = "", faction = "Alliance" }, ["Bank Person-PvE"] = { realm = "PvE", faction = "Alliance" } },
+    prices = { ["|Alliance"] = { [2589] = { m = 123, t = 1 } } },
+  }
+  ns.FixBlankRealm(db, "PvE")
+  T.eq(db.prices["PvE|Alliance"][2589].m, 123)
+  T.eq(db.prices["|Alliance"], nil)
+end)

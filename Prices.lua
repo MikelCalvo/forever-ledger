@@ -789,24 +789,29 @@ local function compareListings(before, after, gap)
   -- November 21: "grab the expires if possible").
   local gone, maybe, reposted, expired = 0, 0, 0, 0
   for _, v in ipairs(vanished) do
-    if not v.sure and v.band == 1 then expired = expired + v.qty end
+    local repost
     if v.sure then
-      local repost
       for k, f in ipairs(fresh) do
         if f.qty == v.qty and f.price < v.price then repost = k; break end
       end
-      if repost then
-        table.remove(fresh, repost)
-        reposted = reposted + v.qty
-      else
-        local rest
-        for k, f in ipairs(fresh) do
-          if f.price == v.price and f.qty < v.qty and (not rest or f.qty > fresh[rest].qty) then rest = k end
-        end
-        gone = gone + v.qty - (rest and table.remove(fresh, rest).qty or 0)
-      end
+    end
+    if repost then
+      table.remove(fresh, repost)
+      reposted = reposted + v.qty
     else
-      maybe = maybe + v.qty
+      -- A smaller lot left at the same price is the rest of this one (part bought): only
+      -- the part gone counts, as sold or, from the last band, as expired (Codex review,
+      -- November 21: 20 in the last band, 12 left, counted 20 expired).
+      local rest
+      for k, f in ipairs(fresh) do
+        if f.price == v.price and f.qty < v.qty and (not rest or f.qty > fresh[rest].qty) then rest = k end
+      end
+      local left = v.qty - (rest and table.remove(fresh, rest).qty or 0)
+      if v.sure then gone = gone + left
+      else
+        maybe = maybe + left
+        if v.band == 1 then expired = expired + left end
+      end
     end
   end
   return gone, maybe, reposted, expired

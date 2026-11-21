@@ -929,14 +929,18 @@ T.test("Full scan: a listing gone from the last time band counts as expired, one
     T.fire("REPLICATE_ITEM_LIST_UPDATE")
     T.runTimers()
   end
-  listings = { { 700, 5, SHORT, 1 }, { 800, 3, LONG, 4 }, { 100, 1, 94063, 4 } }
+  listings = { { 700, 5, SHORT, 1 }, { 800, 3, LONG, 4 }, { 100, 1, 94063, 4 }, { 600, 20, 94064, 1 } }
   fullScan()
   S.now = S.now + 900
-  listings = { { 100, 1, 94063, 4 } }
+  listings = { { 100, 1, 94063, 4 }, { 600, 12, 94064, 1 } }
   fullScan()
   local gone, _, _, expired = ns:SellRate(SHORT)
   T.eq(gone, 0, "under 30 minutes left: not counted as sold")
   T.eq(expired, 5, "counted as expired")
+  -- (Codex review, November 21: 20 in the last band and 12 still there is 8 gone, not 20.)
+  gone, _, _, expired = ns:SellRate(94064)
+  T.eq(expired, 8, "only the part gone from a lot that is still partly listed")
+  T.eq(gone, 0)
   gone, _, _, expired = ns:SellRate(LONG)
   T.eq(gone, 3, "12 hours or more left: sold")
   T.eq(expired, 0)

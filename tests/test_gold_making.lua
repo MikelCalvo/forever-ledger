@@ -133,3 +133,35 @@ T.test("Gold making: a new auction house cut or safety margin works the list out
   ns.ReworkGoldMaking = real
   if not ok then error(err, 0) end
 end)
+
+-- Codex review, November 21: a sliced run finishing after a settings change put its old
+-- list back.
+T.test("Gold making: a settings change stops the run in progress; its old list never comes back", function()
+  local realIdeas, realClock, now = ns.GoldIdeas, debugprofilestop, 0
+  debugprofilestop = function() return now end
+  local calls = 0
+  ns.GoldIdeas = function()
+    calls = calls + 1
+    local mine = calls
+    for _ = 1, 5 do now = now + 5; ns.MaybeYield() end
+    return { { key = "run" .. mine } }, 0
+  end
+  local ok, err = pcall(function()
+    local G = ns._goldMakingTest
+    G.work()
+    local rows, working = G.rows()
+    T.eq(rows, nil, "still working after the first frame")
+    T.ok(working, "a run in progress")
+    ns:ReworkGoldMaking()   -- (what the cut and margin settings call)
+    T.runTimers()
+    rows = G.rows()
+    T.eq(rows, nil, "the stopped run's list isn't shown")
+    G.work()
+    T.runTimers()
+    rows = G.rows()
+    T.eq(rows and rows[1].key, "run2", "the new run's list")
+  end)
+  ns.GoldIdeas, debugprofilestop = realIdeas, realClock
+  T.runTimers()
+  if not ok then error(err, 0) end
+end)

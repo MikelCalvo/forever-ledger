@@ -306,8 +306,12 @@ end
 -- It's also cleared at least once a minute.
 local cache, cacheTime, dirty = {}, 0, false
 local listCache = {}    -- itemID = full options list at depth 0 (tooltips, finder)
+-- Counts each time every value is thrown away (Gold making checks whether that happened
+-- while it worked its list out over several frames: Codex review, November 21).
+local thrownAway = 0
+function ns.ValuesStamp() return thrownAway end
 function ns:InvalidateValues(now)
-  if now then cache, listCache, cacheTime, dirty = {}, {}, GetTime(), false else dirty = true end
+  if now then cache, listCache, cacheTime, dirty = {}, {}, GetTime(), false; thrownAway = thrownAway + 1 else dirty = true end
 end
 -- One item's price changed (a search shown on the auction house): only its own values go
 -- now, and chains that use it as a material follow with the next rebuild, as for other
@@ -501,6 +505,7 @@ local function freshCache()
   local age = GetTime() - cacheTime
   if (dirty and age > 30) or age > 300 then
     cache, listCache, cacheTime, dirty = {}, {}, GetTime(), false
+    thrownAway = thrownAway + 1
     if ns.PerfNote then ns.PerfNote("Values thrown away (count only)", 0) end
   end
 end

@@ -535,33 +535,57 @@ end
 -- (prices go stale anyway; mixing rulesets would be worse).
 -- realm: the logged-in character's realm. Also learns from the tables in extra (sync).
 local function blankRealmRenamer(db, realm, extra)
-  local home, seen, sideRealm, anyRealm = {}, {}, {}, nil
+  local home, seen = {}, {}
   local function good(r) return type(r) == "string" and r:find("%S") and r ~= "?" end
   local function note(t, key, r)
     if t[key] == nil then t[key] = r elseif t[key] ~= r then t[key] = false end
   end
-  for i = 1, 2 do
-    local source = i == 1 and db or extra
-    for key, c in pairs(source and source.chars or {}) do
-      local name, r
-      if type(key) == "string" then name, r = key:match("^(.+)%-([^%-]+)$") end
-      if name and good(r) then
-        note(seen, name, r)
-        local side = type(c) == "table" and c.faction
-        if type(side) == "string" then note(sideRealm, side, r) end
-        if anyRealm == nil then anyRealm = r elseif anyRealm ~= r then anyRealm = false end
+  local function eachChar(fn)
+    for i = 1, 2 do
+      local source = i == 1 and db or extra
+      for key, c in pairs(source and source.chars or {}) do
+        if type(key) == "string" then
+          local name, r = key:match("^(.+)%-([^%-]*)$")
+          if name then fn(name, r, c) end
+        end
       end
     end
   end
+  -- Characters: the realm of their other records, then the remembered one, then (for the
+  -- one logged in) the one read now.
+  eachChar(function(name, r) if good(r) then note(seen, name, r) end end)
   for name, r in pairs(seen) do if r then home[name] = r end end
   -- (Not ipairs over { extra, db }: with no extra the list would look empty.)
   for i = 1, 2 do
     local source = i == 1 and extra or db
     for name, r in pairs(source and source.charRealm or {}) do if good(r) then home[name] = r end end
   end
-  if good(realm) then
-    home[ns.FullName()] = realm
-    if anyRealm == nil then anyRealm = realm elseif anyRealm ~= realm then anyRealm = false end
+  local me = ns.FullName()
+  if good(realm) then home[me] = realm end
+  -- Markets: the realms each side's characters are on, counting every character placed
+  -- above, blank records included (Codex review, November 21: a just-repaired character
+  -- didn't count, so Alliance prices made on PvE went to Hardcore). A character whose side
+  -- isn't known makes every side with another realm ambiguous; ambiguous stays put.
+  local sideRealm, anyRealm, unknownSide, counted = {}, nil, {}, {}
+  local function count(side, r)
+    if anyRealm == nil then anyRealm = r elseif anyRealm ~= r then anyRealm = false end
+    if type(side) == "string" then note(sideRealm, side, r) else unknownSide[r] = true end
+  end
+  eachChar(function(name, r, c)
+    local placed = good(r) and r or home[name]
+    if placed then
+      counted[name] = true
+      count(type(c) == "table" and c.faction or nil, placed)
+    end
+  end)
+  for name, r in pairs(home) do
+    if not counted[name] then
+      count(name == me and UnitFactionGroup and UnitFactionGroup("player") or nil, r)
+    end
+  end
+  if good(realm) then count(UnitFactionGroup and UnitFactionGroup("player") or nil, realm) end
+  for side, r in pairs(sideRealm) do
+    if r then for u in pairs(unknownSide) do if u ~= r then sideRealm[side] = false end end end
   end
   local function fix(s)
     local side = s:match("^%??|(%a+)$")

@@ -384,15 +384,22 @@ local workedAHledger   -- (AHledger prices went into the list: its credit in the
 -- Worked out over several frames (Frank's /fl perf, November 21: 855 ms in one go froze
 -- the game on opening the tab). The last list stays on screen until the new one is done.
 local working   -- the run in progress, if any
+-- A settings change stops the run and starts again (generation), so an old run can't put
+-- its list back after it (Codex review, November 21). A run during which every value was
+-- thrown away (a scan, a setting) is shown, but worked out again at the next look (redo).
+local generation, redo = 0, false
 local function work()
   if working and not working.stopped then return end
   local before = ns.AHledgerUses and ns.AHledgerUses() or 0
-  local finished = false
+  local finished, gen, startedAt = false, generation, time()
+  local stamp = ns.ValuesStamp and ns.ValuesStamp()
   working = ns.RunInSlices("Gold making list", function() return ns:GoldIdeas() end, function(r, n)
     finished = true
     working = nil
+    if gen ~= generation then return end
     rows, noPrice = r, n
-    workedAt = time()
+    workedAt = startedAt
+    redo = stamp ~= (ns.ValuesStamp and ns.ValuesStamp())
     workedAHledger = ns.AHledgerUses and ns.AHledgerUses() ~= before
     if refresh then refresh() end
   end)
@@ -1109,7 +1116,7 @@ function ns:BuildGoldMaking(parent)
   p.price:SetPoint("BOTTOMLEFT", 8, 6)
 
   f:SetScript("OnShow", function()
-    if not workedAt or time() - workedAt > STALE then work() end
+    if not workedAt or redo or time() - workedAt > STALE then work() end
     refresh()
   end)
   f:SetScript("OnSizeChanged", function() if f:IsVisible() then refresh() end end)
@@ -1140,4 +1147,10 @@ refresh = function()
 end
 
 function ns:RefreshGoldMaking() refresh() end
-function ns:ReworkGoldMaking() rows = nil; refresh() end
+function ns:ReworkGoldMaking()
+  generation = generation + 1
+  ns.StopSlices(working)
+  working, rows = nil, nil
+  refresh()
+end
+ns._goldMakingTest = { work = function() work() end, rows = function() return rows, working end }   -- (tests)

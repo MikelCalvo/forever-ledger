@@ -236,7 +236,10 @@ local function records(tab, from, charOK, match, opts)
     if opts.itemOK then
       local function only(list)
         local kept = {}
-        for _, r in ipairs(list) do if r.id and opts.itemOK(r.id) then kept[#kept + 1] = r end end
+        for _, r in ipairs(list) do
+          ns.MaybeYield()   -- (a group look-up per item: Codex review, November 21)
+          if r.id and opts.itemOK(r.id) then kept[#kept + 1] = r end
+        end
         return kept
       end
       sales, buys = only(sales), only(buys)
