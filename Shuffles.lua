@@ -236,6 +236,7 @@ function ns:FindShuffles()
   vendor, ah = groupDisenchants(vendor), groupDisenchants(ah)
   table.sort(vendor, byHour)
   table.sort(ah, byHour)
+  if ns.SlicePart then ns.SlicePart("vendor flips") end   -- (in /fl perf, when in slices)
   return vendor, ah, ns:FindVendorFlips()
 end
 

@@ -199,6 +199,42 @@ T.test("Price history: usual prices see days and weeks as before graphs", functi
   T.eq(#ns:PriceHistory(70081), 14, "the tooltip still shows 14 days")
 end)
 
+-- Frank's /fl perf, November 21: kept per item and day (History.lua pastEntry).
+T.test("Price history: usual prices are kept for the day, and follow earlier days' changes", function()
+  start()
+  local id, d = 70091, today()
+  local h = market("history")
+  h[id] = ("%d:100:100|%d:100:100|%d:100:100"):format(d - 3, d - 2, d - 1)
+  T.eq(ns:UsualPrice(id, "month"), 100)
+  local stats = ns:PriceStats(id, "month")
+  T.eq(stats and stats.usual, 100)
+  -- Today's price comes and changes: today doesn't count, the kept answer stands.
+  ns:RecordPriceHistory(id, 900, 900, 5)
+  T.eq(ns:UsualPrice(id, "month"), 100)
+  T.ok(ns:PriceStats(id, "month") == stats, "the same answer, not worked out again")
+  ns:RecordPriceHistory(id, 800, 800, 5)
+  T.ok(ns:PriceStats(id, "month") == stats, "still the same after today's price changes again")
+  -- An earlier day changes (a partner's day, by hand here): worked out again.
+  h[id] = ("%d:300:300|%d:300:300|%d:300:300|%d:800:800"):format(d - 3, d - 2, d - 1, d)
+  T.eq(ns:UsualPrice(id, "month"), 300, "an earlier day changed")
+  T.eq(ns:PriceStats(id, "month").usual, 300)
+  -- A day added before today, after today's entry (out of order): not taken as today's.
+  h[id] = h[id] .. ("|%d:500:500"):format(d - 4)
+  T.eq(ns:UsualPrice(id, "month"), 300, "median of 300, 300, 300 and 500")
+  h[id] = ("%d:300:300|%d:700:700|%d:700:700"):format(d - 3, d - 2, d - 1)
+  T.eq(ns:UsualPrice(id, "month"), 700, "a whole new text")
+  -- A vendor price change today: only today on, so no usual price yet.
+  ns.db.vendorSellChanged[id] = d
+  T.eq(ns:UsualPrice(id, "month"), nil, "history before the change left out")
+  ns.db.vendorSellChanged[id] = nil
+  T.eq(ns:UsualPrice(id, "month"), 700, "and back")
+  -- Today's entry at 100 doesn't count today; the next day it does.
+  h[id] = h[id] .. ("|%d:100:100"):format(d)
+  T.eq(ns:UsualPrice(id, "month"), 700)
+  S.now = S.now + 86400
+  T.eq(ns:UsualPrice(id, "month"), 300, "median of 100, 300, 700 and 700")
+end)
+
 T.test("Price series: a version's points", function()
   start()
   local now = S.now

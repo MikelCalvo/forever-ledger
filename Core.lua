@@ -737,13 +737,30 @@ function ns.MaybeYield()
 end
 -- Returns the run: run.stopped is true once it finished, failed or was stopped
 -- (ns.StopSlices: the rest is dropped and done is never called).
+-- A run's parts (ns.SlicePart) are also listed in /fl perf on their own, "label: part", so
+-- a long run shows which part makes its time and leftovers (Frank's /fl perf, November 21).
+local sliceRun, partLabel, partStart, partKB = nil, nil, 0, 0
+local function closePart()
+  if partLabel and ns.PerfNote then
+    ns.PerfNote(partLabel, clock() - partStart, true, collectgarbage("count") - partKB)
+  end
+end
+function ns.SlicePart(name)
+  if not (sliceRun and ns.InSlices()) then return end
+  closePart()
+  partLabel = name and (sliceRun.label .. ": " .. name) or nil
+  partStart, partKB = clock(), collectgarbage("count")
+end
 function ns.RunInSlices(label, fn, done)
-  local run = { co = coroutine.create(fn) }
+  local run = { co = coroutine.create(fn), label = label }
   local step
   step = ns.Timed(label, function()
     if run.stopped then return end
-    slicing, sliceStart = run.co, clock()
+    slicing, sliceStart, sliceRun = run.co, clock(), run
+    partLabel, partStart, partKB = run.part, clock(), collectgarbage("count")
     local result = { coroutine.resume(run.co) }
+    closePart()
+    run.part, partLabel, sliceRun = partLabel, nil, nil
     slicing = nil
     if not result[1] then run.stopped = true; geterrorhandler()(result[2]); return end
     if coroutine.status(run.co) == "dead" then run.stopped = true; done(unpack(result, 2))
@@ -1442,9 +1459,12 @@ function ns:MergeData(data, via)
   -- full scan's thousands in one go ran too long (Frank's BugSack, November 12).
   local nowDay = ns.LocalDay and ns.LocalDay(time())
   local later = {}
+  -- (MaybeYield: live sync takes a message in over several frames; the payload's own tables
+  -- are walked, so prices saved meanwhile don't break the walk.)
   for market, items in pairs(data.prices or {}) do
     db.prices[market] = db.prices[market] or {}
     for id, rec in pairs(items) do
+      if ns.MaybeYield then ns.MaybeYield() end
       local mine = db.prices[market][id]
       if not mine or (rec.t or 0) > (mine.t or 0) then
         db.prices[market][id] = rec

@@ -1006,6 +1006,7 @@ function ns:MergeHistoryDay(market, day, packed)
   -- Empty entries count too (Codex review, November 8: skipping a damaged empty one gave
   -- the rest of the day to the wrong items).
   for e in (packed .. ","):gmatch("([^,]*),") do
+    if ns.MaybeYield then ns.MaybeYield() end   -- (Sync.lua takes a message in over several frames)
     local step, m, a, q = e:match("^(%w+)%.(%w+)%.(%w*)%.(%w*)$")
     step, m = tonumber(step or "", 36), tonumber(m or "", 36)
     -- (each id is a step from the last, so nothing after a damaged entry can be trusted)
@@ -1590,6 +1591,74 @@ function ns:PriceStats(id, window)
     q1 = typ[math.max(1, math.ceil(n / 4))], q3 = typ[math.max(1, math.ceil(n * 3 / 4))],
     listed = median(listed),
   }
+end
+
+-- Usual prices and price stats leave today out, so within a day they change only when an
+-- earlier day's history does (a partner's day, the daily trim, a vendor price change).
+-- Each item's are kept for the day while its earlier days' text stays the same: values,
+-- deals and tooltips read every item's history again and again (Frank's /fl perf, November
+-- 21: Gold making's list made 288 MB of leftovers in 94 seconds). The results are shared:
+-- callers must not change them.
+local past, pastDay, pastMarket, pastDb, pastTag = {}, nil, nil, nil, nil
+-- A history text ("day:...|day:...", oldest first) as { s, pre = the text before today's
+-- entry, n = its length }.
+local function pastPart(s)
+  local n = #s
+  if s:sub(1, #pastTag) == pastTag and not s:find("|", 1, true) then
+    n = 0
+  else
+    local last = s:match(".*()|")
+    if last and s:sub(last + 1, last + #pastTag) == pastTag then n = last - 1 end
+  end
+  return { s = s, pre = s:sub(1, n), n = n }
+end
+-- Whether s has the same days before today as p (only today's entry may differ).
+local function samePast(s, p)
+  if s == p.s then return true end
+  local n = p.n
+  if #s < n or s:sub(1, n) ~= p.pre then return false end
+  if #s > n then
+    local rest = n == 0 and 1 or n + 2
+    if n > 0 and s:sub(n + 1, n + 1) ~= "|" then return false end
+    if s:sub(rest, rest + #pastTag - 1) ~= pastTag or s:find("|", rest, true) then return false end
+  end
+  p.s = s
+  return true
+end
+local function peek(name, market, id)   -- (a look only: no market table made)
+  local t = ns.db[name]
+  t = t and t[market]
+  return t and t[id] or ""
+end
+local function pastEntry(id)
+  local d, m = today(), ns.MarketKey()
+  if d ~= pastDay or m ~= pastMarket or ns.db ~= pastDb then
+    past, pastDay, pastMarket, pastDb, pastTag = {}, d, m, ns.db, d .. ":"
+  end
+  local hist, weekly, qty = peek("history", m, id), peek("historyWeekly", m, id), peek("historyQty", m, id)
+  local changed = ns.db.vendorSellChanged and ns.db.vendorSellChanged[id] or false
+  local c = past[id]
+  if c and c.w == weekly and c.chg == changed and samePast(hist, c.h) and samePast(qty, c.q) then return c end
+  c = { w = weekly, chg = changed, h = pastPart(hist), q = pastPart(qty), usual = {}, stats = {} }
+  past[id] = c
+  return c
+end
+do
+  local usualPrice, priceStats = ns.UsualPrice, ns.PriceStats
+  function ns:UsualPrice(id, window)
+    local c = pastEntry(id)
+    local key = window or "all"
+    local hit = c.usual[key]
+    if not hit then hit = { usualPrice(self, id, window) }; c.usual[key] = hit end
+    return hit[1], hit[2]
+  end
+  function ns:PriceStats(id, window)
+    local c = pastEntry(id)
+    local key = window or "all"
+    local hit = c.stats[key]
+    if hit == nil then hit = priceStats(self, id, window) or false; c.stats[key] = hit end
+    return hit or nil
+  end
 end
 
 -- All time: lowest price ever seen and the average typical price, or nil.

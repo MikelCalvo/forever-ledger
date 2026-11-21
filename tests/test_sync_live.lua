@@ -95,7 +95,35 @@ T.test("A big message arrives however long it takes, while its pieces keep comin
     S.now = S.now + 10     -- well over the 2 minute limit in all
     for _, tick in ipairs(S.tickers) do tick() end
   end
+  T.runTimers()   -- (taken in over several frames if it takes long)
   T.eq(ns.db.prices["Testrealm|Alliance"][70001].m, 5)
+end)
+
+-- Frank's /fl perf, November 21: a partner's message took 166 ms in one frame.
+T.test("A big message is taken in over several frames, and the next one waits its turn", function()
+  setup(false)
+  read()
+  local key = "Testrealm|Alliance"
+  local prices = {}
+  for id = 1, 300 do prices[71000 + id] = { m = 5, q = 1, t = S.now, src = "scan" } end
+  local realClock, ms = debugprofilestop, 0
+  local ok, err = pcall(function()
+    debugprofilestop = function() ms = ms + 3; return ms end   -- (each look: 3 ms later)
+    deliver({ k = "d", prices = { [key] = prices } })
+    deliver({ k = "d", prices = { [key] = { [71999] = { m = 7, q = 1, t = S.now, src = "scan" } } } })
+    local got = 0
+    for id = 71001, 71300 do if ns.db.prices[key][id] then got = got + 1 end end
+    T.ok(got > 0 and got < 300, "started, not all in one frame: " .. got)
+    T.eq(ns.db.prices[key][71999], nil, "the second waits for the first")
+    T.runTimers()
+    got = 0
+    for id = 71001, 71300 do if ns.db.prices[key][id] then got = got + 1 end end
+    T.eq(got, 300, "all of the first")
+    T.eq(ns.db.prices[key][71999] and ns.db.prices[key][71999].m, 7, "then the second")
+  end)
+  debugprofilestop = realClock
+  T.runTimers()
+  assert(ok, err)
 end)
 
 T.test("A message that stops arriving is forgotten", function()

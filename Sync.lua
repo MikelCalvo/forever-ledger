@@ -387,6 +387,24 @@ local function handle(payload, sender)
   end
 end
 
+-- A whole message is taken in over several frames, one message at a time in the order they
+-- came (Frank's /fl perf, November 21: a partner's day of price history took 166 ms in
+-- one frame).
+local queue, merging = {}, nil
+local function nextMessage()
+  -- (A run that failed never says it's done: the next message goes ahead anyway.)
+  if (merging and not (merging.run and merging.run.stopped)) or #queue == 0 then return end
+  local m = table.remove(queue, 1)
+  local token = {}
+  merging = token
+  local run = ns.RunInSlices("Sync: taking in a message", function() handle(m[1], m[2]) end, function()
+    if merging == token then merging = nil end
+    nextMessage()
+  end)
+  token.run = run
+  if run.stopped and merging == token then merging = nil; nextMessage() end   -- (failed at once)
+end
+
 ns:On("CHAT_MSG_ADDON", function(prefix, msg, channel, sender)
   if prefix ~= PREFIX or channel ~= "WHISPER" then return end
   local name = shortName(Ambiguate and Ambiguate(sender, "none") or sender)
@@ -408,7 +426,8 @@ ns:On("CHAT_MSG_ADDON", function(prefix, msg, channel, sender)
   incoming[key] = nil
   local data, err = ns.Deserialize(table.concat(r.parts))
   if not data then ns:Debug("Sync: couldn't read a message from", name, err); return end
-  handle(data, name)
+  queue[#queue + 1] = { data, name }
+  nextMessage()
 end)
 
 -- Forget half-received messages after a while.

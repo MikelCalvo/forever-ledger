@@ -224,21 +224,28 @@ end
 -- Works every finder out once. Returns the rows and how many crafts were left out for a
 -- material with no price.
 function ns:GoldIdeas()
+  -- (Each part listed in /fl perf on its own when worked out in slices.)
+  local part = ns.SlicePart or function() end
   local rows = {}
+  part("shuffles")
   local vendor, ah, flips = (ns.FindShufflesUntimed or ns.FindShuffles)(ns)
   for _, s in ipairs(vendor) do rows[#rows + 1] = shuffleRow(s, "vendor") end
   for _, s in ipairs(ah) do rows[#rows + 1] = shuffleRow(s, "ah") end
   for _, f in ipairs(flips) do rows[#rows + 1] = flipRow(f) end
   local noPrice = 0
   if ns.FindAllVendorCrafts then
+    part("every profession's crafts")
     local all
     all, noPrice = ns:FindAllVendorCrafts()
     for _, s in ipairs(all) do rows[#rows + 1] = unknownCraftRow(s) end
   end
+  part("deals")
   for _, d in ipairs(ns:FindDeals(DEAL_AGE)) do
     if d.kind == "usual" and ns:DealShown(d) then rows[#rows + 1] = dealRow(d) end
   end
+  part("Booty Bay")
   neutralRows(rows)
+  part(nil)
   return rows, noPrice or 0
 end
 
