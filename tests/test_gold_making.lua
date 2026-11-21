@@ -153,6 +153,7 @@ T.test("Gold making: values out of date are thrown away before a run starts", fu
   end)
   ns.GoldIdeas = realIdeas
   T.runTimers()
+  ns:ReworkGoldMaking()   -- (no list left for the next test)
   if not ok then error(err, 0) end
 end)
 
