@@ -118,7 +118,7 @@ T.test("Watched: a find at your price is announced as a watched item", function(
     ns:CheckDeals()
     T.runTimers()   -- (the check goes a few hundred items a frame)
   end)
-  T.ok(out:find("Watched item: Test Silk, 12 at 2s or less", 1, true), "chat line: " .. out)
+  T.ok(out:find("Watched item: Test Silk, 12 at " .. ns.Money(200) .. " or less", 1, true), "chat line: " .. out)
   ns:UnwatchItem(SILK)
   m[SILK], S.money = nil, 0
   T.runTimers()
@@ -143,7 +143,7 @@ T.test("Deal check: a few hundred items a frame, and a find announced once", fun
     T.runTimers()
   end)
   ns.WatchedFind = real
-  local _, n = out:gsub("Watched item: Test Silk, 12 at 2s or less", "")
+  local _, n = out:gsub(("Watched item: Test Silk, 12 at " .. ns.Money(200) .. " or less"):gsub("%p", "%%%0"), "")
   T.eq(n, 1, "announced once: " .. out)
   out = printed(function() ns:CheckDeals(); T.runTimers() end)
   T.eq(out:find("Test Silk", 1, true), nil, "and not again at the same price")
