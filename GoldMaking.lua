@@ -827,7 +827,7 @@ end
 ---------------------------------------------------------------------------
 local function askName(onName)
   StaticPopupDialogs["FOREVER_LEDGER_GOLD_SET"] = {
-    text = "Name these filters (a quick button on Gold making):", button1 = SAVE or "Save", button2 = CANCEL or "Cancel",
+    text = ns.LocalizeText("Name these filters (a quick button on Gold making):"), button1 = SAVE or "Save", button2 = CANCEL or "Cancel",
     hasEditBox = true,
     OnShow = function(self)
       local eb = self.editBox or self.EditBox
@@ -852,8 +852,8 @@ local function confirmDelete(i)
   local set = S().sets[i]
   if not set then return end
   StaticPopupDialogs["FOREVER_LEDGER_GOLD_SET_DELETE"] = {
-    text = ("Delete the saved filters \"%s\"? This can't be undone."):format(set.name),
-    button1 = "Delete", button2 = CANCEL or "Cancel",
+    text = ns.LocalizeText("Delete the saved filters \"%s\"? This can't be undone."):format(set.name),
+    button1 = ns.LocalizeText("Delete"), button2 = CANCEL or "Cancel",
     OnAccept = function()
       for j, s in ipairs(S().sets) do if s == set then table.remove(S().sets, j); break end end
       refresh()

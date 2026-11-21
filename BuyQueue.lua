@@ -2689,21 +2689,21 @@ local function buildListsView(parent)
   end)
 
   local new = T:Button(v, "New", 50, function()
-    StaticPopup_Show("FOREVER_LEDGER_LIST_NAME", "Name for the new shopping list:", nil,
+    ns:ShowPopup("FOREVER_LEDGER_LIST_NAME", "Name for the new shopping list:", nil,
       { fn = function(name) ns:NewShoppingList(name); refreshLists() end })
   end, 22)
   new:SetPoint("LEFT", pick, "RIGHT", 6, 0)
   local rename = T:Button(v, "Rename", 58, function()
     local list = currentList()
     if not list then return end
-    StaticPopup_Show("FOREVER_LEDGER_LIST_NAME", "New name for this list:", nil,
+    ns:ShowPopup("FOREVER_LEDGER_LIST_NAME", "New name for this list:", nil,
       { default = list.name, fn = function(name) list.name = name; refreshLists() end })
   end, 22)
   rename:SetPoint("LEFT", new, "RIGHT", 4, 0)
   local delete = T:Button(v, "Delete", 54, function()
     local list, i = ns:CurrentShoppingList()
     if not list then return end
-    StaticPopup_Show("FOREVER_LEDGER_LIST_DELETE", ("Delete the shopping list \"%s\"?"):format(list.name), nil,
+    ns:ShowPopup("FOREVER_LEDGER_LIST_DELETE", ns.LocalizeText("Delete the shopping list \"%s\"?"):format(list.name), nil,
       { fn = function() ns:DeleteShoppingList(i); Q.built = 0; refreshLists() end })
   end, 22)
   delete:SetPoint("LEFT", rename, "RIGHT", 4, 0)

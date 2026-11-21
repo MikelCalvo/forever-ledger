@@ -26,7 +26,7 @@ local function copy(t) local c = {} for k, v in pairs(t or {}) do c[k] = v end r
 ---------------------------------------------------------------------------
 local function confirm(text, onYes)
   StaticPopupDialogs["FOREVER_LEDGER_GROUPS_CONFIRM"] = {
-    text = text, button1 = YES or "Yes", button2 = NO or "No",
+    text = ns.LocalizeText(text), button1 = YES or "Yes", button2 = NO or "No",
     OnAccept = onYes, timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
   }
   StaticPopup_Show("FOREVER_LEDGER_GROUPS_CONFIRM")
@@ -34,7 +34,7 @@ end
 
 local function askName(text, start, onName)
   StaticPopupDialogs["FOREVER_LEDGER_GROUPS_NAME"] = {
-    text = text, button1 = OKAY or "OK", button2 = CANCEL or "Cancel", hasEditBox = true,
+    text = ns.LocalizeText(text), button1 = OKAY or "OK", button2 = CANCEL or "Cancel", hasEditBox = true,
     OnShow = function(self)
       local eb = self.editBox or self.EditBox
       if eb then eb:SetText(start or ""); eb:HighlightText() end

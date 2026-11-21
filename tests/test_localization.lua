@@ -524,3 +524,54 @@ T.test("Localization: recent upstream settings and sessions stay Chinese", funct
   T.ok(ns.LocalizeText("Auction price (%s)"):format("AHledger")
     :find("拍卖行价格", 1, true))
 end)
+
+T.test("Localization: shopping list, saved filter and group dialogs are shown translated", function()
+  local ns = locale()
+  local strings = ns.GetLocaleData().strings
+  strings["Name these filters (a quick button on Gold making):"] = "命名这些筛选："
+  strings["Delete the saved filters \"%s\"? This can't be undone."] = "删除已保存筛选“%s”？此操作无法撤销。"
+  strings["Delete your group %s? Its items stay in their other groups; groups under it move up. This can't be undone."] = "删除分组%s？"
+  local realDialogs, realShow, shown = StaticPopupDialogs, StaticPopup_Show, nil
+  StaticPopupDialogs = {}
+  StaticPopup_Show = function(which, text1)
+    local d = StaticPopupDialogs[which] or {}
+    shown = { text = text1 or d.text, button1 = d.button1 }
+  end
+  local ok, err = pcall(function()
+    local lists = source("BuyQueue.lua")
+    local function button(label)
+      local body = assert(lists:match('T:Button%(v, "' .. label .. '", %d+, (function%(%)\n.-\n  end), 22%)'))
+      return assert(loadstring("local ns, refreshLists, currentList, Q = ...\nreturn " .. body))(ns, function() end,
+        function() return { name = "Mats" } end, {})
+    end
+    ns.CurrentShoppingList = function() return { name = "Mats" }, 1 end
+    button("New")()
+    T.eq(shown.text, "新购物清单名称：", "new shopping list")
+    button("Rename")()
+    T.eq(shown.text, "此清单的新名称：", "rename a shopping list")
+    button("Delete")()
+    T.eq(shown.text, "删除购物清单“Mats”？", "delete a shopping list")
+
+    local gold = source("GoldMaking.lua")
+    local body = assert(gold:match("\n(local function askName%(onName%).-\nend)\n")) .. "\n" ..
+      assert(gold:match("\n(local function confirmDelete%(i%).-\nend)\n"))
+    local askName, confirmDelete = assert(loadstring("local ns, S, refresh = ...\n" .. body .. "\nreturn askName, confirmDelete"))(ns,
+      function() return { sets = { { name = "Ore" } } } end, function() end)
+    askName(function() end)
+    T.eq(shown.text, "命名这些筛选：", "name saved filters")
+    confirmDelete(1)
+    T.eq(shown.text, "删除已保存筛选“Ore”？此操作无法撤销。", "delete saved filters")
+    T.eq(shown.button1, "删除", "its button")
+
+    local groups = source("GroupsTab.lua")
+    body = assert(groups:match("\n(local function confirm%(text, onYes%).-\nend)\n")) .. "\n" ..
+      assert(groups:match("\n(local function askName%(text, start, onName%).-\nend)\n"))
+    local confirm, ask = assert(loadstring("local ns = ...\n" .. body .. "\nreturn confirm, askName"))(ns)
+    ask("Name for the new group:", "", function() end)
+    T.eq(shown.text, "新分组名称：", "name a group")
+    confirm(("Delete your group %s? Its items stay in their other groups; groups under it move up. This can't be undone."):format("Ore"), function() end)
+    T.eq(shown.text, "删除分组Ore？", "delete a group")
+  end)
+  StaticPopupDialogs, StaticPopup_Show = realDialogs, realShow
+  if not ok then error(err, 0) end
+end)

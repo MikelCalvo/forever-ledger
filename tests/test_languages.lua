@@ -95,6 +95,27 @@ T.test("Languages: a partner's professions under a known translated name are mov
   if not ok then error(err, 0) end
 end)
 
+T.test("Languages: recipe books saved under a known translated name join the English one", function()
+  local saved, savedBooks = ns.db.profAliases, ns.db.recipeBook
+  local kept, old, only = { n = "kept" }, { n = "old" }, { n = "only old" }
+  ns.db.profAliases = { ["Кожевничество"] = "Leatherworking" }
+  ns.db.recipeBook = { ["Кожевничество"] = { [1] = old, [2] = only }, Leatherworking = { [1] = kept },
+    ["Снятие шкур"] = { [3] = {} } }
+  local stamp = ns.recipeBookStamp or 0
+  local ok, err = pcall(function()
+    T.ok(ns.NormalizeProfessions(ns.db))
+    local books = ns.db.recipeBook
+    T.eq(books["Кожевничество"], nil, "the old key")
+    T.eq(books.Leatherworking[1], kept, "a recipe already under the English name stays")
+    T.eq(books.Leatherworking[2], only, "a recipe only under the old name comes over")
+    T.ok(books["Снятие шкур"], "a name not known yet stays")
+    T.ok((ns.recipeBookStamp or 0) > stamp, "recipe lists are built again")
+    T.eq(ns.NormalizeProfessions(ns.db), false, "nothing more to move")
+  end)
+  ns.db.profAliases, ns.db.recipeBook = saved, savedBooks
+  if not ok then error(err, 0) end
+end)
+
 T.test("Languages: a channel number learned from chat isn't trusted once the channel changed", function()
   -- (Codex review, November 19: Trade left and its number reused for a custom channel.)
   local realChat = C_ChatInfo
@@ -111,6 +132,30 @@ T.test("Languages: a channel number learned from chat isn't trusted once the cha
     wipe(seen)
   end)
   C_ChatInfo = realChat
+  if not ok then error(err, 0) end
+end)
+
+T.test("Languages: a bag's slots read from its tooltip line in the client's own format", function()
+  local file = assert(io.open("Tooltip.lua", "rb"))
+  local code = file:read("*a"):gsub("\r\n", "\n"); file:close()
+  local chunk = assert(code:match("\n(local bagSlots.-\nlocal SLOTS_PATTERN[^\n]*)"))
+  local real = CONTAINER_SLOTS
+  local function slots(format, line)
+    CONTAINER_SLOTS = format
+    local pattern = assert(loadstring(chunk .. "\nreturn SLOTS_PATTERN"))()
+    return line:match(pattern)
+  end
+  local ok, err = pcall(function()
+    T.eq(slots("%d Slot %s", "10 Slot Bag"), "10", "English")
+    T.eq(slots("%d Slot %s", "Blue Leather Bag"), nil, "a line that isn't the slots")
+    local ru = "%2$s (%1$d |4ячейка:ячейки:ячеек;)"
+    T.eq(slots(ru, "Сумка (8 ячеек)"), "8", "Russian, as shown")
+    T.eq(slots(ru, "Сумка (1 |4ячейка:ячейки:ячеек;)"), "1", "Russian, before the client picks the word form")
+    T.eq(slots(ru, "Синяя кожаная сумка"), nil, "the bag's name")
+    T.eq(slots(ru, "Требуется (10-й уровень)"), nil, "another line with brackets")
+    T.eq(slots("%2$s [%1$d slots]. +", "Bag [10 slots]. +"), "10", "brackets, a dot and a plus")
+  end)
+  CONTAINER_SLOTS = real
   if not ok then error(err, 0) end
 end)
 

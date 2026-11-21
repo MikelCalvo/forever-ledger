@@ -80,6 +80,17 @@ function ns.NormalizeProfessions(db)
       if ns.MoveProfessionKey(c.profs, name, known[name]) then changed = true end
     end
   end
+  local books, move = db.recipeBook or {}, {}
+  for name in pairs(books) do if known[name] and known[name] ~= name then move[#move + 1] = name end end
+  for _, name in ipairs(move) do
+    local book = books[known[name]] or {}
+    for id, recipe in pairs(books[name]) do if book[id] == nil then book[id] = recipe end end
+    books[known[name]], books[name] = book, nil
+  end
+  if #move > 0 then
+    ns.recipeBookStamp = (ns.recipeBookStamp or 0) + 1
+    changed = true
+  end
   if changed and ns.BuildUsageIndex and ns.usage then ns:BuildUsageIndex() end
   return changed
 end

@@ -65,7 +65,11 @@ end
 -- so you buy the cheapest space first. Plain bags only (not profession bags).
 ---------------------------------------------------------------------------
 local bagSlots = {}   -- [itemID] = slots, or false (not a plain bag / unknown), this session
-local SLOTS_PATTERN = (CONTAINER_SLOTS or "%d Slot %s"):gsub("%%d", "(%%d+)"):gsub("%%s", ".+")
+local function slotsPattern(format)
+  local p = format:gsub("|4[^;]*;", "\1"):gsub("%%%d+%$", "%%"):gsub("([%(%)%.%-%+%*%?%[%]%^%$])", "%%%1")
+  return (p:gsub("\1", ".-"):gsub("%%d", "(%%d+)"):gsub("%%s", ".+"))
+end
+local SLOTS_PATTERN = slotsPattern(CONTAINER_SLOTS or "%d Slot %s")
 local instant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
 
 local function slotsOf(id)
