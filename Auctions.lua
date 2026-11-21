@@ -109,23 +109,11 @@ end
 
 local ahOpen = false
 local firstRead = false   -- the first read of the list after opening the auction house
-local emptyRetried = false
+local GONE_CONFIRM = 10
+local confirmAsked = false
 local function readOwned()
   if not (AH and AH.GetNumOwnedAuctions and AH.GetOwnedAuctionInfo) then return false end
   local n = AH.GetNumOwnedAuctions() or 0
-  -- No auctions on the first answer, when some were up last time: the game can answer
-  -- empty for a moment (after a reload), which would look like they all sold. Ask once
-  -- more; a second empty answer is believed.
-  if n == 0 and firstRead and not emptyRetried then
-    for _, e in ipairs((mine() or {}).list or {}) do
-      if not e.sold then
-        emptyRetried = true
-        ns:Debug("Your auctions: the list came back empty; asking again before believing it.")
-        C_Timer.After(2, function() query() end)
-        return false
-      end
-    end
-  end
   local list, now = {}, time()
   local sold = Enum and Enum.AuctionStatus and Enum.AuctionStatus.Sold or 1
   -- What we knew before: when each sold, and sold ones whose gold has gone to the mail.
@@ -171,35 +159,55 @@ local function readOwned()
   end
   -- Sold before and gone from the list now: its gold was sent to the mailbox.
   -- Not sold before, gone now, with time still left on it when last seen: it sold while
-  -- you were away and its gold has gone to the mail already (it can't have expired yet,
-  -- and cancelling needs the auction house open, which updates this list).
+  -- you were away and its gold has gone to the mail already (it can't have expired yet).
+  -- The game can leave an auction out of an answer for a few seconds, so it counts only
+  -- when an answer GONE_CONFIRM seconds later still lacks it. Gone while you're here, it
+  -- was cancelled.
   local last = (mine() or {}).t or now
   local newlySold = {}
+  local awaySold = {}
   for _, e in ipairs(list) do
     local b = before[e.a]
     if e.sold and not (b and b.sold) then
       newlySold[#newlySold + 1] = e
+      if firstRead then awaySold[#awaySold + 1] = e end
     elseif not e.sold and b and not b.sold and (b.q or 1) > (e.q or 1) then
       -- Part of a stack bought (materials sell a few at a time; owner's test, October 5:
       -- "A buyer has been found" for Strange Dust, and no line at the auction house).
       newlySold[#newlySold + 1] = { id = e.id, q = (b.q or 1) - (e.q or 1), each = e.each }
+      if firstRead then awaySold[#awaySold + 1] = newlySold[#newlySold] end
     end
   end
+  local confirming = false
   for a, e in pairs(before) do
-    if not seen[a] and not e.sold and (e.left or 0) > (now - last) + 300 then
-      e.sold, e.mailed, e.soldAt = true, true, now
-      newlySold[#newlySold + 1] = e
+    if not seen[a] and not e.sold then
+      if not e.gone and (e.left or 0) > (now - last) + 300 then
+        e.gone, e.goneAway = now, firstRead or nil
+      end
+      if e.gone and now - e.gone < GONE_CONFIRM then
+        confirming = true
+        list[#list + 1] = e
+      elseif e.gone and e.goneAway then
+        e.gone, e.goneAway = nil, nil
+        e.sold, e.mailed, e.soldAt = true, true, now
+        newlySold[#newlySold + 1] = e
+        awaySold[#awaySold + 1] = e
+      end
     end
     if not seen[a] and e.sold and now - (e.soldAt or now) < KEEP_SOLD_SECONDS then
       e.mailed = true
       list[#list + 1] = e
     end
   end
+  if confirming and not confirmAsked then
+    confirmAsked = true
+    C_Timer.After(GONE_CONFIRM + 1, function() confirmAsked = false; query() end)
+  end
   -- What sold since the last look, found on the first read after opening: it waits in
   -- unseen for the chat line. Sales while you're there get the game's own message.
   local unseen = (mine() or {}).unseen or {}
-  if mine() and firstRead then
-    for _, e in ipairs(newlySold) do
+  if mine() then
+    for _, e in ipairs(awaySold) do
       unseen[#unseen + 1] = { id = e.id, q = e.q, each = e.each, dep = e.dep }
     end
   end
@@ -279,7 +287,7 @@ end
 -- recent price: an old one may have sold, and Cancel would take down an auction that was
 -- fine and lose its deposit (gold audit, November 9).
 local function undercutBy(e)
-  if e.sold or not e.each then return end
+  if e.sold or e.gone or not e.each then return end
   local now, rec = cheapestNow(e)
   if now and now < e.each and priceFresh(rec) then return now end
 end
@@ -287,7 +295,7 @@ end
 -- The cheapest, but well under the usual price: you could ask more (owner's mockup,
 -- November 15). Returns the usual price.
 local function couldAskMore(e)
-  if e.sold or not e.each or undercutBy(e) then return end
+  if e.sold or e.gone or not e.each or undercutBy(e) then return end
   local now, rec = cheapestNow(e)
   if not (now and priceFresh(rec)) then return end
   local stats = ns.PriceStats and ns:PriceStats(e.id, "month")
@@ -354,18 +362,16 @@ ns:On("OWNED_AUCTIONS_UPDATED", function()
   -- which would look like everything sold or vanished.
   if not ahOpen then return end
   if readOwned() == false then return end
-  if firstRead then
-    firstRead = false
-    local m = mine()
-    if m and m.unseen then
-      soldSummary(m.unseen)
-      m.unseen = nil
-    end
+  firstRead = false
+  local m = mine()
+  if m and m.unseen and #m.unseen > 0 then
+    soldSummary(m.unseen)
+    m.unseen = nil
   end
   checkAlerts()
   if refresh then refresh() end
 end)
-ns:On("AUCTION_HOUSE_SHOW", function() ahOpen, firstRead, emptyRetried = true, true, false end)
+ns:On("AUCTION_HOUSE_SHOW", function() ahOpen, firstRead = true, true end)
 ns:On("AUCTION_HOUSE_CLOSED", function() ahOpen, firstRead = false, false end)
 -- A sale or a cancel changes the list: ask again.
 ns:On("AUCTION_CANCELED", function() C_Timer.After(0.5, query) end)

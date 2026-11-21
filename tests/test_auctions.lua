@@ -93,12 +93,46 @@ T.test("Gone unsold with plenty of time left: it sold while you were away", func
   fresh()
   read({ auction(2, 70002, 100, 1, 2 * DAY) })
   S.now = NOW + HOUR
+  T.fire("AUCTION_HOUSE_SHOW")
+  read({})
+  T.eq(entry(2).sold, nil, "not on one answer")
+  S.now = NOW + HOUR + 10
   read({})
   local e = entry(2)
   T.ok(e, "kept")
   T.eq(e.sold, true)
   T.eq(e.mailed, true)
-  T.eq(e.soldAt, NOW + HOUR)
+  T.eq(e.soldAt, NOW + HOUR + 10)
+end)
+
+T.test("Gone from two answers and back a few seconds later: not sold, deposit kept", function()
+  fresh()
+  read({ auction(4, 70004, 1618, 50, 2 * HOUR) })
+  entry(4).dep = 562
+  S.now = NOW + 600
+  T.fire("AUCTION_HOUSE_SHOW")
+  local said = chat(function()
+    read({})
+    S.now = NOW + 602
+    read({})
+    S.now = NOW + 605
+    read({ auction(4, 70004, 1618, 50, 2 * HOUR - 605) })
+    S.now = NOW + 620
+    read({ auction(4, 70004, 1618, 50, 2 * HOUR - 620) })
+  end)
+  T.eq(count(said, "Sold since"), 0, table.concat(said, " / "))
+  T.eq(entry(4).sold, nil)
+  T.eq(entry(4).dep, 562)
+end)
+
+T.test("Gone while you're at the auction house: cancelled, not sold", function()
+  fresh()
+  read({ auction(5, 70005, 100, 1, 2 * DAY) })
+  S.now = NOW + 30
+  read({})
+  S.now = NOW + 45
+  read({})
+  T.eq(entry(5), nil)
 end)
 
 T.test("Gone unsold with little time left: it may have expired, so not counted", function()
@@ -145,8 +179,9 @@ T.test("Sold while away: ones gone from the list with time left count", function
   S.now = NOW + HOUR
   T.fire("AUCTION_HOUSE_SHOW")
   local said = chat(function()
-    read({})   -- an empty first answer is asked again (it can be the game not ready yet)
-    read({})   -- a second one is believed
+    read({})   -- one answer without it isn't believed (the game can leave it out)
+    S.now = NOW + HOUR + 10
+    read({})   -- a later one is
   end)
   T.eq(count(said, "Gone Sale x2"), 1)
 end)
