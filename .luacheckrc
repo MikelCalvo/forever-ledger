@@ -42,7 +42,7 @@ read_globals = {
   "InviteUnit", "IsAltKeyDown", "IsControlKeyDown", "ITEM_QUALITY_COLORS", "BreakUpLargeNumbers", "IsInGroup", "IsInGuild", "IsInInstance", "IsInRaid",
   "IsModifiedClick", "IsMouseButtonDown", "IsPVPTimerRunning", "issecretvalue",
   "IsShiftKeyDown", "PlaySound", "RaidNotice_AddMessage", "ReloadUI", "SendChatMessage",
-  "SetCVar", "StaticPopup_Show", "time", "tinsert", "wipe",
+  "SetCVar", "StaticPopup_Show", "StaticPopup_Hide", "time", "tinsert", "wipe",
   "UnitBuff", "UnitClass", "UnitExists", "UnitFactionGroup", "UnitFullName", "UnitGUID",
   "UnitIsDead", "UnitLevel", "UnitName", "UnitReaction",
 
