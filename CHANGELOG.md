@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- Prices, sell speeds and the rest of your saved data are back in some zones: since the November 21 game changes the game can give an empty realm name, and Forever Ledger then looked under a realm with no name. It now remembers each character's realm and uses it then, and anything saved meanwhile moves back where it belongs.
 - Sessions: a Reset popup left open while you stopped and started a new session no longer clears the new one; an auction sale from items posted before an update is still matched to that loot.
 - The price window credits AHledger when its prices went into Worth to you or a craft cost there, as the other screens do.
 - `/fl perf`: after an error in one of Forever Ledger's tasks, the rest of that moment's work still counts toward its share.

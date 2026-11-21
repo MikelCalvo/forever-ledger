@@ -125,3 +125,59 @@ T.test("Hidden event text: hidden message skipped and counted, other hidden argu
   T.eq(got[2], nil)
   T.eq(ns.secretSkipped.FL_TEST_SECRET, 1)
 end)
+
+-- November 21: the live game gave an empty realm name (Frank's mage in Felwood), which hid
+-- every price and started a second record of the character.
+T.test("Empty realm name: the last good one is used", function()
+  local oldRead, oldGood = GetRealmName, ns.goodRealm
+  local ok, err = pcall(function()
+    ns.goodRealm = nil
+    ns.db.charRealm[ns.FullName()] = nil
+    GetRealmName = function() return "" end
+    local saved = ns.db.chars
+    ns.db.chars = { ["Someone Else-PvP"] = { realm = "PvP" }, ["Tester-PvE"] = { realm = "PvE" },
+      ["Tester-"] = { realm = "" } }
+    T.eq(ns.RealmName(), "PvE", "from this character's own record")
+    T.eq(ns.MarketKey(), "PvE|Alliance")
+    ns.db.chars = saved
+    ns.db.charRealm[ns.FullName()] = "PvE"
+    T.eq(ns.RealmName(), "PvE", "remembered")
+    GetRealmName = function() return "CAMWOW US2 Realm 3 Hardcore" end
+    T.eq(ns.RealmName(), "Hardcore", "a real name is read again")
+    T.eq(ns.db.charRealm[ns.FullName()], "Hardcore", "and remembered")
+    GetRealmName = function() return "" end
+    T.eq(ns.RealmName(), "Hardcore", "then kept for the session")
+  end)
+  GetRealmName, ns.goodRealm = oldRead, oldGood
+  ns.db.charRealm[ns.FullName()] = oldGood
+  assert(ok, err)
+end)
+
+T.test("Empty realm name: data saved meanwhile moves back under the realm", function()
+  local me, blank = "Ivellos Veren-PvE", "Ivellos Veren-"
+  local db = {
+    chars = { [me] = { realm = "PvE", level = 40, updated = 100 }, [blank] = { realm = "", level = 41, updated = 200 } },
+    prices = { ["PvE|Alliance"] = { [1] = { m = 10, t = 100 } }, ["|Alliance"] = { [1] = { m = 12, t = 200 }, [2] = { m = 5, t = 200 } } },
+    money = { [me] = { [20778] = { loot = 100, vendorSell = 50 } }, [blank] = { [20778] = { loot = 30 }, [20779] = { loot = 7 } } },
+    myAuctions = { [blank .. " (neutral)"] = { list = {} } },
+    sales = { { c = blank, a = 5 } },
+    soldSnap = { market = "|Alliance" },
+    itemNames = { [1] = "Pick-" },
+  }
+  T.ok(ns.HasBlankRealmData(db, "PvE"))
+  ns.FixBlankRealm(db, "PvE")
+  T.eq(db.chars[blank], nil)
+  T.eq(db.chars[me].level, 41, "the newer record")
+  T.eq(db.chars[me].realm, "PvE")
+  T.eq(db.prices["|Alliance"], nil)
+  T.eq(db.prices["PvE|Alliance"][1].m, 12, "the newer price")
+  T.eq(db.prices["PvE|Alliance"][2].m, 5)
+  T.eq(db.money[me][20778].loot, 130, "the same day's money adds up")
+  T.eq(db.money[me][20778].vendorSell, 50)
+  T.eq(db.money[me][20779].loot, 7)
+  T.ok(db.myAuctions["Ivellos Veren-PvE (neutral)"], "the neutral auctions list")
+  T.eq(db.sales[1].c, me)
+  T.eq(db.soldSnap.market, "PvE|Alliance")
+  T.eq(db.itemNames[1], "Pick-", "only your characters' names")
+  T.eq(ns.HasBlankRealmData(db, "PvE"), false)
+end)

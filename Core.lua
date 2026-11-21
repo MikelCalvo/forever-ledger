@@ -10,7 +10,8 @@ end
 ns.PREFIX = "|cffb9a2ffForever Ledger:|r"
 
 local DEFAULTS = {
-  schema = 10,
+  schema = 11,
+  charRealm = {},   -- [full name] = the realm last read for that character, for when the game gives none (schema 11)
   profAliases = {}, -- [the game's name for a profession] = English key (Professions.lua, schema 10)
   chars = {},       -- [charKey] = { name, realm, class, level, faction, updated, profs = { [profName] = { rank, max, updated, recipes = {...} } } }
   prices = {},      -- [marketKey][itemID] = { m = cheapest, a = avg of cheapest 20, q = listed, t = time, src = "scan" }
@@ -257,9 +258,53 @@ end
 -- both), so saved data is filed under what's left: "PvE". Also turns
 -- "Name-CAMWOW US2 Realm 3 PvE" into "Name-PvE".
 function ns.PlainRealm(s) return (s:gsub("CAMWOW%s+%S+%s+Realm%s+%d+%s+", "")) end
+
+-- Since November 21 the live game can give an empty realm name (Frank's mage in Felwood:
+-- GetRealmName() printed nothing, while his bank character in Stormwind still had one; likely
+-- Blizzard's layer changes against layer-hopping addons). Everything is filed under the
+-- realm, so an empty one hid every price and sell speed and started a second record of the
+-- character (a CurseForge comment and a Discord report the same day). The last good name is
+-- kept per character (charRealm) and used whenever the game's is empty or hidden.
+local function readRealm()
+  if not GetRealmName then return end
+  local ok, realm = pcall(GetRealmName)
+  if not ok or (issecretvalue and issecretvalue(realm)) or type(realm) ~= "string" then return end
+  realm = ns.PlainRealm(realm)
+  if not realm:find("%S") then return end
+  return realm
+end
+
+-- This character's realm from saved data: remembered, else its own record ("Name-Realm"),
+-- else the realm most characters are on.
+local function knownRealm()
+  local db = ns.db
+  if not db then return end
+  local me = ns.FullName()
+  local r = db.charRealm and db.charRealm[me]
+  if r then return r end
+  local counts, best = {}, nil
+  for key, c in pairs(db.chars or {}) do
+    local realm = type(c) == "table" and c.realm
+    if type(realm) == "string" and realm:find("%S") and realm ~= "?" then
+      if key == me .. "-" .. realm then return realm end
+      counts[realm] = (counts[realm] or 0) + 1
+      if not best or counts[realm] > counts[best] then best = realm end
+    end
+  end
+  return best
+end
+
 function ns.RealmName()
-  local realm = GetRealmName and GetRealmName()
-  return realm and ns.PlainRealm(realm)
+  if ns.goodRealm then return ns.goodRealm end
+  local realm = readRealm()
+  if not realm then return knownRealm() end
+  -- (A realm can't change without a reload, so once read it's kept for the session.)
+  ns.goodRealm = realm
+  if ns.db then
+    ns.db.charRealm = ns.db.charRealm or {}
+    ns.db.charRealm[ns.FullName()] = realm
+  end
+  return realm
 end
 
 -- Two records for the same place under different server names. A price history is dated
@@ -411,26 +456,97 @@ local function combineVersions(into, from, kind)
 end
 ns.CombineVersions = combineVersions   -- (tests)
 
--- Puts every key and value in saved or received data under the plain realm.
--- kind: inside a table with its own way of combining (OWN_MERGE).
-function ns.PlainRealmData(t, kind)
+-- Money in and out (money[charKey][day][source] = copper): the same day under two keys is
+-- the same character's gold in two parts of the day, so the amounts add up.
+local function addUp(into, from)
+  for k, v in pairs(from) do
+    local mine = into[k]
+    if mine == nil then into[k] = v
+    elseif type(mine) == "number" and type(v) == "number" then into[k] = mine + v
+    elseif type(mine) == "table" and type(v) == "table" then addUp(mine, v) end
+  end
+  return into
+end
+OWN_MERGE.money = "sum"
+
+-- Renames keys (newKey) and string values (newValue) everywhere in t; two records that end
+-- up under one key are combined. kind: inside a table with its own way of combining (OWN_MERGE).
+local function renameData(t, kind, newKey, newValue)
   local renames
   for k, v in pairs(t) do
-    if type(v) == "table" then ns.PlainRealmData(v, kind or OWN_MERGE[k])
-    elseif type(v) == "string" and v:find("CAMWOW", 1, true) then t[k] = ns.PlainRealm(v) end
-    if type(k) == "string" and k:find("CAMWOW", 1, true) then
+    if type(v) == "table" then renameData(v, kind or OWN_MERGE[k], newKey, newValue)
+    elseif type(v) == "string" then
+      local nv = newValue(v, k)
+      if nv then t[k] = nv end
+    end
+    if type(k) == "string" and newKey(k) then
       renames = renames or {}
       renames[#renames + 1] = k
     end
   end
   for _, k in ipairs(renames or {}) do
-    local v, new = t[k], ns.PlainRealm(k)
+    local v, new = t[k], newKey(k)
     t[k] = nil
     if t[new] == nil then t[new] = v
     elseif type(t[new]) == "table" and type(v) == "table" then
-      t[new] = kind and combineVersions(t[new], v, kind) or combineRecord(t[new], v)
+      if kind == "sum" then addUp(t[new], v)
+      else t[new] = kind and combineVersions(t[new], v, kind) or combineRecord(t[new], v) end
     end
   end
+end
+
+-- Puts every key and value in saved or received data under the plain realm.
+function ns.PlainRealmData(t, kind)
+  renameData(t, kind, function(k)
+    return k:find("CAMWOW", 1, true) and ns.PlainRealm(k)
+  end, function(v)
+    return v:find("CAMWOW", 1, true) and ns.PlainRealm(v)
+  end)
+end
+
+-- Data saved while the game gave an empty realm name (November 21, see RealmName above):
+-- markets "|Alliance" and characters "Name-" (or "?|Alliance", "Name-?" with none at all),
+-- and a character's "Name- (neutral)" auctions list, back under the realm. Only names of
+-- your own characters count as character keys.
+local function blankRealmRenamer(db, realm)
+  local names = { [ns.FullName()] = true }
+  for key in pairs(db.chars or {}) do
+    local name = type(key) == "string" and key:match("^(.+)%-[^%-]+$")
+    if name then names[name] = true end
+    name = type(key) == "string" and key:match("^(.+)%-%??$")
+    if name then names[name] = true end
+  end
+  local function fix(s)
+    local side = s:match("^%??|(%a+)$")
+    if side then return realm .. "|" .. side end
+    local name = s:match("^(.+)%-%??$")
+    if name and names[name] then return name .. "-" .. realm end
+    name = s:match("^(.+)%-%?? %(neutral%)$")
+    if name and names[name] then return name .. "-" .. realm .. " (neutral)" end
+  end
+  return fix, function(v, k)
+    if k == "realm" and (v == "" or v == "?") then return realm end
+    return fix(v)
+  end
+end
+
+-- Whether any table has such a key (a quick look, so the full repair runs only when needed).
+function ns.HasBlankRealmData(db, realm)
+  local fix = blankRealmRenamer(db, realm)
+  for _, t in pairs(db) do
+    if type(t) == "table" then
+      for k in pairs(t) do
+        if type(k) == "string" and fix(k) then return true end
+      end
+    end
+  end
+  return false
+end
+
+function ns.FixBlankRealm(db, realm)
+  if not realm then return end
+  local fixKey, fixValue = blankRealmRenamer(db, realm)
+  renameData(db, nil, fixKey, fixValue)
 end
 
 function ns.CharKey()
@@ -1006,6 +1122,12 @@ ns:On("ADDON_LOADED", function(name)
     ForeverLedgerDB.profAliases = ForeverLedgerDB.profAliases or {}
     ForeverLedgerDB.schema = 10
   end
+  -- Schema 11 (November 21): charRealm remembers each character's realm (ns.RealmName);
+  -- it fills in as characters log in, and data saved under an empty realm moves back below.
+  if ForeverLedgerDB.schema < 11 then
+    ForeverLedgerDB.charRealm = ForeverLedgerDB.charRealm or {}
+    ForeverLedgerDB.schema = 11
+  end
   -- Settings per character (below): while a character used its own, the shared settings
   -- were also kept under settingsAccount. If the game ever saved the stand-in instead of
   -- the real table, this brings them back.
@@ -1015,6 +1137,12 @@ ns:On("ADDON_LOADED", function(name)
   end
   copyDefaults(DEFAULTS, ForeverLedgerDB)
   ns.db = ForeverLedgerDB
+  -- Anything saved while the game gave no realm name (see ns.RealmName) goes back under it.
+  local okFix, errFix = pcall(function()
+    local realm = ns.RealmName()
+    if realm and ns.HasBlankRealmData(ForeverLedgerDB, realm) then ns.FixBlankRealm(ForeverLedgerDB, realm) end
+  end)
+  if not okFix then geterrorhandler()(errFix) end
   ns:ApplyCharSettings()
   if ns.Theme and ns.Theme.Apply then ns.Theme:Apply() end   -- the look, before any of our frames exist
   for _, fn in ipairs(ns.readyCallbacks) do
@@ -1129,6 +1257,8 @@ end
 function ns:MergeData(data, via)
   local db, nChars, nPrices, nVendor, nBags = ns.db, 0, 0, 0, 0
   ns.PlainRealmData(data)   -- (from someone still on a version that files by server)
+  -- (and from one that saved under an empty realm name: November 21)
+  if ns.RealmName() and ns.HasBlankRealmData(data, ns.RealmName()) then ns.FixBlankRealm(data, ns.RealmName()) end
   for key, c in pairs(data.chars or {}) do
     local mine = db.chars[key]
     if via and ns:IsOwnChar(key) then
