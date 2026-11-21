@@ -754,6 +754,32 @@ function ns.RunInSlices(label, fn, done)
 end
 function ns.StopSlices(run) if run then run.stopped = true end end
 
+-- A stable merge sort that gives the frame back now and then inside a sliced run (Lua's
+-- table.sort can't: it calls the comparator from C). Sorts t in place by less.
+function ns.SortInSlices(t, less)
+  local n = #t
+  if n < 2 then return t end
+  local a, b, width, done = t, {}, 1, 0
+  while width < n do
+    for i = 1, n, 2 * width do
+      local mid, hi = math.min(i + width, n + 1), math.min(i + 2 * width, n + 1)
+      local l, r, k = i, mid, i
+      while l < mid and r < hi do
+        if less(a[r], a[l]) then b[k] = a[r]; r = r + 1 else b[k] = a[l]; l = l + 1 end
+        k = k + 1
+      end
+      while l < mid do b[k] = a[l]; l = l + 1; k = k + 1 end
+      while r < hi do b[k] = a[r]; r = r + 1; k = k + 1 end
+      done = done + (hi - i)
+      if done >= 256 then done = 0; ns.MaybeYield() end
+    end
+    a, b = b, a
+    width = width * 2
+  end
+  if a ~= t then for i = 1, n do t[i] = a[i] end end
+  return t
+end
+
 local frameOurs, frameTop, frameTopMs = 0, nil, 0   -- this frame's time in our code (freeze watch, below)
 local framePart, framePartMs, frameTipItem = nil, 0, nil   -- its slowest part (sub), the tooltip item we worked on
 -- sub: a part of a task timed under its own label too (the tooltip's sections): listed in

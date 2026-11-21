@@ -400,6 +400,7 @@ local function earlyJudge(id, it, now)
     return
   end
   if not ns:AddCheapest(id, it.min, it.q) then return end
+  if S.changedIds then S.changedIds[id] = true end
   local saved = (ns.db.prices[ns.MarketKey()] or {})[id]
   S.early[id] = { rec = saved, price = it.min, limit = limit, gear = gear, watched = it.watched }
   if not gear and saved then provisional[id] = { rec = saved, l = saved.l, t = saved.t } end
@@ -572,14 +573,14 @@ local function judge(id, it, now, looks, stats)
   end
   if drop then
     local gone = ns:DropBelow(id, it.min, true)
-    if gone > 0 then stats.dropped, stats.gone = stats.dropped + 1, stats.gone + gone end
+    if gone > 0 then stats.dropped, stats.gone = stats.dropped + 1, stats.gone + gone; if S.changedIds then S.changedIds[id] = true end end
   end
   if look == "check" then
     looks[#looks + 1] = { id = id, price = it.min, watched = watched, new = prev ~= it.min,
       gain = (limit - it.min) / math.max(limit, 1) }
     return nil   -- (remembered once it's among the looks that run: see read's end)
   elseif look == "add" then
-    if ns:AddCheapest(id, it.min, it.q) then stats.added = stats.added + 1 end
+    if ns:AddCheapest(id, it.min, it.q) then stats.added = stats.added + 1; if S.changedIds then S.changedIds[id] = true end end
   elseif look == "touch" then
     rec.t = now
     stats.touched = stats.touched + 1
@@ -662,7 +663,13 @@ read = function(rows)
     within = within or #rows
     local changed = stats.dropped + stats.added + stats.touched + S.earlyCount > 0
     if changed then
-      if ns.InvalidateValues then ns:InvalidateValues(true) end
+      -- Only the items whose price changed get their values worked out again (the rest
+      -- follow within 30 seconds): throwing every value away after each reading, every 20
+      -- seconds, remade them all, hundreds of MB of leftovers a minute (Frank's /fl perf,
+      -- November 21). Full scans still start over.
+      if ns.InvalidateItem then
+        for id in pairs(S.changedIds or {}) do ns:InvalidateItem(id) end
+      elseif ns.InvalidateValues then ns:InvalidateValues(true) end
       if ns.RefreshFlipsIfShown then C_Timer.After(0.5, function() ns:RefreshFlipsIfShown() end) end
     end
     local money = ns.MoneyPlain or tostring
@@ -709,6 +716,7 @@ function ns:StartSweep(done)
   if S.state ~= "idle" then return false end
   S.onDone, S.groups, S.yielded, S.emptyOnce, S.sent, S.sentAt = done, 0, false, nil, nil, nil
   S.items, S.early, S.earlyParts, S.earlyCount, S.upTo, S.yields, S.afterQueue = {}, {}, 0, 0, 0, 0, nil
+  S.changedIds = {}   -- items whose saved price this reading changed (their values are refreshed)
   S.throttled, S.throttledFor, S.throttledSince, S.holdWhy, S.holdFirst, S.newFlips = 0, 0, nil, nil, nil, nil
   S.flipParts = {}
   S.run = (S.run or 0) + 1

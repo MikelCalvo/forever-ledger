@@ -166,3 +166,14 @@ T.test("Slices: a stopped run never finishes, and timed tasks inside a run just 
   T.runTimers()
   assert(ok, err)
 end)
+
+T.test("Slices: the merge sort orders like table.sort and keeps equal items in order", function()
+  local list, expect = {}, {}
+  for i = 1, 1000 do list[i] = { v = (i * 7919) % 101, n = i } end
+  for i = 1, 1000 do expect[i] = list[i] end
+  table.sort(expect, function(a, b) if a.v ~= b.v then return a.v < b.v end return a.n < b.n end)
+  ns.SortInSlices(list, function(a, b) return a.v < b.v end)
+  for i = 1, 1000 do T.eq(list[i], expect[i], "position " .. i) end
+  T.same(ns.SortInSlices({}, function() return false end), {})
+  T.same(ns.SortInSlices({ 3 }, function(a, b) return a < b end), { 3 })
+end)

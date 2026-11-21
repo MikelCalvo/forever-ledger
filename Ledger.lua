@@ -159,6 +159,23 @@ local GROUP_SECONDS = 60
 -- The saved logs the lists come from (RefreshLedger builds again when one of them grows).
 local LOGS = { "sales", "purchases", "vendorLog", "ledgerMonths", "otherLog", "sessions" }
 
+-- The order the rows are shown in: sort = { key, desc }; ties newest first.
+local function ledgerLess(sort)
+  local key, desc = sort.key, sort.desc
+  return function(a, b)
+    local va, vb = a[key], b[key]
+    if type(va) == "string" then va = va:lower() end
+    if type(vb) == "string" then vb = vb:lower() end
+    if va == vb or va == nil or vb == nil then
+      if va == nil and vb ~= nil then return false end
+      if vb == nil and va ~= nil then return true end
+      return (a.t or 0) > (b.t or 0)
+    end
+    if desc then return va > vb end
+    return va < vb
+  end
+end
+
 -- Combine trades of the same item, at the same price each, in the same place, by the
 -- same character, within a minute of each other (selling 10 oils one by one is one row).
 local function groupSimilar(list)
@@ -857,7 +874,9 @@ function ns:RefreshLedger()
   -- The same filters over the same logs give the same list: built again only when one of
   -- them changes, or a minute on (Frank's /fl perf, November 21: 240 ms and 20 MB of
   -- leftovers for each of 24 refreshes in 20 minutes).
-  local stamp = { s.tab, s.range, tostring(s.char), match, tostring(s.group), tostring(s.rarity), math.floor(time() / 60) }
+  local sort = s.sort[s.tab] or { key = s.tab == "resale" and "profit" or "t", desc = true }
+  local order = tostring(sort.key) .. (sort.desc and ":desc" or ":asc")
+  local stamp = { s.tab, s.range, tostring(s.char), match, tostring(s.group), tostring(s.rarity), math.floor(time() / 60), order }
   for _, k in ipairs(LOGS) do
     local l = ns.db[k] or {}
     local last = l[#l]
@@ -873,7 +892,11 @@ function ns:RefreshLedger()
     f.building = stamp
     local tab, group, rarity, inside = s.tab, s.group, s.rarity, true
     f.buildRun = ns.RunInSlices("Ledger list", function()
-      if not itemTab then return { stamp = stamp, tab = tab, list = records(tab, from, charOK, match) } end
+      -- Sorted here too, a few hundred rows at a time (sorting thousands in one go took 100
+      -- ms: Frank's /fl perf, November 21).
+      local less = ledgerLess(sort)
+      local function sorted(l) ns.SortInSlices(l, less); l.sortedBy = order; return l end
+      if not itemTab then return { stamp = stamp, tab = tab, list = sorted(records(tab, from, charOK, match)) } end
       local g, r = group, rarity
       local function itemOK(id)
         -- Rarity first: it is quick, and an item it rules out needs no group look-up.
@@ -892,7 +915,7 @@ function ns:RefreshLedger()
         if not hasR[r] then r = "all" end
         list = run()
       end
-      return { stamp = stamp, tab = tab, list = list, gopts = gopts, ropts = ropts, group = g, rarity = r }
+      return { stamp = stamp, tab = tab, list = sorted(list), gopts = gopts, ropts = ropts, group = g, rarity = r }
     end, function(result)
       if f.building ~= stamp then return end
       f.building, f.cache = nil, result
@@ -917,24 +940,12 @@ function ns:RefreshLedger()
   f.list = list
 
   local cols = COLUMNS[s.tab]
-  local sort = s.sort[s.tab] or { key = s.tab == "resale" and "profit" or "t", desc = true }
   -- Sorted once per list and order (it was sorted again on every refresh: 100 ms with
   -- thousands of rows, Frank's /fl perf, November 21).
-  local order = tostring(sort.key) .. (sort.desc and ":desc" or ":asc")
-  if list.sortedBy ~= order then
-  table.sort(list, function(a, b)
-    local va, vb = a[sort.key], b[sort.key]
-    if type(va) == "string" then va = va:lower() end
-    if type(vb) == "string" then vb = vb:lower() end
-    if va == vb or va == nil or vb == nil then
-      if va == nil and vb ~= nil then return false end
-      if vb == nil and va ~= nil then return true end
-      return (a.t or 0) > (b.t or 0)
-    end
-    if sort.desc then return va > vb end
-    return va < vb
-  end)
-  list.sortedBy = order
+  -- (While a new build runs the last list shows in its old order: the new one comes sorted.)
+  if list.sortedBy ~= order and not f.loading then
+    table.sort(list, ledgerLess(sort))
+    list.sortedBy = order
   end
 
   -- Header
