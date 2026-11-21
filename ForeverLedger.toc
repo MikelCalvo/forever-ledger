@@ -11,6 +11,7 @@ Libs\LibStub\LibStub.lua
 Libs\LibAHTab\LibAHTab.lua
 Locale.lua
 Locales\zhCN.lua
+Locales\ruRU.lua
 Core.lua
 LocaleHooks.lua
 Prices.lua

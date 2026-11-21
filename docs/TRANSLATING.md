@@ -32,10 +32,45 @@ The same summary runs on every push (GitHub Actions, Check code, "Translation co
 
 ## Rules for the strings
 
-- Keep every `%s`, `%d`, `%.1f` and the like, the same number of them in the same order. Word order around them is yours to change.
+- Keep every `%s`, `%d`, `%.1f` and the like in the same order: the core fills them by position. You may leave out placeholders only at the end of a line. Word order around them is yours to change.
 - Keep color codes (`|cffffd100` ... `|r`), item links and icons exactly as they are.
 - Don't translate slash commands (`/fl ...`), setting keys or anything saved.
 - Money stays in the game's coin icons where the addon shows them.
+
+## Counted nouns
+
+Some languages need three forms of a counted noun: 1 день, 2 дня, 5 дней. Write the
+translation as a table of three strings:
+
+```lua
+language.strings["%d items"] = { "%d предмет", "%d предмета", "%d предметов" }
+language.strings["%d item"] = { "%d предмет", "%d предмета", "%d предметов" }
+```
+
+and add `language.forms(n)` to the language file, returning 1, 2 or 3 for a number:
+
+```lua
+function language.forms(n)
+  n = math.abs(tonumber(n) or 0)
+  local mod100, mod10 = n % 100, n % 10
+  if mod100 >= 11 and mod100 <= 14 then return 3 end
+  if mod10 == 1 then return 1 end
+  if mod10 >= 2 and mod10 <= 4 then return 2 end
+  return 3
+end
+```
+
+The core picks the form by the first number the message shows. A line with a number
+but no noun (most of them) stays a plain string.
+
+When the code builds a line from a number and a word before showing it, add the
+finished singular and plural lines as keys too (`"%d item"` and `"%d items"` above):
+the number is already in the text the core sees.
+
+For a message the code assembles before showing it, translate the finished line:
+`ns.LocalizeFormatted("%d items left", n)` formats first, then translates, so the form
+sees the number. A language without `language.forms` keeps translating the template
+and formatting after, as before.
 
 ## Optional parts of a language file
 

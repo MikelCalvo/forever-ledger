@@ -390,8 +390,8 @@ local function drawList()
   elseif not when then
     status = "Press Scan to read the auction house, then tick groups on the left to narrow it down."
   else
-    status = ("Prices from %s: %d item%s%s."):format(when, #shown, #shown == 1 and "" or "s",
-      #shown > MAX_ROWS and (", the first %d shown (tick groups or search to narrow it)"):format(MAX_ROWS) or "")
+    status = ns.LocalizeFormatted("Prices from %s: %d item%s", when, #shown, #shown == 1 and "" or "s")
+      .. (#shown > MAX_ROWS and ns.LocalizeText((", the first %d shown (tick groups or search to narrow it)"):format(MAX_ROWS)) or ".")
   end
   if status then frame.status:SetText(status) end
   frame.empty:SetShown(not building and #shown == 0)

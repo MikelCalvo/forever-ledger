@@ -1140,6 +1140,14 @@ end
 -- comes back.
 local pendingFlips, flipTimer = {}, false
 
+-- A language with plural forms matches the English line before its noun is translated;
+-- one without translates the word first, as the line is translated as a whole.
+local function dealWord(n)
+  local word = n == 1 and "deal" or "deals"
+  local data = ns.GetLocaleData and ns.GetLocaleData()
+  return data and data.forms and word or ns.LocalizeText(word)
+end
+
 -- Chime, screen message and chat for new vendor flips and below-usual-price deals.
 local function announce(all, usual)
   if #all == 0 and usual == 0 then return end
@@ -1176,7 +1184,7 @@ local function announce(all, usual)
   else
     -- Names the tab: the auction house panel only holds flips and shopping lists (owner,
     -- November 9: looked for 2 deals there and found nothing).
-    text = ns.LocalizeText("%d new %s below the usual price: see Gold making, Deals (/fl)"):format(usual, ns.LocalizeText(usual == 1 and "deal" or "deals"))
+    text = ns.LocalizeFormatted("%d new %s below the usual price: see Gold making, Deals (/fl)", usual, dealWord(usual))
   end
   -- Off in Settings if it covers your windows (Magic, October 3: it landed on the Buy queue).
   -- Never while the auction house is open (Frank, November 15: it covered the Buy tab's
@@ -1202,8 +1210,8 @@ local function announce(all, usual)
     end
   end
   if usual > 0 and chat then
-    ns:Print(ns.LocalizeText("%d new %s below the usual price: see Gold making, Deals (/fl)."):format(
-      usual, ns.LocalizeText(usual == 1 and "deal" or "deals")))
+    ns:Print(ns.LocalizeFormatted("%d new %s below the usual price: see Gold making, Deals (/fl).",
+      usual, dealWord(usual)))
   end
 end
 

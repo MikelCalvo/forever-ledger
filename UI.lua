@@ -881,7 +881,7 @@ local function fillDetail(d, s, width, noSteps)
     l.text:SetPoint("LEFT", l.icon, "RIGHT", 6, 0)
     l.text:SetWidth(half - 44)
     l.text:SetText(ns.LocalizeText("%s%s at %s  %s"):format(b.qty > 1 and (b.qty .. " x ") or "", itemName(b.id),
-      ns.Money(b.price), dim(b.listed and (b.listed .. " listed") or "from a vendor")))
+      ns.Money(b.price), dim(b.listed and ns.LocalizeText("%d listed"):format(b.listed) or ns.LocalizeText("from a vendor"))))
     l.text:Show()
     y = y + 18
   end
