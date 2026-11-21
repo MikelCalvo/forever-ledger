@@ -62,6 +62,7 @@ Post.lua
 GroupsTab.lua
 CraftPlan.lua
 GoldMaking.lua
+WritsData.lua
 Writs.lua
 QuickDisenchant.lua
 PriceWindow.lua
