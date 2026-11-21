@@ -109,6 +109,7 @@ T.test("Freeze watch: a timed task that stops with an error doesn't hide the res
   later()
   local added = ns.FrameShare() - share
   debugprofilestop, geterrorhandler = realClock, realHandler
-  T.eq(added, 150, "the event's 100 ms and the later task's 50")
+  -- (Near, not equal: the frame's running total before it can carry a fraction.)
+  T.ok(math.abs(added - 150) < 0.001, "the event's 100 ms and the later task's 50, got " .. tostring(added))
   ns.perf["Test broken"], ns.perf["Test later"], ns.perf.FL_TEST_DEPTH = nil, nil, nil
 end)
