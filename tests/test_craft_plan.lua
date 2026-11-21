@@ -138,3 +138,19 @@ T.test("Craft plan: a whole batch beats a cheap first listing when the next is d
   T.eq(total, 149)
   T.eq(plan[BOLT].bought, 1); T.eq(plan[BOLT].made, 2)
 end)
+
+T.test("Craft plan: a big plan doesn't look over the whole rest for every unit", function()
+  local reads = 0
+  local function counted(levels)
+    return setmetatable({}, { __index = function(_, k) reads = reads + 1; return levels[k] end })
+  end
+  local bolts, cloth = {}, {}
+  for i = 1, 40 do bolts[i] = { 40 + i, 50 }; cloth[i] = { 12 + i, 200 } end
+  local total, plan = ns.CraftPlan({ [BOLT] = 400 }, sources({
+    [BOLT] = { ladder = counted(bolts), recipe = { makes = 1, mats = { { RUNE, 3 } } } },
+    [RUNE] = { ladder = counted(cloth) },
+  }))
+  T.eq(total, 16900)
+  T.eq(plan[BOLT].bought + plan[BOLT].made, 400)
+  T.ok(reads < 400 * 1000, ("%d looks at the listings for 400 bolts"):format(reads))
+end)
