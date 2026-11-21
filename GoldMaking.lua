@@ -224,7 +224,7 @@ end
 -- material with no price.
 function ns:GoldIdeas()
   local rows = {}
-  local vendor, ah, flips = ns:FindShuffles()
+  local vendor, ah, flips = (ns.FindShufflesUntimed or ns.FindShuffles)(ns)
   for _, s in ipairs(vendor) do rows[#rows + 1] = shuffleRow(s, "vendor") end
   for _, s in ipairs(ah) do rows[#rows + 1] = shuffleRow(s, "ah") end
   for _, f in ipairs(flips) do rows[#rows + 1] = flipRow(f) end
@@ -380,11 +380,22 @@ local function filters(kind)
 end
 
 local workedAHledger   -- (AHledger prices went into the list: its credit in the status line)
+-- Worked out over several frames (Frank's /fl perf, November 21: 855 ms in one go froze
+-- the game on opening the tab). The last list stays on screen until the new one is done.
+local working   -- the run in progress, if any
 local function work()
+  if working and coroutine.status(working) ~= "dead" then return end   -- (dead: it stopped with an error)
   local before = ns.AHledgerUses and ns.AHledgerUses() or 0
-  rows, noPrice = ns:GoldIdeas()
-  workedAt = time()
-  workedAHledger = ns.AHledgerUses and ns.AHledgerUses() ~= before
+  local finished = false
+  working = ns.RunInSlices("Gold making list", function() return ns:GoldIdeas() end, function(r, n)
+    finished = true
+    working = nil
+    rows, noPrice = r, n
+    workedAt = time()
+    workedAHledger = ns.AHledgerUses and ns.AHledgerUses() ~= before
+    if refresh then refresh() end
+  end)
+  if finished then working = nil end   -- (done within the first slice)
 end
 
 local function sortRows(list)
@@ -566,6 +577,7 @@ local function drawList()
   end
 
   local parts = {}
+  if working then parts[#parts + 1] = "Working out the list..." end
   if workedAt then
     local last = ns.db.lastFullScan
     parts[#parts + 1] = ("Worked out %s%s"):format(date("%H:%M", workedAt),
@@ -579,7 +591,7 @@ local function drawList()
   f.status:SetText(table.concat(parts, ". ") .. (#parts > 0 and "." or ""))
   f.empty:SetShown(#shown == 0)
   if #shown == 0 then
-    f.empty:SetText(not next(ns.db.prices[ns.MarketKey()] or {}) and
+    f.empty:SetText(working and not rows and "Working out the list: a moment..." or not next(ns.db.prices[ns.MarketKey()] or {}) and
       "No prices yet: run a Full scan at the auction house, then come back."
       or "Nothing here with these filters. Try Everything, a lower Least profit, or clear the search.")
   end

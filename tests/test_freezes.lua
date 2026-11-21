@@ -113,3 +113,32 @@ T.test("Freeze watch: a timed task that stops with an error doesn't hide the res
   T.ok(math.abs(added - 150) < 0.001, "the event's 100 ms and the later task's 50, got " .. tostring(added))
   ns.perf["Test broken"], ns.perf["Test later"], ns.perf.FL_TEST_DEPTH = nil, nil, nil
 end)
+
+-- Frank's /fl perf, November 21: Gold making's list, 855 ms in one frame.
+T.test("Slices: long work gives the frame back and still finishes", function()
+  local realClock, now = debugprofilestop, 0
+  debugprofilestop = function() return now end
+  local ok, err = pcall(function()
+    local done, slices = nil, 0
+    ns.RunInSlices("Test slices", function()
+      local sum = 0
+      for i = 1, 10 do
+        now = now + 3            -- each step 3 ms
+        sum = sum + i
+        ns.MaybeYield()
+      end
+      return sum, "end"
+    end, function(a, b) done = { a, b } end)
+    T.eq(done, nil, "not all in the first frame")
+    while not done and slices < 20 do slices = slices + 1; T.runTimers() end
+    T.eq(done[1], 55)
+    T.eq(done[2], "end")
+    T.ok(slices >= 2, "spread over frames: " .. slices)
+    local before = now
+    ns.MaybeYield()   -- outside a run: nothing happens
+    T.eq(now, before)
+  end)
+  debugprofilestop = realClock
+  T.runTimers()
+  assert(ok, err)
+end)

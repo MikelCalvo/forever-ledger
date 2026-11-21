@@ -692,6 +692,32 @@ function ns:EventKnown(event) return handlers[event] ~= nil and not handlers[eve
 -- Timing, for /fl perf: total and slowest single run per event or task.
 ns.perf, ns.perfSince = {}, GetTime()
 local function clock() return debugprofilestop and debugprofilestop() or GetTime() * 1000 end
+
+-- Long work spread over frames (Frank's /fl perf, November 21: Gold making's list took
+-- 855 ms in one frame). ns.RunInSlices(fn, done) runs fn in a coroutine, BUDGET_MS a
+-- frame; long loops inside it call ns.MaybeYield() to give the frame back. done gets fn's
+-- results. Outside such a run MaybeYield does nothing, so the same code still works in
+-- one go. Each slice is timed as label (nothing timed may be running when it yields).
+local SLICE_MS = 8
+local slicing, sliceStart = nil, 0
+function ns.MaybeYield()
+  if slicing and coroutine.running() == slicing and clock() - sliceStart > SLICE_MS then coroutine.yield() end
+end
+function ns.RunInSlices(label, fn, done)
+  local co = coroutine.create(fn)
+  local step
+  step = ns.Timed(label, function()
+    slicing, sliceStart = co, clock()
+    local result = { coroutine.resume(co) }
+    slicing = nil
+    if not result[1] then geterrorhandler()(result[2]); return end
+    if coroutine.status(co) == "dead" then done(unpack(result, 2))
+    else C_Timer.After(0, step) end
+  end)
+  step()
+  return co
+end
+
 local frameOurs, frameTop, frameTopMs = 0, nil, 0   -- this frame's time in our code (freeze watch, below)
 local framePart, framePartMs, frameTipItem = nil, 0, nil   -- its slowest part (sub), the tooltip item we worked on
 -- sub: a part of a task timed under its own label too (the tooltip's sections): listed in

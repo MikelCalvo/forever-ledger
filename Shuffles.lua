@@ -206,6 +206,7 @@ function ns:FindShuffles()
 
   local vendor, ah, seen = {}, {}, {}
   for id in pairs(candidates) do
+    if ns.MaybeYield then ns.MaybeYield() end   -- (in slices when Gold making works its list out)
     local cost, listed = buyInfo(id, market)
     if cost and cost > 0 then
       -- The best option that ends mostly with vendor sales, and the best that ends
@@ -1342,4 +1343,5 @@ function ns:PrintDeals()
   end
   printGrouped(deals, 20)
 end
+ns.FindShufflesUntimed = ns.FindShuffles   -- (Gold making runs it in slices, timed as a whole)
 ns.FindShuffles = ns.Timed("Finding shuffles", ns.FindShuffles)
