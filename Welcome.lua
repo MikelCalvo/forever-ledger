@@ -173,15 +173,11 @@ end
 -- { ..., fix = true } a fix (a wrench). The small ones share one card.
 ---------------------------------------------------------------------------
 ns.WHATS_NEW = {
-  version = "0.28.0",
+  version = "0.28.1",
   lines = {
-    { "Translations: Forever Ledger can show its text in your game's language, Simplified Chinese first (thanks to yippp). Professions, quests, riding and the Trade channel now work on game clients in every language.", major = true },
-    { "Writs: every column fits, and Per rep shows in green what the coin pouch pays you for each point.", change = true },
-    { "Disenchant window and Auctions tab: the button names the next item, and prices and lines fit.", change = true },
-    { "Booty Bay in every language: neutral auction house prices are kept apart on French, German and other clients too.", fix = true },
-    { "No hitch on crates and writs: hovering them no longer makes the game load thousands of items at once.", fix = true },
-    { "Other addons' auction house tabs: Cheap Upgrades, Auctionator and TSM tabs line up with ours in one row, each showing only its own view.", fix = true },
-    { "Always undercut: works on Blizzard's Sell tab too.", fix = true },
+    { "Your prices are back: since the game changes on November 21 the game can give an empty realm name in some zones, which hid prices, sell speeds and Worth to you from tooltips. Forever Ledger now remembers each character's realm, and anything saved meanwhile moves back where it belongs. Nothing was lost.", fix = true },
+    { "Sessions: a Reset popup left open can no longer clear a newer session.", fix = true },
+    { "Price window: credits AHledger when its prices are used there.", fix = true },
   },
 }
 

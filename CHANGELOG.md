@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-11-21
+
+### Highlights
+- ✓ **Your prices are back**: since the game changes on November 21 the game can give an empty realm name in some zones, which hid prices, sell speeds and Worth to you from tooltips. Forever Ledger now remembers each character's realm, and anything saved meanwhile moves back where it belongs. Nothing was lost.
+- ✓ **Sessions**: a Reset popup left open can no longer clear a newer session.
+- ✓ **Price window**: credits AHledger when its prices are used there.
+
 ### Fixed
 - Prices, sell speeds and the rest of your saved data are back in some zones: since the November 21 game changes the game can give an empty realm name, and Forever Ledger then looked under a realm with no name. It now remembers each character's realm and uses it then, and anything saved meanwhile moves back where it belongs.
 - Sessions: a Reset popup left open while you stopped and started a new session no longer clears the new one; an auction sale from items posted before an update is still matched to that loot.
