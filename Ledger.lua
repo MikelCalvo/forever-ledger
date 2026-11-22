@@ -512,7 +512,7 @@ end
 
 -- Selected rows get the accent tint.
 local function paint()
-  for i, r in ipairs(rows) do
+  for i, r in pairs(rows) do   -- (pairs: rows are made as they come into view, with gaps after a jump)
     local rec = shown[i]
     r.sel:SetShown(rec ~= nil and r:IsShown() and sel[recKey(rec)] or false)
   end
@@ -1017,7 +1017,7 @@ function ns:RefreshLedger()
   wipe(shown)
   for i = 1, n do shown[i] = list[i] end
   f.draw = { cols = cols, lay = lay, width = width, done = {} }
-  for i = 1, #rows do rows[i]:Hide() end
+  for _, r in pairs(rows) do r:Hide() end   -- (pairs: the pool has gaps after a scroll jump; Codex review)
   local narrowed = itemTab and (s.group ~= "all" or s.rarity ~= "all")
   f.empty:SetText(f.loading and "Loading..." or (EMPTY[s.tab] or EMPTY.all) .. (narrowed and "\n\nThe Group or Rarity choice is hiding some: choose Any group and Any rarity to see them." or ""))
   f.empty:SetShown(#list == 0)
@@ -1076,6 +1076,8 @@ drawVisible = function()
 end
 
 ns.RefreshLedger = ns.Timed("Ledger tab", ns.RefreshLedger)
+ns._ledgerTest = { frame = function() return f end, rows = function() return rows end,
+  drawVisible = function() drawVisible() end }   -- (tests)
 
 -- Open the Ledger on one of its sub-tabs (the Dashboard's "See all sessions").
 function ns:OpenLedgerTab(tab)

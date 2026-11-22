@@ -913,7 +913,7 @@ local function recipeRows(prof, width, lay)
   -- Only the rows in view (and a few either side) are drawn, more as you scroll (Frank's
   -- tenth /fl perf, November 21: all 300 drawn on each refresh took 60 ms).
   f.rdraw = { list = list, lay = lay, width = width, rank = rank, prof = prof, n = n, done = {} }
-  for i = 1, #rows do rows[i]:Hide() end
+  for _, r in pairs(rows) do r:Hide() end   -- (pairs: the pool has gaps after a scroll jump; Codex review)
   drawRecipesVisible()
   f.summary:SetText(ns.LocalizeText("%s: %d recipes, %d known. Showing %d%s. (Classic) = original Classic data, unconfirmed in Forever until you see it."):format(
     prof, total, knownCount, n, #list > MAX_ROWS and (" of " .. #list) or ""))
@@ -1148,7 +1148,7 @@ function ns:RefreshRecipes()
   local n, total = 0, 0
   f.rdraw = nil   -- (the Trainers view draws all its rows: a few)
   if trainers then n = trainerRows(width, lay) elseif current then n, total = recipeRows(current, width, lay) end
-  for i = n + 1, #rows do rows[i]:Hide() end
+  for i, r in pairs(rows) do if i > n then r:Hide() end end   -- (pairs: gaps after a scroll jump)
   f.empty:SetShown(n == 0)
   -- Recipes there but all hidden by the choices above: say which (Frank, AN6, November 13:
   -- Skinning looked empty on Known, as none of his characters knows its 3 recipes).
