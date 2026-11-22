@@ -181,10 +181,19 @@ local GROUP_SECONDS = 60
 local LOGS = { "sales", "purchases", "vendorLog", "ledgerMonths", "otherLog", "sessions" }
 
 -- The order the rows are shown in: sort = { key, desc }; ties newest first.
+-- A row's money in (+) or out (-): its own amount where it has one (other money, sessions),
+-- else a trade's total, out for a buy (the All tab).
+local function amountOf(rec)
+  if rec.amount ~= nil then return rec.amount end
+  if rec.total == nil then return nil end
+  return rec.buy and -rec.total or rec.total
+end
+
 local function ledgerLess(sort)
   local key, desc = sort.key, sort.desc
   return function(a, b)
     local va, vb = a[key], b[key]
+    if key == "amount" then va, vb = amountOf(a), amountOf(b) end
     if type(va) == "string" then va = va:lower() end
     if type(vb) == "string" then vb = vb:lower() end
     if va == vb or va == nil or vb == nil then
@@ -317,7 +326,7 @@ local function records(tab, from, charOK, match, opts)
         if not r or r.id ~= e.id then
           -- No quantity means a non-commodity purchase, which is always one item.
           r = keepRow(e, { t = e.t, id = e.id, item = item, iconKey = e.id, qty = e.q or 1, total = e.a,
-            where = "Auction", char = e.c, kind = "Auction purchase" })
+            where = "Auction", char = e.c, kind = "Auction purchase", buy = true })
         end
         buys[#buys + 1] = r
       end
@@ -331,7 +340,7 @@ local function records(tab, from, charOK, match, opts)
         local kind = sold and "Sold to vendor" or "Bought from vendor"
         if not r or r.id ~= e.id or r.kind ~= kind then
           r = keepRow(e, { t = e.t, id = e.id, item = item, iconKey = e.id, qty = e.q, total = e.a, where = "Vendor",
-            char = e.c, kind = kind })
+            char = e.c, kind = kind, buy = not sold or nil })
         end
         if sold then sales[#sales + 1] = r else buys[#buys + 1] = r end
       end
@@ -347,7 +356,7 @@ local function records(tab, from, charOK, match, opts)
         local r = keptRow(m, item)
         if not r or r.id ~= m.id or r.kind ~= kind then
           r = keepRow(m, { t = m.t, month = true, id = m.id, item = item, iconKey = m.id or m.n,
-            qty = m.q, total = m.a, where = auction and "Auction" or "Vendor", char = m.c, kind = kind })
+            qty = m.q, total = m.a, where = auction and "Auction" or "Vendor", char = m.c, kind = kind, buy = not sold or nil })
         end
         if sold then sales[#sales + 1] = r else buys[#buys + 1] = r end
       end
@@ -376,17 +385,12 @@ local function records(tab, from, charOK, match, opts)
     part("grouping")
     if tab == "sales" then out = groupSimilar(sales) elseif tab == "purchases" then out = groupSimilar(buys)
     elseif tab == "all" then
-      -- Everything, money in (+) and out (-); the other money is added below.
-      -- (A kept row is copied: the Sales and Purchases tabs show the same row without a sign.)
-      for _, r in ipairs(groupSimilar(sales)) do
-        if r.src or r._members then r = copyRow(r) end
-        r.amount = r.total; out[#out + 1] = r
-      end
-      for _, r in ipairs(groupSimilar(buys)) do
-        ns.MaybeYield()
-        if r.src or r._members then r = copyRow(r) end
-        r.amount = -r.total; out[#out + 1] = r
-      end
+      -- Everything, money in (+) and out (-); the other money is added below. A trade's sign
+      -- is worked out where it's shown (amountOf), not written on the row: rows are kept
+      -- between builds, and copying each to sign it made 88 MB in 7 builds (Frank's
+      -- twenty-third /fl perf, November 22).
+      for _, r in ipairs(groupSimilar(sales)) do out[#out + 1] = r end
+      for _, r in ipairs(groupSimilar(buys)) do ns.MaybeYield(); out[#out + 1] = r end
     else
       -- By item: every item bought or sold, with how many, the averages, and (for items
       -- both bought and sold) the profit on the ones sold, each and in all. Auction sales
@@ -553,6 +557,7 @@ end
 -- What a record adds to a total: money in positive, out negative (resale: its profit).
 local function signedOf(rec, tab)
   if rec.amount then return rec.amount end
+  if tab == "all" then return amountOf(rec) or 0 end
   if tab == "resale" then return rec.profit or 0 end
   if tab == "purchases" then return -(rec.total or 0) end
   return rec.total or 0
@@ -771,6 +776,7 @@ end
 -- The text shown for one value.
 local function show(rec, key)
   local v = rec[key]
+  if key == "amount" then v = amountOf(rec) end
   -- Other money has no item, count or price each: blank, not "-" or "?" (AN14).
   if rec.other and (key == "qty" or key == "each" or (key == "item" and (v or "") == "")) then return "" end
   if rec.session then
@@ -878,7 +884,7 @@ local function rowTooltip(r)
   line("When", date((rec.month and "%B %Y, month total") or (rec.day and "%b %d, day total") or "%b %d %H:%M", rec.t or 0))
   line("Type", rec.kind)
   if rec.qty and rec.each then line("Quantity", ("%d x %s"):format(rec.qty, ns.Money(math.floor(rec.each + 0.5)))) end
-  if rec.amount or rec.total then line("Amount", show(rec, rec.amount and "amount" or "total")) end
+  if rec.amount or rec.total then line("Amount", show(rec, (rec.amount or settings().tab == "all") and "amount" or "total")) end
   if rec.profit then line("Profit", show(rec, "profit")) end
   line("Buyer", rec.who)
   if rec.char then line("Character", charName(rec.char)) end
@@ -1167,7 +1173,7 @@ end
 
 ns.RefreshLedger = ns.Timed("Ledger tab", ns.RefreshLedger)
 ns._ledgerTest = { frame = function() return f end, rows = function() return rows end,
-  drawVisible = function() drawVisible() end }   -- (tests)
+  drawVisible = function() drawVisible() end, amountOf = amountOf }   -- (tests)
 
 -- Open the Ledger on one of its sub-tabs (the Dashboard's "See all sessions").
 function ns:OpenLedgerTab(tab)
