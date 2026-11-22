@@ -422,15 +422,50 @@ T.test("A vendor sale with no bag click is read from the buyback list", function
   T.same(ns.db.vendorLog[2], { t = NOW, c = ME, id = 4306, q = 2, a = 400, s = "sell" })
 end)
 
-T.test("A sale already on the list isn't logged again by the next one", function()
+-- Frank, November 22: still nothing after the fix above. The game can change the list (and
+-- say so) before the gold arrives; the entry was then noted as already seen.
+T.test("A vendor sale whose buyback entry is announced before its gold is logged", function()
   for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
   atVendor(159)
-  -- (logged from its bag click: nothing waiting when the list changes, so it's noted)
   BUYBACK[1] = { id = 2592, qty = 3, price = 90 }
   T.fire("MERCHANT_UPDATE")
-  soldNoClick(4306, 2, 90, true)           -- the same gold as the earlier one
+  S.money = S.money + 90
+  T.fire("PLAYER_MONEY")
+  T.runTimers()
   T.eq(#ns.db.vendorLog, 1)
-  T.eq(ns.db.vendorLog[1].id, 4306)
+  T.same(ns.db.vendorLog[1], { t = NOW, c = ME, id = 2592, q = 3, a = 90, s = "sell" })
+end)
+
+T.test("A sale logged from its bag click isn't logged again from the buyback list", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  atVendor(159)
+  local realC = C_Container
+  C_Container = { GetContainerItemInfo = function() return { itemID = 2592, stackCount = 3 } end }
+  local ok, err = pcall(ns._historyTest.sellHint, 0, 1)
+  C_Container = realC
+  assert(ok, err)
+  BUYBACK[1] = { id = 2592, qty = 3, price = 90 }
+  T.fire("MERCHANT_UPDATE")
+  S.money = S.money + 90
+  T.fire("PLAYER_MONEY")
+  T.eq(#ns.db.vendorLog, 1, "logged once, from the click")
+  soldNoClick(4306, 2, 90, false)          -- the same gold, no click, its list after
+  T.runTimers()
+  T.eq(#ns.db.vendorLog, 2)
+  T.eq(ns.db.vendorLog[2].id, 4306, "not the clicked sale again")
+end)
+
+T.test("A buyback entry older than a few seconds doesn't take later vendor gold", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  atVendor(159)
+  BUYBACK[1] = { id = 2592, qty = 3, price = 90 }
+  T.fire("MERCHANT_UPDATE")                 -- (its gold went elsewhere)
+  S.now = S.now + 10
+  S.money = S.money + 90
+  T.fire("PLAYER_MONEY")
+  T.runTimers()
+  T.eq(#ns.db.vendorLog, 0)
+  S.now = NOW
 end)
 
 T.test("Vendor gold with nothing new on the buyback list logs nothing", function()

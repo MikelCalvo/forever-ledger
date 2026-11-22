@@ -509,9 +509,15 @@ end
 -- Vendor sales that no bag click explained (a bag addon's own buttons, a Sell junk button):
 -- the item is read from the vendor's buyback list, where each sale lands (Frank, November
 -- 22: right-clicked sales on his bank account were never logged, only the gold's day total).
+-- The list can change before the gold arrives or after it (Frank, November 22: the fix
+-- below first noted a new entry as seen when the list changed with no gold waiting, so a
+-- sale whose list came first was never logged). So each new entry waits a few seconds in
+-- recent, for its gold or for the bag click's log that explains it.
 local buybackSeen = {}   -- [link:price:qty] = how many of these were on the list already
+local recent = {}        -- new on the list: { b = entry, at = GetTime() }
+local explained = {}     -- sold with a bag click and logged: { id, qty, at }
 local unexplained = {}   -- vendor gold with nothing logged: { at = GetTime(), amount, t, who }
-local UNEXPLAINED_SECONDS = 3
+local UNEXPLAINED_SECONDS = 5
 local function buybackNow()
   local out = {}
   if not (GetNumBuybackItems and GetBuybackItemInfo and GetBuybackItemLink) then return out end
@@ -546,29 +552,52 @@ local function paid(b, want)
   if b.price == want then return want end
   if b.price * b.qty == want then return want end
 end
-local function tryBuyback()
-  local now, logged = GetTime(), false
-  for i = #unexplained, 1, -1 do
-    if now - unexplained[i].at > UNEXPLAINED_SECONDS then table.remove(unexplained, i) end
+-- New entries move into recent (each once); old ones, and ones a bag click's log explains,
+-- leave it.
+local function scanBuyback()
+  local now = GetTime()
+  for _, b in ipairs(newBuyback()) do
+    buybackSeen[b.sig] = (buybackSeen[b.sig] or 0) + 1
+    recent[#recent + 1] = { b = b, at = now }
+    ns:Debug("New on the buyback list:", b.qty, "x", b.id, "for", ns.Money(b.price))
   end
+  for _, list in ipairs({ recent, explained, unexplained }) do
+    for i = #list, 1, -1 do
+      if now - list[i].at > UNEXPLAINED_SECONDS then table.remove(list, i) end
+    end
+  end
+  for i = #explained, 1, -1 do
+    local e = explained[i]
+    for j = #recent, 1, -1 do
+      local b = recent[j].b
+      if b.id == e.id and (not e.qty or b.qty == e.qty) then
+        table.remove(recent, j); table.remove(explained, i)
+        break
+      end
+    end
+  end
+end
+local function tryBuyback()
+  local logged = false
+  scanBuyback()
   while unexplained[1] do
     local u = unexplained[1]
-    local fresh, take = newBuyback(), nil
-    for i = #fresh, 1, -1 do   -- (newest first)
-      if paid(fresh[i], u.amount) then take = { { b = fresh[i], a = u.amount } }; break end
+    local take, used = nil, nil
+    for i = #recent, 1, -1 do   -- (newest first)
+      if paid(recent[i].b, u.amount) then take, used = { { b = recent[i].b, a = u.amount } }, { i }; break end
     end
-    if not take and #fresh >= 2 then   -- several sold in one gold change
+    if not take and #recent >= 2 then   -- several sold in one gold change
       local sum = 0
-      for _, b in ipairs(fresh) do sum = sum + b.price end
+      for _, r in ipairs(recent) do sum = sum + r.b.price end
       if sum == u.amount then
-        take = {}
-        for _, b in ipairs(fresh) do take[#take + 1] = { b = b, a = b.price } end
+        take, used = {}, {}
+        for i, r in ipairs(recent) do take[#take + 1] = { b = r.b, a = r.b.price }; used[#used + 1] = i end
       end
     end
     if not take then break end
     table.remove(unexplained, 1)
+    for k = #used, 1, -1 do table.remove(recent, used[k]) end
     for _, x in ipairs(take) do
-      buybackSeen[x.b.sig] = (buybackSeen[x.b.sig] or 0) + 1
       addLog(ns.db.vendorLog, { t = u.t, c = u.who, id = x.b.id, q = x.b.qty, a = x.a, s = "sell" })
       if ns.SessionSold then ns:SessionSold(x.b.id, x.b.qty) end
       ns:Debug("Vendor sold (from the buyback list)", x.b.qty, "x", x.b.id, "for", ns.Money(x.a))
@@ -580,12 +609,8 @@ local function tryBuyback()
     if ns.BooksChanged then ns:BooksChanged(true) end
   end
 end
-ns:On("MERCHANT_SHOW", function() unexplained = {}; noteBuyback() end)
-ns:On("MERCHANT_UPDATE", function()
-  if #unexplained > 0 then tryBuyback() end
-  -- Nothing waiting: what's new was logged from its bag click, so it's noted as seen.
-  if #unexplained == 0 then noteBuyback() end
-end)
+ns:On("MERCHANT_SHOW", function() unexplained, recent, explained = {}, {}, {}; noteBuyback() end)
+ns:On("MERCHANT_UPDATE", tryBuyback)
 
 local function onMoney()
   local now = GetMoney()
@@ -628,7 +653,10 @@ local function onMoney()
     elseif h.log == "vendor" then
       addLog(ns.db.vendorLog, { t = now, c = who, id = h.item, q = h.qty, a = amount, s = h.source == "vendorSell" and "sell" or "buy" })
       logged = true
-      if h.source == "vendorSell" then vendorLogged = true end
+      if h.source == "vendorSell" then
+        vendorLogged = true
+        explained[#explained + 1] = { id = h.item, qty = h.qty, at = GetTime() }   -- (its buyback entry isn't new gold)
+      end
       if h.source == "vendorSell" and ns.SessionSold then ns:SessionSold(h.item, h.qty) end
       ns:Debug("Vendor", h.source == "vendorSell" and "sold" or "bought", h.qty or "?", "x", h.item or "?", "for", ns.Money(amount))
     end
@@ -664,10 +692,14 @@ local function onMoney()
   -- another addon sells without a bag click, and the partner's Ledger then waited for the
   -- gold's minute (Frank, November 22: sold to a vendor, "over a minute and nothing").
   if source == "vendorSell" or source == "vendorBuy" then logged = true end
-  if source == "vendorSell" and delta > 0 and not vendorLogged then
-    unexplained[#unexplained + 1] = { at = GetTime(), amount = delta, t = now, who = who }
+  if source == "vendorSell" and delta > 0 then
+    if not vendorLogged then
+      unexplained[#unexplained + 1] = { at = GetTime(), amount = delta, t = now, who = who }
+    end
     tryBuyback()
-    if #unexplained > 0 then C_Timer.After(0.5, tryBuyback) end   -- (the list may update a moment later)
+    if #unexplained > 0 then   -- (the list may update a moment later)
+      for _, s in ipairs({ 0.5, 1.5, 3 }) do C_Timer.After(s, tryBuyback) end
+    end
   end
   if logged and ns.BooksChanged then ns:BooksChanged(true) end
 end
@@ -758,6 +790,7 @@ local function sellHint(bag, slot)
   local each = ns:GetSellPrice(info.itemID)
   hint({ source = "vendorSell", item = info.itemID, qty = count, amount = each and each > 0 and each * count or nil, log = "vendor" })
 end
+ns._historyTest = { sellHint = sellHint }
 
 ns:OnReady(function()
   hook(_G, "BuyMerchantItem", buyHint)
