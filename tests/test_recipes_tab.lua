@@ -101,7 +101,9 @@ T.test("Professions: the kept list's stamp changes with what the list is made fr
     T.ok(s3 ~= s2, "a source seen: a new stamp")
     -- Values: taken in at most every 10 seconds, with a redraw queued for then.
     T.S.now = T.S.now + 20
+    ns:InvalidateItem(2589)
     local v1 = R.valuesKey()
+    T.eq(v1, ns.ValuesChanges(), "the first change after a quiet spell: taken in at once")
     local timers = #T.S.timers
     ns:InvalidateItem(2589)
     T.eq(R.valuesKey(), v1, "not within 10 seconds")
