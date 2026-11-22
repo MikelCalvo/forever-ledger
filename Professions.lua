@@ -292,7 +292,37 @@ ns:On("TRADE_SKILL_DATA_SOURCE_CHANGED", queueCapture)
 ---------------------------------------------------------------------------
 -- Which of your characters use each item
 ---------------------------------------------------------------------------
+-- What the index and values are made from, as one number: counted characters, their
+-- professions' ranks (Enchanting's sets disenchanting) and every recipe's materials and
+-- output. Read without making anything (Frank's twentieth /fl perf, November 22: the index
+-- was rebuilt at every loading screen and threw every value away each time, so Gold
+-- making worked out all 7,000 values again).
+local usageSig
+local function usageSignature()
+  local n, sum = 0, 0
+  for key, c in pairs(ns.db.chars) do
+    if ns:SameMarketChar(key) then
+      n = n + 1
+      sum = (sum + #key * 3 + (c.name and #c.name or 0)) % 2147483647
+      for prof, p in pairs(c.profs or {}) do
+        sum = (sum + #prof * 5 + (tonumber(p.rank) or 0) * 13) % 2147483647
+        for recipeID, rec in pairs(p.recipes or {}) do
+          sum = (sum + (tonumber(recipeID) or 0) * 31 + (tonumber(rec.out) or 0) * 17 + (tonumber(rec.oq) or 1) * 11 + (type(rec.n) == "string" and #rec.n or 0)) % 2147483647
+          for i, r in ipairs(rec.r or {}) do
+            n = n + 1
+            sum = (sum + (tonumber(r[1]) or 0) * 7 + (tonumber(r[2]) or 0) * (i + 2)) % 2147483647
+          end
+        end
+      end
+    end
+  end
+  return n * 2147483647 + sum
+end
+-- Rebuilt only when what it's made from changed (then every value goes, as before).
 function ns:BuildUsageIndex()
+  local sig = usageSignature()
+  if ns.usage and sig == usageSig then return end
+  usageSig = sig
   local usage, byReagent = {}, {}
   -- Only characters who could craft for you: same ruleset and faction (Core.lua).
   for key, c in pairs(ns.db.chars) do

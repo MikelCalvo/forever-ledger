@@ -1027,6 +1027,7 @@ function ns:MergeHistoryDay(market, day, packed)
   if day >= d or day <= d - KEEP_DAYS then return 0 end
   local hist, qty = marketTable("history", market), marketTable("historyQty", market)
   local id, n = 0, 0
+  local here = ns.InvalidateItem and market == ns.MarketKey()   -- (values are this market's)
   -- Empty entries count too (Codex review, November 8: skipping a damaged empty one gave
   -- the rest of the day to the wrong items).
   for e in (packed .. ","):gmatch("([^,]*),") do
@@ -1037,7 +1038,12 @@ function ns:MergeHistoryDay(market, day, packed)
     if not (step and m) then break end
     id = id + step
     a, q = tonumber(a, 36) or m, tonumber(q, 36)
-    if mergeDay(hist, id, day, m, a, market) then n = n + 1 end
+    if mergeDay(hist, id, day, m, a, market) then
+      n = n + 1
+      -- Its usual price may move: that item's values and what leads to it, not every value
+      -- (each synced day threw them all away: Frank's twentieth /fl perf, November 22).
+      if here then ns:InvalidateItem(id) end
+    end
     if q and day > d - COUNT_DAYS then mergeListed(qty, id, day, q) end
   end
   return n

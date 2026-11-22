@@ -268,3 +268,29 @@ T.test("Perf report: saved data sized from a sample, the big part still named", 
   -- (300 x 300 entries of about 46 bytes: roughly 4 MB, estimated from the sample.)
   T.ok(kb and kb > 2000 and kb < 8000, tostring(kb))
 end)
+
+-- Frank's twentieth /fl perf, November 22: the recipe index was rebuilt at every loading
+-- screen and threw every value away, so Gold making worked out all of them again.
+T.test("Recipe index: rebuilt, and values thrown away, only when what it's made from changed", function()
+  local key = "Index Tester-Testrealm"
+  ns.db.chars[key] = { name = "Index Tester", profs = { Tailoring = { rank = 100,
+    recipes = { [97501] = { n = "Test Bolt", out = 97502, r = { { 97503, 2 } } } } } } }
+  ns:BuildUsageIndex()
+  local realAll, all = ns.InvalidateValues, 0
+  ns.InvalidateValues = function() all = all + 1 end
+  local ok, err = pcall(function()
+    ns:BuildUsageIndex()
+    T.eq(all, 0, "nothing changed: kept")
+    ns.db.chars[key].profs.Tailoring.recipes[97501].r[1][2] = 3
+    ns:BuildUsageIndex()
+    T.eq(all, 1, "a material count changed")
+    ns.db.chars[key].profs.Tailoring.rank = 125
+    ns:BuildUsageIndex()
+    T.eq(all, 2, "a rank changed (Enchanting's sets disenchanting)")
+    T.ok(ns.recipesByReagent[97503], "the index has the recipe's material")
+  end)
+  ns.InvalidateValues = realAll
+  ns.db.chars[key] = nil
+  ns:BuildUsageIndex()
+  assert(ok, err)
+end)
