@@ -533,15 +533,17 @@ local function buybackNow()
   end
   return out
 end
-local function noteBuyback()
-  buybackSeen = {}
-  for _, b in ipairs(buybackNow()) do buybackSeen[b.sig] = (buybackSeen[b.sig] or 0) + 1 end
+local function countSigs(list)
+  local seen = {}
+  for _, b in ipairs(list) do seen[b.sig] = (seen[b.sig] or 0) + 1 end
+  return seen
 end
+local function noteBuyback() buybackSeen = countSigs(buybackNow()) end
 -- What came onto the list since it was last noted.
-local function newBuyback()
+local function newBuyback(list)
   local left, out = {}, {}
   for k, v in pairs(buybackSeen) do left[k] = v end
-  for _, b in ipairs(buybackNow()) do
+  for _, b in ipairs(list) do
     if (left[b.sig] or 0) > 0 then left[b.sig] = left[b.sig] - 1 else out[#out + 1] = b end
   end
   return out
@@ -552,18 +554,24 @@ local function paid(b, want)
   if b.price == want then return want end
   if b.price * b.qty == want then return want end
 end
+-- A full list where a change brought nothing new: the sale pushed its twin off the end
+-- (Codex review, November 22: the 13th of 13 identical sales looked like nothing).
+local BUYBACK_SLOTS = 12
+local quietFull
 -- New entries move into recent (each once); old ones, and ones a bag click's log explains,
--- leave it.
-local function scanBuyback()
-  local now = GetTime()
-  for _, b in ipairs(newBuyback()) do
-    buybackSeen[b.sig] = (buybackSeen[b.sig] or 0) + 1
+-- leave it. The list as it is now is noted, so an entry that left and comes back is new.
+local function scanBuyback(fromUpdate)
+  local now, list = GetTime(), buybackNow()
+  local fresh = newBuyback(list)
+  buybackSeen = countSigs(list)
+  for _, b in ipairs(fresh) do
     recent[#recent + 1] = { b = b, at = now }
     ns:Debug("New on the buyback list:", b.qty, "x", b.id, "for", ns.Money(b.price))
   end
-  for _, list in ipairs({ recent, explained, unexplained }) do
-    for i = #list, 1, -1 do
-      if now - list[i].at > UNEXPLAINED_SECONDS then table.remove(list, i) end
+  if fromUpdate and #fresh == 0 and #list >= BUYBACK_SLOTS then quietFull = now end
+  for _, l in ipairs({ recent, explained, unexplained }) do
+    for i = #l, 1, -1 do
+      if now - l[i].at > UNEXPLAINED_SECONDS then table.remove(l, i) end
     end
   end
   for i = #explained, 1, -1 do
@@ -576,32 +584,56 @@ local function scanBuyback()
       end
     end
   end
+  return list
 end
-local function tryBuyback()
+local function logBuyback(u, b, amount)
+  addLog(ns.db.vendorLog, { t = u.t, c = u.who, id = b.id, q = b.qty, a = amount, s = "sell" })
+  if ns.SessionSold then ns:SessionSold(b.id, b.qty) end
+  ns:Debug("Vendor sold (from the buyback list)", b.qty, "x", b.id, "for", ns.Money(amount))
+end
+-- last: the gold's final try (3 s after it), when a full list's twin is accepted.
+local function tryBuyback(last, fromUpdate)
   local logged = false
-  scanBuyback()
-  while unexplained[1] do
-    local u = unexplained[1]
-    local take, used = nil, nil
-    for i = #recent, 1, -1 do   -- (newest first)
-      if paid(recent[i].b, u.amount) then take, used = { { b = recent[i].b, a = u.amount } }, { i }; break end
+  local list = scanBuyback(fromUpdate)
+  local i = 1
+  while unexplained[i] do
+    local u, take, used = unexplained[i], nil, nil
+    for k = #recent, 1, -1 do   -- (newest first)
+      if paid(recent[k].b, u.amount) then take, used = { { b = recent[k].b, a = u.amount } }, { k }; break end
     end
     if not take and #recent >= 2 then   -- several sold in one gold change
       local sum = 0
       for _, r in ipairs(recent) do sum = sum + r.b.price end
       if sum == u.amount then
         take, used = {}, {}
-        for i, r in ipairs(recent) do take[#take + 1] = { b = r.b, a = r.b.price }; used[#used + 1] = i end
+        for k, r in ipairs(recent) do take[#take + 1] = { b = r.b, a = r.b.price }; used[#used + 1] = k end
       end
     end
-    if not take then break end
-    table.remove(unexplained, 1)
-    for k = #used, 1, -1 do table.remove(recent, used[k]) end
-    for _, x in ipairs(take) do
-      addLog(ns.db.vendorLog, { t = u.t, c = u.who, id = x.b.id, q = x.b.qty, a = x.a, s = "sell" })
-      if ns.SessionSold then ns:SessionSold(x.b.id, x.b.qty) end
-      ns:Debug("Vendor sold (from the buyback list)", x.b.qty, "x", x.b.id, "for", ns.Money(x.a))
+    -- Nothing new after a quiet change of a full list: the entries that fit the gold, if
+    -- they're all the same item. Otherwise it can't be told which, and only the gold counts.
+    if not take and last and GetTime() - u.at >= 2.5 and quietFull and math.abs(quietFull - u.at) <= UNEXPLAINED_SECONDS then
+      local match, same = nil, true
+      for _, b in ipairs(list) do
+        if paid(b, u.amount) then
+          if match and (match.id ~= b.id or match.qty ~= b.qty) then same = false end
+          match = match or b
+        end
+      end
+      if match and same then
+        take, used = { { b = match, a = u.amount } }, {}
+      else
+        table.remove(unexplained, i)
+        ns:Debug("Vendor gold", ns.Money(u.amount), "not told apart on the buyback list: kept as the day's gold only")
+        u = nil
+      end
+    end
+    if take then
+      table.remove(unexplained, i)
+      for k = #used, 1, -1 do table.remove(recent, used[k]) end
+      for _, x in ipairs(take) do logBuyback(u, x.b, x.a) end
       logged = true
+    elseif u then
+      i = i + 1
     end
   end
   if logged then
@@ -609,8 +641,8 @@ local function tryBuyback()
     if ns.BooksChanged then ns:BooksChanged(true) end
   end
 end
-ns:On("MERCHANT_SHOW", function() unexplained, recent, explained = {}, {}, {}; noteBuyback() end)
-ns:On("MERCHANT_UPDATE", tryBuyback)
+ns:On("MERCHANT_SHOW", function() unexplained, recent, explained, quietFull = {}, {}, {}, nil; noteBuyback() end)
+ns:On("MERCHANT_UPDATE", function() tryBuyback(false, true) end)
 
 local function onMoney()
   local now = GetMoney()
@@ -698,7 +730,9 @@ local function onMoney()
     end
     tryBuyback()
     if #unexplained > 0 then   -- (the list may update a moment later)
-      for _, s in ipairs({ 0.5, 1.5, 3 }) do C_Timer.After(s, tryBuyback) end
+      C_Timer.After(0.5, function() tryBuyback() end)
+      C_Timer.After(1.5, function() tryBuyback() end)
+      C_Timer.After(3, function() tryBuyback(true) end)
     end
   end
   if logged and ns.BooksChanged then ns:BooksChanged(true) end

@@ -455,6 +455,56 @@ T.test("A sale logged from its bag click isn't logged again from the buyback lis
   T.eq(ns.db.vendorLog[2].id, 4306, "not the clicked sale again")
 end)
 
+-- Codex review, November 22: the list holds 12; the 13th identical sale pushes its twin off
+-- and nothing looks new.
+local function sellOnList(id, price)
+  S.money = S.money + price
+  T.fire("PLAYER_MONEY")
+  if #BUYBACK == 12 then table.remove(BUYBACK, 1) end
+  BUYBACK[#BUYBACK + 1] = { id = id, qty = 1, price = price }
+  T.fire("MERCHANT_UPDATE")
+  S.now = S.now + 3
+  T.runTimers()
+end
+
+T.test("The 13th identical sale on a full buyback list is still logged", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  atVendor(159)
+  for _ = 1, 13 do sellOnList(2589, 10) end
+  S.now = NOW
+  T.eq(#ns.db.vendorLog, 1, "one entry (the same item within a minute)")
+  T.eq(ns.db.vendorLog[1].q, 13)
+  T.eq(ns.db.vendorLog[1].a, 130)
+end)
+
+T.test("A full list whose twin can't be told apart logs only the gold", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  atVendor(159)
+  for n = 1, 12 do BUYBACK[n] = { id = n % 2 == 0 and 2589 or 2592, qty = 1, price = 10 } end
+  T.fire("MERCHANT_SHOW")
+  sellOnList(2589, 10)   -- (2592 leaves, 2589 comes: a 10c entry of two items)
+  S.now = NOW
+  -- (it did change: one 2589 more, so it's logged as new)
+  T.eq(#ns.db.vendorLog, 1)
+  T.eq(ns.db.vendorLog[1].id, 2589)
+  sellOnList(2589, 10)   -- (a 2589 leaves, a 2589 comes: nothing looks new)
+  S.now = NOW
+  T.eq(#ns.db.vendorLog, 1)
+  T.eq(ns.db.vendorLog[1].q, 1, "two items fit 10c: not guessed")
+end)
+
+T.test("An item that left the buyback list is new when sold again", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  atVendor(159)
+  soldNoClick(2592, 3, 90, false)
+  BUYBACK[1] = nil   -- (bought back)
+  T.fire("MERCHANT_UPDATE")
+  soldNoClick(2592, 3, 90, false)
+  T.runTimers()
+  T.eq(#ns.db.vendorLog, 1)
+  T.eq(ns.db.vendorLog[1].q, 6, "both sales, merged")
+end)
+
 T.test("A buyback entry older than a few seconds doesn't take later vendor gold", function()
   for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
   atVendor(159)
