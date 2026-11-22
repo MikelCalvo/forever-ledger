@@ -361,6 +361,9 @@ local f
 local rows = {}
 local drawRecipesVisible   -- fills the recipe rows in view (below)
 local current     -- profession shown, or "Trainers:<profession>"
+-- Bumped when your recipe types change: the list is built again at once (recipeRows).
+local listGen = 0
+function ns.RecipesListChanged() listGen = listGen + 1 end
 
 -- num: sorts high to low first (text sorts A to Z first; Type in the usual group order).
 local COLS = {
@@ -447,6 +450,7 @@ StaticPopupDialogs["FOREVER_LEDGER_CLEAR_TYPES"] = {
   button2 = NO or "No",
   OnAccept = function()
     wipe(ns.db.recipeTypes)
+    ns.RecipesListChanged()
     ns:Print("Your recipe types are cleared.")
     ns:RefreshRecipes()
   end,
@@ -685,6 +689,7 @@ local function getRow(i)
     -- Shift-right-click: back to the automatic type.
     if IsShiftKeyDown() then
       overrides[self.recipeID] = nil
+      ns.RecipesListChanged()
       ns:RefreshRecipes()
       return
     end
@@ -694,6 +699,7 @@ local function getRow(i)
       for i, k in ipairs(ORDER) do if k == now then nextType = ORDER[i + 1] end end
     end
     overrides[self.recipeID] = nextType
+    ns.RecipesListChanged()
     ns:RefreshRecipes()
   end)
   r:SetScript("OnEnter", function(self)
@@ -856,15 +862,29 @@ drawRecipesVisible = function()
   end
 end
 
-local function recipeRows(prof, width, lay)
+-- A profession's list for the choices above, built a little each frame (Frank's /fl perf,
+-- November 21: 47-101 ms in one go on opening the tab or changing a choice). Kept until a
+-- choice, the recipe book, values or your recipe types change, or a minute passes.
+local function listStamp(prof, s, match)
+  local sort = s.sort
+  return table.concat({ prof, tostring(s.view), tostring(s.group), tostring(s.type), tostring(s.least),
+    tostring(s.skill), tostring(s.source), tostring(s.custom), tostring(sort and sort.key), tostring(sort and sort.desc),
+    match, tostring(ns.recipeBookStamp or 0), tostring(ns.ValuesStamp and ns.ValuesStamp() or 0), tostring(listGen),
+    tostring(math.floor(time() / 60)) }, "\1")
+end
+
+local function buildList(prof, s, match)
   local rank = bestRank(prof)
-  local s = settings()
-  local match = (f.search:GetText() or ""):lower()
   local groups = groupChoices(prof)
   local fc = foreverBook(prof)
+  local ahlBefore = ns.AHledgerUses and ns.AHledgerUses() or 0
+  -- (The IDs first: a recipe recorded while this waits for the next frame can't break the walk.)
+  local book = ns.db.recipeBook[prof] or {}
+  local ids = ns.KeysOf(book)
+  for id in pairs(fc) do if book[id] == nil then ids[#ids + 1] = id end end
   local list = {}
   local total, knownCount = 0, 0
-  eachRecipe(prof, function(id, r)
+  local function visit(id, r)
     local names = knownBy(prof, id)
     local known = #names > 0
     total = total + 1
@@ -885,7 +905,12 @@ local function recipeRows(prof, width, lay)
     if s.source ~= "all" and sourceKind(src, fromItem) ~= s.source then return end
     list[#list + 1] = { id = id, r = r, names = names, type = t, override = mine ~= nil, profit = profit,
       skill = skill, src = src, fromItem = fromItem, en = en }
-  end)
+  end
+  for _, id in ipairs(ids) do
+    ns.MaybeYield()
+    local r = book[id] or fc[id]
+    if r then visit(id, r) end
+  end
   -- Grouped by type (flip or shuffle first), then most profit first.
   local function usual(a, b)
     if a.type ~= b.type then return typeRank[a.type] < typeRank[b.type] end
@@ -896,8 +921,8 @@ local function recipeRows(prof, width, lay)
   -- A clicked column heading: by that column, ties and rows with no value in the usual order.
   local sort = s.sort
   if sort and NUMERIC[sort.key] ~= nil then
-    for _, e in ipairs(list) do e.sortBy = sortValue(e, sort.key) end
-    table.sort(list, function(a, b)
+    for _, e in ipairs(list) do ns.MaybeYield(); e.sortBy = sortValue(e, sort.key) end
+    ns.SortInSlices(list, function(a, b)
       local va, vb = a.sortBy, b.sortBy
       if va == nil or vb == nil or va == vb then
         if (va == nil) ~= (vb == nil) then return va ~= nil end
@@ -907,17 +932,51 @@ local function recipeRows(prof, width, lay)
       return va < vb
     end)
   else
-    table.sort(list, usual)
+    ns.SortInSlices(list, usual)
   end
+  return { prof = prof, list = list, total = total, knownCount = knownCount, rank = rank,
+    ahl = (ns.AHledgerUses and ns.AHledgerUses() or 0) ~= ahlBefore or nil }
+end
+
+-- Returns how many rows are shown, the profession's recipe count, and whether the list is
+-- still being worked out. The last list of the same profession stays on screen meanwhile.
+local recipeRun, recipeBuilding
+local function recipeRows(prof, width, lay)
+  local s = settings()
+  local match = (f.search:GetText() or ""):lower()
+  local stamp = listStamp(prof, s, match)
+  local cached = f.rcache and f.rcache.stamp == stamp and f.rcache
+  if not cached and recipeBuilding ~= stamp then
+    -- (A choice changed during a build: that build is dropped.)
+    ns.StopSlices(recipeRun)
+    recipeBuilding = stamp
+    if ns.FreshValues then ns.FreshValues() end   -- (values out of date go now: in slices they're kept)
+    local inside = true
+    recipeRun = ns.RunInSlices("Recipes list", function() return buildList(prof, s, match) end, function(result)
+      if recipeBuilding ~= stamp then return end
+      recipeBuilding, result.stamp, f.rcache = nil, stamp, result
+      if not inside then ns:RefreshRecipes() end
+    end, function() if recipeBuilding == stamp then recipeBuilding = nil end end)
+    inside = false
+    cached = f.rcache and f.rcache.stamp == stamp and f.rcache   -- (done within the first slice)
+  end
+  local shown = cached or (f.rcache and f.rcache.prof == prof and f.rcache) or nil
+  -- (AHledger's credit, below, where its prices went into the profits shown.)
+  if shown and shown.ahl then ns.ahledgerUses = (ns.ahledgerUses or 0) + 1 end
+  local list = shown and shown.list or {}
   local n = math.min(#list, MAX_ROWS)
   -- Only the rows in view (and a few either side) are drawn, more as you scroll (Frank's
   -- tenth /fl perf, November 21: all 300 drawn on each refresh took 60 ms).
-  f.rdraw = { list = list, lay = lay, width = width, rank = rank, prof = prof, n = n, done = {} }
+  f.rdraw = { list = list, lay = lay, width = width, rank = shown and shown.rank, prof = prof, n = n, done = {} }
   for _, r in pairs(rows) do r:Hide() end   -- (pairs: the pool has gaps after a scroll jump; Codex review)
   drawRecipesVisible()
-  f.summary:SetText(ns.LocalizeText("%s: %d recipes, %d known. Showing %d%s. (Classic) = original Classic data, unconfirmed in Forever until you see it."):format(
-    prof, total, knownCount, n, #list > MAX_ROWS and (" of " .. #list) or ""))
-  return n, total
+  if shown then
+    f.summary:SetText(ns.LocalizeText("%s: %d recipes, %d known. Showing %d%s. (Classic) = original Classic data, unconfirmed in Forever until you see it."):format(
+      prof, shown.total, shown.knownCount, n, #list > MAX_ROWS and (" of " .. #list) or ""))
+  else
+    f.summary:SetText(ns.LocalizeText("%s: working out the list..."):format(prof))
+  end
+  return n, shown and shown.total or 0, not cached
 end
 
 -- The Trainers view has its own column widths (same keys, so rows can be shared).
@@ -1145,9 +1204,9 @@ function ns:RefreshRecipes()
   end
 
   f.content:SetWidth(width)
-  local n, total = 0, 0
+  local n, total, loading = 0, 0, false
   f.rdraw = nil   -- (the Trainers view draws all its rows: a few)
-  if trainers then n = trainerRows(width, lay) elseif current then n, total = recipeRows(current, width, lay) end
+  if trainers then n = trainerRows(width, lay) elseif current then n, total, loading = recipeRows(current, width, lay) end
   for i, r in pairs(rows) do if i > n then r:Hide() end end   -- (pairs: gaps after a scroll jump)
   f.empty:SetShown(n == 0)
   -- Recipes there but all hidden by the choices above: say which (Frank, AN6, November 13:
@@ -1167,6 +1226,8 @@ function ns:RefreshRecipes()
   if match ~= "" then why[#why + 1] = ('search "%s"'):format(match) end
   if trainers then
     f.empty:SetText("No trainers seen yet. Open a profession trainer's window.")
+  elseif loading and n == 0 then
+    f.empty:SetText("Working out the list...")
   elseif total > 0 then
     f.empty:SetText(ns.LocalizeFormatted("%s has %d recipe%s, but none match what's chosen above (%s). Choose All and Any to see them.",
       current, total, total == 1 and "" or "s", table.concat(why, ", ")))
@@ -1183,3 +1244,4 @@ function ns:RefreshRecipes()
 end
 
 ns.RefreshRecipes = ns.Timed("Recipes tab", ns.RefreshRecipes)
+ns._recipesTest = { buildList = buildList, settings = settings }   -- (tests)

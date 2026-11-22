@@ -24,3 +24,31 @@ T.test("Professions: recipes from the game data show the client's own name", fun
   T.eq(book[97204].n, "Unknown Brew", "a spell the client doesn't have keeps the data's name")
   ns.FOREVER_CRAFTS, GetSpellInfo = oldF, oldSpell
 end)
+
+T.test("Professions: the list is built over several frames, the same as in one go", function()
+  -- (Frank's /fl perf, November 21: up to 101 ms in one go on opening the tab.)
+  local R = ns._recipesTest
+  local book = {}
+  for i = 1, 300 do book[98000 + i] = { n = ("Test Recipe %03d"):format(i) } end
+  ns.db.recipeBook.Testcraft = book
+  local s = R.settings()
+  s.view, s.skill, s.source, s.type, s.group, s.least, s.sort = "all", "all", "all", "all", "all", 0, nil
+  local whole = R.buildList("Testcraft", s, "")
+  T.eq(whole.total, 300)
+  local realClock, ms = debugprofilestop, 0
+  local result
+  local ok, err = pcall(function()
+    debugprofilestop = function() ms = ms + 1; return ms end   -- (each look at the clock: 1 ms)
+    ns.RunInSlices("Recipes list test", function() return R.buildList("Testcraft", s, "") end, function(r) result = r end)
+    T.eq(result, nil, "not all in the first frame")
+    T.runTimers()
+  end)
+  debugprofilestop = realClock
+  ns.db.recipeBook.Testcraft = nil
+  T.runTimers()
+  assert(ok, err)
+  T.ok(result, "finished")
+  T.eq(result and result.total, 300)
+  T.eq(result and #result.list, #whole.list)
+  for i = 1, #whole.list do T.eq(result.list[i].id, whole.list[i].id, "row " .. i) end
+end)
