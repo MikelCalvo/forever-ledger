@@ -389,7 +389,9 @@ local function crateCounts()
 end
 
 local function favorNow()
-  local ok, info = pcall(C_CurrencyInfo.GetCurrencyInfo, FAVOR)
+  local get = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo   -- (guarded: pcall can't catch the look-up)
+  if not get then return nil end
+  local ok, info = pcall(get, FAVOR)
   return ok and info and info.quantity or nil
 end
 
