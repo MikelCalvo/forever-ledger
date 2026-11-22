@@ -814,7 +814,7 @@ local function drawRecipe(i)
   row.stripe:SetShown(i % 2 == 0)
   row.recipeID, row.out, row.recipeName = e.id, e.r.out, e.en
   row.cells.profit:SetJustifyH("RIGHT")
-  row.icon:SetTexture(e.r.out and ns:ItemIcon(e.r.out) or "Interface\Icons\INV_Misc_QuestionMark")
+  row.icon:SetTexture(e.r.out and ns:ItemIcon(e.r.out) or "Interface\\Icons\\INV_Misc_QuestionMark")
   row.icon:ClearAllPoints()
   row.icon:SetPoint("LEFT", row, "LEFT", lay.name.x, 0)
   local src = e.src
