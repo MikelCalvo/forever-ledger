@@ -208,3 +208,30 @@ T.test("Slices: putting a sync message's realm names right looks at the clock as
   assert(ok, err)
   T.ok(looks >= 1000, "a look per record: " .. looks)
 end)
+
+-- Frank's fifteenth /fl perf, November 21: a partner's hello, 50 ms in one frame, counting
+-- every item's recent days of price history.
+T.test("Slices: a hello's count of price history days gives frames back", function()
+  local market = "Slice test market|Alliance"
+  local d = ns.LocalDay(S.now)
+  local hist = {}
+  for i = 1, 150 do hist[95000 + i] = ("%d:100:120|%d:90:95"):format(d - 2, d - 1) end
+  ns.db.history = ns.db.history or {}
+  ns.db.history[market] = hist
+  local whole = ns:HistoryDayCounts(d - 14, d - 1)[market]
+  local realClock, ms, result = debugprofilestop, 0, nil
+  local ok, err = pcall(function()
+    debugprofilestop = function() ms = ms + 1; return ms end   -- (each look at the clock: 1 ms)
+    ns.RunInSlices("Day count test", function() return ns:HistoryDayCounts(d - 14, d - 1) end, function(r) result = r end)
+    T.eq(result, nil, "not all in the first frame")
+    for _ = 1, 100 do if result then break end T.runTimers() end
+  end)
+  debugprofilestop = realClock
+  ns.db.history[market] = nil
+  T.runTimers()
+  assert(ok, err)
+  T.eq(whole and whole[d - 2], 150)
+  T.eq(whole and whole[d - 1], 150)
+  T.eq(result and result[market] and result[market][d - 2], 150, "the same counts")
+  T.eq(result and result[market] and result[market][d - 1], 150)
+end)

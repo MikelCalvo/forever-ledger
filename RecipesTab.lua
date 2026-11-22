@@ -781,12 +781,20 @@ local function groupChoices(prof)
   c = { count = count, t = GetTime(), sets = {}, opts = { { value = "all", label = "Any group" } } }
   local present = {}
   if ns.ItemGroupSet then
-    eachRecipe(prof, function(_, r)
-      if r.out and not c.sets[r.out] then
+    -- Worked out in the list's slices (buildList), giving frames back: every recipe's
+    -- groups, 43 ms in one frame on the tab (Frank's fifteenth /fl perf, November 21). The
+    -- IDs first, as a recipe can be recorded in between.
+    local book, fc = ns.db.recipeBook[prof] or {}, foreverBook(prof)
+    local ids = ns.KeysOf(book)
+    for id in pairs(fc) do if book[id] == nil then ids[#ids + 1] = id end end
+    for _, id in ipairs(ids) do
+      local r = book[id] or fc[id]
+      if r and r.out and not c.sets[r.out] then
         c.sets[r.out] = ns:ItemGroupSet(r.out)
         for gid in pairs(c.sets[r.out]) do present[gid] = true end
       end
-    end)
+      if ns.MaybeYield then ns.MaybeYield() end
+    end
     for _, g in ipairs(ns:GroupTree()) do
       if present[g.id] and (g.kind == "user" or (g.kind == "builtin" and g.depth <= 1)) then
         c.opts[#c.opts + 1] = { value = g.id, label = (g.depth > 0 and "   " or "") .. g.name }
@@ -1159,14 +1167,14 @@ function ns:RefreshRecipes()
   f.sf:ClearAllPoints()
   f.sf:SetPoint("TOPLEFT", 0, top - 24)
   f.sf:SetPoint("BOTTOMRIGHT", 0, 20)
-  if not trainers and current then
+  -- The group choices are worked out with the list (buildList); the last ones meanwhile.
+  local function knownGroups() return not trainers and current and groupCache[current] or nil end
+  local gc = knownGroups()
+  if gc then
     -- A group chosen for another profession that makes nothing in it here: back to Any.
-    local opts = groupChoices(current).opts
     local found = false
-    for _, o in ipairs(opts) do if o.value == s.group then found = true end end
+    for _, o in ipairs(gc.opts) do if o.value == s.group then found = true end end
     if not found then s.group = "all" end
-    f.group:SetOptions(opts)
-    f.group:SetValue(s.group)
   end
 
   local width = f:GetWidth() - 20   -- (clear of the scroll bar)
@@ -1207,6 +1215,11 @@ function ns:RefreshRecipes()
   local n, total, loading = 0, 0, false
   f.rdraw = nil   -- (the Trainers view draws all its rows: a few)
   if trainers then n = trainerRows(width, lay) elseif current then n, total, loading = recipeRows(current, width, lay) end
+  gc = knownGroups()   -- (worked out just now if the list was done within its first frame)
+  if gc then
+    f.group:SetOptions(gc.opts)
+    f.group:SetValue(s.group)
+  end
   for i, r in pairs(rows) do if i > n then r:Hide() end end   -- (pairs: gaps after a scroll jump)
   f.empty:SetShown(n == 0)
   -- Recipes there but all hidden by the choices above: say which (Frank, AN6, November 13:
@@ -1220,7 +1233,7 @@ function ns:RefreshRecipes()
   end
   if s.source ~= "all" then why[#why + 1] = label(SOURCE_OPTS, s.source) end
   if s.skill ~= "all" then why[#why + 1] = label(SKILL_OPTS, s.skill) end
-  if s.group ~= "all" and current and not trainers then why[#why + 1] = label(groupChoices(current).opts, s.group) end
+  if s.group ~= "all" and gc then why[#why + 1] = label(gc.opts, s.group) end
   if s.least > 0 then why[#why + 1] = label(LEAST_OPTS, s.least) end
   local match = f.search:GetText() or ""
   if match ~= "" then why[#why + 1] = ('search "%s"'):format(match) end
@@ -1244,4 +1257,4 @@ function ns:RefreshRecipes()
 end
 
 ns.RefreshRecipes = ns.Timed("Recipes tab", ns.RefreshRecipes)
-ns._recipesTest = { buildList = buildList, settings = settings }   -- (tests)
+ns._recipesTest = { buildList = buildList, settings = settings, groupChoices = groupChoices }   -- (tests)

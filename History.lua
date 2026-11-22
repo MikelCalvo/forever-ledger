@@ -898,11 +898,17 @@ end
 ns.Base36 = b36   -- (tests)
 
 -- How many items have a price on each of these days, per market: { [market] = { [day] = n } }.
+-- Inside a sliced run (a partner's hello, Sync.lua) it gives frames back: every item's
+-- recent days are read, 50 ms in one frame (Frank's fifteenth /fl perf, November 21). The
+-- keys are copied first, as the history can change in between.
 function ns:HistoryDayCounts(from, to)
   local out = {}
-  for market, items in pairs(ns.db.history or {}) do
-    local c
-    for _, s in pairs(items) do
+  local history = ns.db.history or {}
+  for _, market in ipairs(ns.KeysOf(history)) do
+    local items, c = history[market] or {}, nil
+    for _, id in ipairs(ns.KeysOf(items)) do
+      if ns.MaybeYield then ns.MaybeYield() end
+      local s = items[id]
       if type(s) == "string" then
         local _, tail = splitTail(s)
         for day in tail:gmatch("(%d+):%d+:%d+") do

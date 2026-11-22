@@ -297,10 +297,11 @@ local function catchUpNext(c)
 end
 
 -- theirs: the partner's counts from its hello, { [market] = { [day] = items } }.
-local function startCatchUp(theirs)
+-- mine: this account's counts for the same days, if already worked out.
+local function startCatchUp(theirs, mine)
   if type(theirs) ~= "table" then return end
   local from, to = lastDays()
-  local mine = ns:HistoryDayCounts(from, to)
+  mine = mine or ns:HistoryDayCounts(from, to)
   local days = {}
   for day = from, to do
     local markets = {}
@@ -321,9 +322,9 @@ local function startCatchUp(theirs)
   end
 end
 
-local function hello(reply)
+local function hello(reply, counts)
   local from, to = lastDays()
-  send({ k = "h", v = 1, books = 2, reply = reply or nil, from = ns.CharKey(), hc = ns:HistoryDayCounts(from, to) }, partner())
+  send({ k = "h", v = 1, books = 2, reply = reply or nil, from = ns.CharKey(), hc = counts or ns:HistoryDayCounts(from, to) }, partner())
 end
 
 ---------------------------------------------------------------------------
@@ -345,14 +346,19 @@ local function handle(payload, sender)
     local first = not partnerOnline
     partnerOnline = true
     partnerBooks = payload.books == 2   -- (2: says when they've arrived)
-    if not payload.reply then hello(true) end
+    -- (Counted once for the reply and the catch-up, and over several frames: 50 ms in one
+    -- frame, Frank's fifteenth /fl perf, November 21.)
+    if ns.SlicePart then ns.SlicePart("a hello: counting days of price history") end
+    local mine = ns:HistoryDayCounts(lastDays())
+    if ns.SlicePart then ns.SlicePart("a hello") end
+    if not payload.reply then hello(true, mine) end
     if first then
       ns:Print(("Sync: connected to %s."):format(partner()))
       if ns.RefreshSettings then ns:RefreshSettings() end
     end
     ns:SyncSend(false)
     -- (a version from before November 8 sends no counts, and wouldn't read the days)
-    if payload.hc then startCatchUp(payload.hc) end
+    if payload.hc then startCatchUp(payload.hc, mine) end
   elseif payload.k == "hd" then
     partnerOnline = true
     if ns.SlicePart then ns.SlicePart("a day of price history") end   -- (in /fl perf)

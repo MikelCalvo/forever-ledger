@@ -52,3 +52,31 @@ T.test("Professions: the list is built over several frames, the same as in one g
   T.eq(result and #result.list, #whole.list)
   for i = 1, #whole.list do T.eq(result.list[i].id, whole.list[i].id, "row " .. i) end
 end)
+
+T.test("Professions: the group choices are worked out over several frames", function()
+  -- (Frank's fifteenth /fl perf, November 21: every recipe's groups, 43 ms in one frame.)
+  local R = ns._recipesTest
+  local book = {}
+  for i = 1, 200 do book[97000 + i] = { n = ("Group Recipe %03d"):format(i), out = 96000 + i } end
+  ns.db.recipeBook.Groupcraft = book
+  local real = { ns.ItemGroupSet, ns.GroupTree, debugprofilestop }
+  local calls, ms, result = 0, 0, nil
+  local ok, err = pcall(function()
+    ns.ItemGroupSet = function(_, id) calls = calls + 1; return id % 2 == 0 and { test_even = true } or {} end
+    ns.GroupTree = function() return { { id = "test_even", kind = "builtin", depth = 0, name = "Even" },
+      { id = "test_none", kind = "builtin", depth = 0, name = "None" } } end
+    debugprofilestop = function() ms = ms + 1; return ms end   -- (each look at the clock: 1 ms)
+    ns.RunInSlices("Group choices test", function() return R.groupChoices("Groupcraft") end, function(r) result = r end)
+    T.eq(result, nil, "not all in the first frame")
+    for _ = 1, 100 do if result then break end T.runTimers() end
+  end)
+  ns.ItemGroupSet, ns.GroupTree, debugprofilestop = real[1], real[2], real[3]
+  ns.db.recipeBook.Groupcraft = nil
+  T.runTimers()
+  assert(ok, err)
+  T.ok(result, "finished")
+  T.eq(calls, 200, "each recipe's product once")
+  T.eq(result and #result.opts, 2, "Any group and the one group something here is in")
+  T.eq(result and result.opts[2].value, "test_even")
+  T.ok(result and result.sets[96002] and result.sets[96002].test_even, "kept for the list's filter")
+end)
