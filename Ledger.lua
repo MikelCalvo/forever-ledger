@@ -418,6 +418,7 @@ ns.LedgerRecords = records   -- (the tests check what the Ledger shows)
 local f
 local rows, headers = {}, {}
 local shown = {}          -- the records on screen, in order (for selecting by row)
+local drawVisible         -- fills the rows in view (below)
 local sel = {}            -- [record key] = true: the selected rows
 local anchor, dragging    -- the row a Shift-click or drag starts from; a drag under way
 local lastClick = { t = 0 }   -- (By item's double-click)
@@ -561,6 +562,8 @@ function ns:BuildLedger(parent)
   f.sf, f.content = T:Scroll(f)
   f.sf:SetPoint("TOPLEFT", 0, -90)
   f.sf:SetPoint("BOTTOMRIGHT", 0, 24)
+  f.sf:HookScript("OnVerticalScroll", function() drawVisible() end)
+  f.sf:HookScript("OnSizeChanged", function() drawVisible() end)
   f.empty = T:Text(f.content, 12, T.dim)
   f.empty:SetPoint("TOPLEFT", 8, -8)
   f.empty:SetPoint("RIGHT", f.content, "RIGHT", -8, 0)
@@ -987,48 +990,69 @@ function ns:RefreshLedger()
   end
   for i = #cols + 1, #headers do headers[i]:Hide() end
 
-  -- Rows
+  -- Rows: only the ones in view (and a few either side) are drawn, more as you scroll
+  -- (Frank's tenth /fl perf, November 21: all 500 drawn on each refresh took 60 ms).
   f.content:SetWidth(width)
   local n = math.min(#list, MAX_ROWS)
   wipe(shown)
-  for i = 1, n do
-    local rec, r = list[i], getRow(i)
-    shown[i] = rec
-    r.index = i
-    r:ClearAllPoints()
-    r:SetPoint("TOPLEFT", f.content, "TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
-    r:SetWidth(width)
-    r.stripe:SetShown(i % 2 == 0)
-    for key, fs in pairs(r.cells) do fs:SetShown(lay[key] ~= nil) end
-    -- The icon, looked up for shown rows only (for every record it was part of the "script
-    -- ran too long", Frank, November 16).
-    if rec.icon == nil then rec.icon = rec.iconKey and iconOf(rec.iconKey) or false end
-    for _, c in ipairs(cols) do
-      local fs = cell(r, c.key)
-      fs:ClearAllPoints()
-      local x, w = lay[c.key].x, lay[c.key].w
-      if c.key == "item" and rec.icon then
-        r.icon:ClearAllPoints()
-        r.icon:SetPoint("LEFT", r, "LEFT", x, 0)
-        r.icon:SetTexture(rec.icon)
-        x, w = x + 18, w - 18
-      end
-      fs:SetPoint("LEFT", r, "LEFT", x, 0)
-      fs:SetWidth(w)
-      fs:SetJustifyH(c.right and "RIGHT" or "LEFT")
-      fs:SetText(show(rec, c.key))
-      fs:Show()
-    end
-    r.icon:SetShown(lay.item ~= nil and rec.icon and true or false)
-    r:Show()
-  end
-  for i = n + 1, #rows do rows[i]:Hide() end
+  for i = 1, n do shown[i] = list[i] end
+  f.draw = { cols = cols, lay = lay, width = width, done = {} }
+  for i = 1, #rows do rows[i]:Hide() end
   local narrowed = itemTab and (s.group ~= "all" or s.rarity ~= "all")
   f.empty:SetText(f.loading and "Loading..." or (EMPTY[s.tab] or EMPTY.all) .. (narrowed and "\n\nThe Group or Rarity choice is hiding some: choose Any group and Any rarity to see them." or ""))
   f.empty:SetShown(#list == 0)
   f.content:SetHeight(math.max(n * ROW_HEIGHT, 30))
   f.sf.UpdateScrollBar()
+  drawVisible()
   paint()
+end
+
+-- One row of the list as it is now (f.draw: the columns and their places).
+local function drawRow(i)
+  local d, rec, r = f.draw, shown[i], getRow(i)
+  local cols, lay = d.cols, d.lay
+  r.index = i
+  r:ClearAllPoints()
+  r:SetPoint("TOPLEFT", f.content, "TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
+  r:SetWidth(d.width)
+  r.stripe:SetShown(i % 2 == 0)
+  for key, fs in pairs(r.cells) do fs:SetShown(lay[key] ~= nil) end
+  -- The icon, looked up for shown rows only (for every record it was part of the "script
+  -- ran too long", Frank, November 16).
+  if rec.icon == nil then rec.icon = rec.iconKey and iconOf(rec.iconKey) or false end
+  for _, c in ipairs(cols) do
+    local fs = cell(r, c.key)
+    fs:ClearAllPoints()
+    local x, w = lay[c.key].x, lay[c.key].w
+    if c.key == "item" and rec.icon then
+      r.icon:ClearAllPoints()
+      r.icon:SetPoint("LEFT", r, "LEFT", x, 0)
+      r.icon:SetTexture(rec.icon)
+      x, w = x + 18, w - 18
+    end
+    fs:SetPoint("LEFT", r, "LEFT", x, 0)
+    fs:SetWidth(w)
+    fs:SetJustifyH(c.right and "RIGHT" or "LEFT")
+    fs:SetText(show(rec, c.key))
+    fs:Show()
+  end
+  r.icon:SetShown(lay.item ~= nil and rec.icon and true or false)
+  r.sel:SetShown(sel[recKey(rec)] or false)
+  r:Show()
+end
+
+-- The rows in view, and a screen's worth either side, each drawn once per refresh.
+local SPARE = 10
+drawVisible = function()
+  local d = f and f.draw
+  if not d then return end
+  local top, h = f.sf:GetVerticalScroll() or 0, f.sf:GetHeight() or 0
+  if h <= 0 then h = 30 * ROW_HEIGHT end
+  local first = math.max(1, math.floor(top / ROW_HEIGHT) + 1 - SPARE)
+  local last = math.min(#shown, math.ceil((top + h) / ROW_HEIGHT) + SPARE)
+  for i = first, last do
+    if not d.done[i] then d.done[i] = true; drawRow(i) end
+  end
 end
 
 ns.RefreshLedger = ns.Timed("Ledger tab", ns.RefreshLedger)

@@ -359,6 +359,7 @@ end
 ---------------------------------------------------------------------------
 local f
 local rows = {}
+local drawRecipesVisible   -- fills the recipe rows in view (below)
 local current     -- profession shown, or "Trainers:<profession>"
 
 -- num: sorts high to low first (text sorts A to Z first; Type in the usual group order).
@@ -546,6 +547,8 @@ function ns:BuildRecipes(parent)
   T:Fill(f.header, { 1, 1, 1, 0.05 })
   f.heads = {}
   f.sf, f.content = T:Scroll(f)
+  f.sf:HookScript("OnVerticalScroll", function() drawRecipesVisible() end)
+  f.sf:HookScript("OnSizeChanged", function() drawRecipesVisible() end)
   f.summary = T:Text(f, 11, T.dim)
   f.summary:SetPoint("BOTTOMLEFT", 4, 2)
   f.empty = T:Text(f.content, 12, T.dim)
@@ -801,6 +804,58 @@ local function sortValue(e, key)
   if key == "profit" then return e.profit end
 end
 
+-- One recipe row (f.rdraw: the list and columns as last worked out).
+local function drawRecipe(i)
+  local d = f.rdraw
+  local e, row, lay, rank, prof = d.list[i], getRow(i), d.lay, d.rank, d.prof
+  row:ClearAllPoints()
+  row:SetPoint("TOPLEFT", f.content, "TOPLEFT", 0, -(i - 1) * ROW)
+  row:SetWidth(d.width)
+  row.stripe:SetShown(i % 2 == 0)
+  row.recipeID, row.out, row.recipeName = e.id, e.r.out, e.en
+  row.cells.profit:SetJustifyH("RIGHT")
+  row.icon:SetTexture(e.r.out and ns:ItemIcon(e.r.out) or "Interface\Icons\INV_Misc_QuestionMark")
+  row.icon:ClearAllPoints()
+  row.icon:SetPoint("LEFT", row, "LEFT", lay.name.x, 0)
+  local src = e.src
+  row.src = src
+  local tinfo = TYPES[e.type]
+  local values = {
+    name = e.r.n or "?",
+    skill = skillText(e.skill, rank),
+    known = #e.names > 0 and table.concat(e.names, ", ") or (SECONDARY[prof] and "|cff7fd39canyone can learn|r" or dim("nobody yet")),
+    source = sourceText(src, e.fromItem),
+    type = ("|cff%s%s|r%s"):format(tinfo.color, tinfo.label, e.override and dim(" (yours)") or ""),
+    profit = money(e.profit),
+  }
+  for key, fs in pairs(row.cells) do
+    local x, w = lay[key].x, lay[key].w
+    if key == "name" then x, w = x + 20, w - 20 end
+    fs:ClearAllPoints()
+    fs:SetPoint("LEFT", row, "LEFT", x, 0)
+    fs:SetWidth(w)
+    fs:SetText(values[key])
+    fs:Show()
+  end
+  row.pin:ClearAllPoints()
+  row.pin:SetPoint("LEFT", row, "LEFT", lay.pin.x, 0)
+  row.pin:SetShown(src and src.mapID and src.x and true or false)
+  row:Show()
+end
+
+-- The recipe rows in view, and a screen's worth either side, each drawn once per refresh.
+drawRecipesVisible = function()
+  local d = f and f.rdraw
+  if not d then return end
+  local top, h = f.sf:GetVerticalScroll() or 0, f.sf:GetHeight() or 0
+  if h <= 0 then h = 30 * ROW end
+  local first = math.max(1, math.floor(top / ROW) + 1 - 10)
+  local last = math.min(d.n, math.ceil((top + h) / ROW) + 10)
+  for i = first, last do
+    if not d.done[i] then d.done[i] = true; drawRecipe(i) end
+  end
+end
+
 local function recipeRows(prof, width, lay)
   local rank = bestRank(prof)
   local s = settings()
@@ -855,42 +910,11 @@ local function recipeRows(prof, width, lay)
     table.sort(list, usual)
   end
   local n = math.min(#list, MAX_ROWS)
-  for i = 1, n do
-    local e, row = list[i], getRow(i)
-    row:ClearAllPoints()
-    row:SetPoint("TOPLEFT", f.content, "TOPLEFT", 0, -(i - 1) * ROW)
-    row:SetWidth(width)
-    row.stripe:SetShown(i % 2 == 0)
-    row.recipeID, row.out, row.recipeName = e.id, e.r.out, e.en
-    row.cells.profit:SetJustifyH("RIGHT")
-    row.icon:SetTexture(e.r.out and ns:ItemIcon(e.r.out) or "Interface\\Icons\\INV_Misc_QuestionMark")
-    row.icon:ClearAllPoints()
-    row.icon:SetPoint("LEFT", row, "LEFT", lay.name.x, 0)
-    local src = e.src
-    row.src = src
-    local tinfo = TYPES[e.type]
-    local values = {
-      name = e.r.n or "?",
-      skill = skillText(e.skill, rank),
-      known = #e.names > 0 and table.concat(e.names, ", ") or (SECONDARY[prof] and "|cff7fd39canyone can learn|r" or dim("nobody yet")),
-      source = sourceText(src, e.fromItem),
-      type = ("|cff%s%s|r%s"):format(tinfo.color, tinfo.label, e.override and dim(" (yours)") or ""),
-      profit = money(e.profit),
-    }
-    for key, fs in pairs(row.cells) do
-      local x, w = lay[key].x, lay[key].w
-      if key == "name" then x, w = x + 20, w - 20 end
-      fs:ClearAllPoints()
-      fs:SetPoint("LEFT", row, "LEFT", x, 0)
-      fs:SetWidth(w)
-      fs:SetText(values[key])
-      fs:Show()
-    end
-    row.pin:ClearAllPoints()
-    row.pin:SetPoint("LEFT", row, "LEFT", lay.pin.x, 0)
-    row.pin:SetShown(src and src.mapID and src.x and true or false)
-    row:Show()
-  end
+  -- Only the rows in view (and a few either side) are drawn, more as you scroll (Frank's
+  -- tenth /fl perf, November 21: all 300 drawn on each refresh took 60 ms).
+  f.rdraw = { list = list, lay = lay, width = width, rank = rank, prof = prof, n = n, done = {} }
+  for i = 1, #rows do rows[i]:Hide() end
+  drawRecipesVisible()
   f.summary:SetText(ns.LocalizeText("%s: %d recipes, %d known. Showing %d%s. (Classic) = original Classic data, unconfirmed in Forever until you see it."):format(
     prof, total, knownCount, n, #list > MAX_ROWS and (" of " .. #list) or ""))
   return n, total
@@ -1122,6 +1146,7 @@ function ns:RefreshRecipes()
 
   f.content:SetWidth(width)
   local n, total = 0, 0
+  f.rdraw = nil   -- (the Trainers view draws all its rows: a few)
   if trainers then n = trainerRows(width, lay) elseif current then n, total = recipeRows(current, width, lay) end
   for i = n + 1, #rows do rows[i]:Hide() end
   f.empty:SetShown(n == 0)
