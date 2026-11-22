@@ -69,9 +69,14 @@ ns.GetItemInfo = getItemInfo
 -- (Registered before the handlers below, which read the item as it arrives.)
 ns:On("GET_ITEM_INFO_RECEIVED", function(id, success)
   if not id then return end
+  local missed = askedAt[id] or noSuchItem[id]
   askedAt[id] = nil
   -- (A later yes clears an earlier no: Codex review, November 21.)
   if success == false then noSuchItem[id] = true elseif success then noSuchItem[id] = nil end
+  -- Something was worked out without this item's details (whether it binds, its vendor
+  -- price): its values go, so lists kept until their inputs change (the Recipes tab) see
+  -- it, even when its vendor price was saved already (Codex review, November 21).
+  if success and missed and ns.InvalidateItem then ns:InvalidateItem(id) end
 end)
 
 -- Item names, remembered in saved data once the game has given them. The game keeps

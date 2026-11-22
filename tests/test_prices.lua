@@ -237,3 +237,22 @@ T.test("Item details: one ask per item until the game answers; an item it doesn'
   T.eq(ns.GetItemInfo(GONE), "Never", "a later yes clears the no")
   S.items[ID], S.items[GONE] = nil, nil
 end)
+
+-- Codex review, November 21: a recipe's output with a saved vendor price was listed as a
+-- flip before its details arrived; when they came (bind on pickup), nothing told the
+-- Recipes tab's kept list. An answer for an item asked about without success counts as a
+-- change to its values; one nobody was waiting for doesn't.
+T.test("Item details: an awaited answer changes the item's values, an unasked one doesn't", function()
+  local S = T.S
+  local ID, OTHER = 97903, 97904
+  S.items[ID] = nil
+  T.eq(ns.GetItemInfo(ID), nil, "not loaded yet")
+  S.items[ID] = { name = "Bound Robe" }
+  local before = ns.ValuesChanges()
+  T.fire("GET_ITEM_INFO_RECEIVED", ID, true)
+  T.ok(ns.ValuesChanges() > before, "the awaited item's values changed")
+  before = ns.ValuesChanges()
+  T.fire("GET_ITEM_INFO_RECEIVED", OTHER, true)
+  T.eq(ns.ValuesChanges(), before, "nobody was waiting for this one")
+  S.items[ID] = nil
+end)
