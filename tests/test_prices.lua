@@ -361,10 +361,10 @@ T.test("Item details: read directly when the game can't be asked for them", func
   local realC = C_Item
   local ok, err = pcall(function()
     C_Item = { IsItemDataCachedByID = function() return false end }
-    S.items[97990] = { name = "Direct Read" }
-    T.eq(ns.GetItemInfo(97990), "Direct Read")
+    S.items[98990] = { name = "Direct Read" }   -- (outside the IDs the test above asked about)
+    T.eq(ns.GetItemInfo(98990), "Direct Read")
   end)
   C_Item = realC
-  S.items[97990] = nil
+  S.items[98990] = nil
   assert(ok, err)
 end)
