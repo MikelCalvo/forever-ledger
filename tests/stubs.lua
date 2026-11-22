@@ -12,6 +12,9 @@ local function dummy()
   local o = { scripts = {}, events = {} }
   local mt = {}
   mt.__index = function(_, k)
+    -- (A field the addon sets later, like f.cache, is nil until then, as in the game: the
+    -- game's own methods all start with a capital.)
+    if type(k) ~= "string" or k:find("^%l") then return nil end
     if k:find("^Create") or k:find("^Get%u%l*Frame") or k == "GetFontString" then
       return function() return dummy() end
     end
