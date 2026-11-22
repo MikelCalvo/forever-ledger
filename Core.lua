@@ -1128,7 +1128,7 @@ end
 
 function ns:PrintPerf(reset)
   if reset then
-    ns.perf, ns.perfSince = {}, GetTime()
+    ns.perf, ns.perfSince, ns.perfDetail = {}, GetTime(), {}
     if ns.db then ns.db.freezeLog = nil end
     print(ns.PREFIX, "Timing and freezes reset. Play until it happens again, then /fl perf.")
     return
