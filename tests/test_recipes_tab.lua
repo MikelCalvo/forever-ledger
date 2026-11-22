@@ -88,7 +88,7 @@ T.test("Professions: the kept list's stamp changes with what the list is made fr
   local R = ns._recipesTest
   local s = R.settings()
   local key = "Stamp Tester-Testrealm"
-  local realChar, realNow, realSource = ns.db.chars[key], S.now, ns.recipeSourceStamp
+  local realChar, realNow, realSource = ns.db.chars[key], T.S.now, ns.recipeSourceStamp
   local ok, err = pcall(function()
     ns.db.chars[key] = { name = "Stamp Tester", profs = { Stampcraft = { rank = 100, updated = 1, recipeCount = 3, recipes = {} } } }
     local c1, s1 = R.listStamp("Stampcraft", s, "")
@@ -100,16 +100,16 @@ T.test("Professions: the kept list's stamp changes with what the list is made fr
     local _, s3 = R.listStamp("Stampcraft", s, "")
     T.ok(s3 ~= s2, "a source seen: a new stamp")
     -- Values: taken in at most every 10 seconds, with a redraw queued for then.
-    S.now = S.now + 20
+    T.S.now = T.S.now + 20
     local v1 = R.valuesKey()
-    local timers = #S.timers
+    local timers = #T.S.timers
     ns:InvalidateItem(2589)
     T.eq(R.valuesKey(), v1, "not within 10 seconds")
-    T.eq(#S.timers, timers + 1, "a redraw for when they're taken in")
-    S.now = S.now + 10
+    T.eq(#T.S.timers, timers + 1, "a redraw for when they're taken in")
+    T.S.now = T.S.now + 10
     T.ok(R.valuesKey() ~= v1, "then taken in")
   end)
-  ns.db.chars[key], S.now, ns.recipeSourceStamp = realChar, realNow, realSource
+  ns.db.chars[key], T.S.now, ns.recipeSourceStamp = realChar, realNow, realSource
   T.runTimers()
   assert(ok, err)
 end)
