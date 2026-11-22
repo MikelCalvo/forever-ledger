@@ -71,6 +71,11 @@ T.test("Freeze watch: leftovers made, and memory cleared in a freeze", function(
   ns.perf = saved
   ns.db.freezeLog = { { t = 1, ms = 600, ours = 2, slow = {}, clearedMB = 95 } }
   T.ok(table.concat(ns.FreezeLines(8), "\n"):find("cleared 95 MB of leftover memory", 1, true))
+  -- (Frank's twentieth /fl perf: item details arriving, and memory made, in the frozen frame.)
+  ns.db.freezeLog = { { t = 1, ms = 290, ours = 18, slow = {}, items = 340, grewMB = 6 } }
+  local text = table.concat(ns.FreezeLines(8), "\n")
+  T.ok(text:find("340 item details arrived from the game in it", 1, true), text)
+  T.ok(text:find("memory grew 6 MB in it", 1, true), text)
   ns.db.freezeLog = nil
 end)
 
@@ -234,4 +239,32 @@ T.test("Slices: a hello's count of price history days gives frames back", functi
   T.eq(whole and whole[d - 1], 150)
   T.eq(result and result[market] and result[market][d - 2], 150, "the same counts")
   T.eq(result and result[market] and result[market][d - 1], 150)
+end)
+
+-- Frank's twentieth /fl perf, November 22: sizing every saved table hit the game's time
+-- limit ("script ran too long"). A sample of each level now, the rest estimated.
+T.test("Perf report: saved data sized from a sample, the big part still named", function()
+  local big = {}
+  for i = 1, 300 do
+    local inner = {}
+    for j = 1, 300 do inner[j] = { j, "some text here" } end
+    big[i] = inner
+  end
+  ns.db.testBigData = big
+  local lines, realPrint = {}, print
+  print = function(...)
+    local parts = {}
+    for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+    lines[#lines + 1] = table.concat(parts, " ")
+  end
+  local ok, err = pcall(ns.PrintPerf, ns)
+  print = realPrint
+  ns.db.testBigData = nil
+  assert(ok, err)
+  local sizes
+  for _, l in ipairs(lines) do if l:find("Biggest saved data", 1, true) then sizes = l end end
+  T.ok(sizes and sizes:find("testBigData", 1, true), sizes or "no sizes line")
+  local kb = sizes and tonumber(sizes:match("testBigData (%d+) KB"))
+  -- (300 x 300 entries of about 46 bytes: roughly 4 MB, estimated from the sample.)
+  T.ok(kb and kb > 2000 and kb < 8000, tostring(kb))
 end)

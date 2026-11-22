@@ -932,6 +932,7 @@ function ns.NoteFrame(elapsed, ours, top, topMs, tipItem, others, part, partMs)
   return e
 end
 
+local frameItems = 0   -- (item details that arrived since the last frame: GET_ITEM_INFO_RECEIVED)
 local overBase, overOld   -- (each addon's count of frames over 100 ms: a second ago at most, and the one before)
 local watch = CreateFrame("Frame")
 local lastTick   -- (our own clock at the last OnUpdate)
@@ -956,6 +957,11 @@ watch:SetScript("OnUpdate", function(_, elapsed)
     end
     local e = ns.NoteFrame(elapsed, frameOurs, frameTop, frameTopMs, tip or frameTipItem, profilerTop("LastTime", 3), framePart, framePartMs)
     if e and cleared >= 1024 then e.clearedMB = math.floor(cleared / 1024 + 0.5) end
+    -- Item details the game sent in it, and memory made in it (Frank's twentieth /fl perf,
+    -- November 22: freezes of 250-290 ms while Gold making's list was worked out, Forever
+    -- Ledger 18 ms of them, no addon over 100 ms: the game loading items asked about?).
+    if e and frameItems > 0 then e.items = frameItems end
+    if e and cleared <= -1024 then e.grewMB = math.floor(-cleared / 1024 + 0.5) end
     -- Which addons had a frame over 100 ms in it: their counts a second later against the
     -- counts kept every second before it (the per-frame times read now aren't the frozen
     -- frame's: Frank's AN30, November 17, every addon showed 15 ms or less).
@@ -971,6 +977,7 @@ watch:SetScript("OnUpdate", function(_, elapsed)
   end
   frameOurs, frameTop, frameTopMs = 0, nil, 0
   framePart, framePartMs, frameTipItem = nil, 0, nil
+  frameItems = 0
   depth = 0   -- (a timed task that stopped with an error left it raised)
 end)
 -- Every second: each addon's count of frames over 100 ms, for the freeze above.
@@ -982,7 +989,9 @@ end
 watch:RegisterEvent("LOADING_SCREEN_ENABLED")
 watch:RegisterEvent("LOADING_SCREEN_DISABLED")
 watch:RegisterEvent("PLAYER_LEAVING_WORLD")
+watch:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 watch:SetScript("OnEvent", function(_, event)
+  if event == "GET_ITEM_INFO_RECEIVED" then frameItems = frameItems + 1; return end
   loadingSeq = loadingSeq + 1
   if event == "LOADING_SCREEN_DISABLED" then
     -- (A few seconds more: the first frames after a loading screen are slow for everyone.
@@ -1111,6 +1120,8 @@ function ns.FreezeLines(n)
         parts[#parts + 1] = "; slowest addons: " .. table.concat(e.addons, ", ")
       end
       if e.clearedMB then parts[#parts + 1] = ("; |cffffd100the game cleared %d MB of leftover memory in it|r"):format(e.clearedMB) end
+      if e.grewMB then parts[#parts + 1] = ("; addons' memory grew %d MB in it"):format(e.grewMB) end
+      if e.items then parts[#parts + 1] = ("; %d item details arrived from the game in it"):format(e.items) end
       if e.item then parts[#parts + 1] = "; tooltip on " .. (ns.ItemName(e.item) or ("item " .. e.item)) end
       lines[#lines + 1] = "    " .. table.concat(parts, " ")
     end
@@ -1160,17 +1171,27 @@ function ns:PrintPerf(reset)
     end
   end
   -- The biggest parts of the saved data, roughly (entries, and KB of text where it's text).
+  -- A sample of each level's tables, the rest estimated from it, and a limit on the whole
+  -- walk: walking all of it hit the game's time limit for one script (Frank's twentieth
+  -- /fl perf, November 22: "script ran too long").
+  local SAMPLE, LIMIT, visits = 24, 100000, 0
   local function measure(t, depth)
-    local n, bytes = 0, 0
+    local n, bytes, tables, sampled, sampledBytes = 0, 0, 0, 0, 0
     for k, v in pairs(t) do
       n = n + 1
+      visits = visits + 1
       if type(k) == "string" then bytes = bytes + #k end
       if type(v) == "string" then bytes = bytes + #v
       elseif type(v) == "table" and depth > 0 then
-        local n2, b2 = measure(v, depth - 1)
-        bytes = bytes + b2 + n2 * 16
+        tables = tables + 1
+        if sampled < SAMPLE and visits < LIMIT then
+          sampled = sampled + 1
+          local n2, b2 = measure(v, depth - 1)
+          sampledBytes = sampledBytes + b2 + n2 * 16
+        end
       else bytes = bytes + 8 end
     end
+    if sampled > 0 then bytes = bytes + sampledBytes * tables / sampled end
     return n, bytes
   end
   local parts = {}
