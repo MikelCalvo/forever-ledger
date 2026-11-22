@@ -295,3 +295,16 @@ T.test("Ledger by item: averages, profit on the resold ones, exact search, item 
   ns.db.sales, ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths = real[1], real[2], real[3], real[4]
   ns.db.itemNames[ORE], ns.db.itemNames[BAR] = nil, nil
 end)
+
+T.test("The local day: the same answer, and the clock's tables read once a second", function()
+  local realDate, looks = date, 0
+  date = function(...) looks = looks + 1; return realDate(...) end
+  local t = os.time({ year = 2026, month = 3, day = 15, hour = 23, min = 59, sec = 59 })
+  local first = ns.LocalDay(t)
+  local before = looks
+  for _ = 1, 50 do T.eq(ns.LocalDay(t), first) end
+  T.eq(looks, before, "no new date tables for the same second")
+  T.eq(ns.LocalDay(t + 1), first + 1, "the next second is the next day")
+  T.eq(ns.LocalDay(t), first, "and back again")
+  date = realDate
+end)

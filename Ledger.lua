@@ -178,10 +178,14 @@ end
 
 -- Combine trades of the same item, at the same price each, in the same place, by the
 -- same character, within a minute of each other (selling 10 oils one by one is one row).
+-- (Sorted a few hundred at a time inside the Ledger list's run: in one go it was most of
+-- that run's slowest 51 ms, Frank's eighth /fl perf, November 21.)
+local function byTime(a, b) return a.t < b.t end
 local function groupSimilar(list)
-  table.sort(list, function(a, b) return a.t < b.t end)
+  ns.SortInSlices(list, byTime)
   local out, last = {}, nil
   for _, r in ipairs(list) do
+    ns.MaybeYield()
     if last and not r.month and not last.month and r.item == last.item and r.where == last.where and r.char == last.char and r.who == last.who
       and r.each and last.each and math.abs(r.each - last.each) < 1 and r.t - last.t <= GROUP_SECONDS then
       last.qty = (last.qty or 1) + (r.qty or 1)
@@ -244,6 +248,7 @@ local function records(tab, from, charOK, match, opts)
     end
     for _, list in ipairs({ sales, buys }) do
       for _, r in ipairs(list) do
+        ns.MaybeYield()
         r.each = r.qty and r.qty > 0 and r.total / r.qty or nil
         r.id = r.id or (r.item and byName[r.item:lower()])
         if opts.seen and r.id then opts.seen[r.id] = true end
@@ -287,8 +292,8 @@ local function records(tab, from, charOK, match, opts)
         x.where[w] = (x.where[w] or 0) + q
         x.first, x.last = math.min(x.first or 0, r.t or 0), math.max(x.last or 0, r.t or 0)
       end
-      for _, r in ipairs(sales) do add(r, true) end
-      for _, r in ipairs(buys) do add(r, false) end
+      for _, r in ipairs(sales) do ns.MaybeYield(); add(r, true) end
+      for _, r in ipairs(buys) do ns.MaybeYield(); add(r, false) end
       for _, x in pairs(by) do
         x.avgBuy = x.bought > 0 and x.boughtTotal / x.bought or nil
         x.avgSell = x.sold > 0 and x.soldTotal / x.sold or nil
@@ -387,6 +392,7 @@ local function records(tab, from, charOK, match, opts)
     local exact = match:match('^"(.+)"$')
     local kept = {}
     for _, r in ipairs(out) do
+      ns.MaybeYield()
       local hit
       if exact then hit = (r.item or ""):lower() == exact
       else hit = ((r.item or "") .. " " .. (r.kind or "")):lower():find(match, 1, true) end

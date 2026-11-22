@@ -51,12 +51,18 @@ local PENDING_SECONDS = 5   -- how long a hint (repair, posting fee, mail) waits
 local PURCHASE_SECONDS = 65
 
 -- Days follow the player's own clock (a UTC day would start in the US evening).
+-- The last answer is kept for the same second: usual prices, price stats and sell speeds
+-- ask for today thousands of times a list, and each look made two date tables (Frank's
+-- eighth /fl perf, November 21: the deals part of Gold making made 135 MB of leftovers).
+local lastT, lastDay
 local function localDay(t)
   t = t or time()
+  if t == lastT then return lastDay end
   local utc = date("!*t", t)
   utc.isdst = date("*t", t).isdst
   local offset = t - time(utc)   -- seconds ahead of UTC, summer time included
-  return math.floor((t + offset) / 86400)
+  lastT, lastDay = t, math.floor((t + offset) / 86400)
+  return lastDay
 end
 ns.LocalDay = localDay
 local function today() return localDay() end
