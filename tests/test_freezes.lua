@@ -294,3 +294,54 @@ T.test("Recipe index: rebuilt, and values thrown away, only when what it's made 
   ns:BuildUsageIndex()
   assert(ok, err)
 end)
+
+-- Codex review, November 22: the walk's limit has to stop every loop, and a part cut short
+-- says so ("at least"), rather than reading as complete or 0 KB.
+T.test("Perf report: a part too big to look through is cut short and says so", function()
+  local flat = {}
+  for i = 1, 120000 do flat[i] = i end
+  ns.db.testFlatData = flat
+  local lines, realPrint = {}, print
+  print = function(...)
+    local parts = {}
+    for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+    lines[#lines + 1] = table.concat(parts, " ")
+  end
+  local ok, err = pcall(ns.PrintPerf, ns)
+  print = realPrint
+  ns.db.testFlatData = nil
+  assert(ok, err)
+  local sizes
+  for _, l in ipairs(lines) do if l:find("Biggest saved data", 1, true) then sizes = l end end
+  T.ok(sizes and (sizes:find("testFlatData at least", 1, true) or sizes:find("not measured", 1, true)), sizes or "no sizes line")
+end)
+
+-- Codex review, November 22: two recipes swapping their material counts left the old index
+-- (the fingerprint added each field on its own).
+T.test("Recipe index: two recipes swapping their counts is a change", function()
+  local key = "Swap Tester-Testrealm"
+  ns.db.chars[key] = { name = "Swap Tester", profs = { Tailoring = { rank = 100, recipes = {
+    [97601] = { n = "Swap X", out = 97611, r = { { 97620, 2 } } },
+    [97602] = { n = "Swap Y", out = 97612, r = { { 97620, 3 } } },
+  } } } }
+  ns:BuildUsageIndex()
+  local realAll, all = ns.InvalidateValues, 0
+  ns.InvalidateValues = function() all = all + 1 end
+  local ok, err = pcall(function()
+    local recs = ns.db.chars[key].profs.Tailoring.recipes
+    recs[97601] = { n = "Swap X", out = 97611, r = { { 97620, 3 } } }
+    recs[97602] = { n = "Swap Y", out = 97612, r = { { 97620, 2 } } }
+    ns:BuildUsageIndex()
+    T.eq(all, 1, "rebuilt")
+    local x
+    for _, use in ipairs(ns.recipesByReagent[97620] or {}) do if use.recipeID == 97601 then x = use.rec end end
+    T.eq(x and x.r[1][2], 3, "the index has the new rows")
+    recs[97601].n = "Swap Z"   -- (a name of the same length)
+    ns:BuildUsageIndex()
+    T.eq(all, 2, "a renamed recipe too")
+  end)
+  ns.InvalidateValues = realAll
+  ns.db.chars[key] = nil
+  ns:BuildUsageIndex()
+  assert(ok, err)
+end)

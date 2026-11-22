@@ -1187,37 +1187,47 @@ function ns:PrintPerf(reset)
   -- A sample of each level's tables, the rest estimated from it, and a limit on the whole
   -- walk: walking all of it hit the game's time limit for one script (Frank's twentieth
   -- /fl perf, November 22: "script ran too long").
+  -- (Every loop stops at the limit, and a part cut short or never reached says so: Codex
+  -- review, November 22: the limit only stopped going deeper, and later parts read 0 KB.)
   local SAMPLE, LIMIT, visits = 24, 100000, 0
   local function measure(t, depth)
-    local n, bytes, tables, sampled, sampledBytes = 0, 0, 0, 0, 0
+    local n, bytes, tables, sampled, sampledBytes, cut = 0, 0, 0, 0, 0, false
     for k, v in pairs(t) do
+      if visits >= LIMIT then cut = true; break end
       n = n + 1
       visits = visits + 1
       if type(k) == "string" then bytes = bytes + #k end
       if type(v) == "string" then bytes = bytes + #v
       elseif type(v) == "table" and depth > 0 then
         tables = tables + 1
-        if sampled < SAMPLE and visits < LIMIT then
+        if sampled < SAMPLE then
           sampled = sampled + 1
-          local n2, b2 = measure(v, depth - 1)
+          local n2, b2, cut2 = measure(v, depth - 1)
           sampledBytes = sampledBytes + b2 + n2 * 16
+          if cut2 then cut = true end
         end
       else bytes = bytes + 8 end
     end
     if sampled > 0 then bytes = bytes + sampledBytes * tables / sampled end
-    return n, bytes
+    return n, bytes, cut
   end
-  local parts = {}
+  local parts, unmeasured = {}, 0
   for key, v in pairs(ns.db or {}) do
     if type(v) == "table" then
-      local n, bytes = measure(v, 4)
-      parts[#parts + 1] = { key = key, n = n, kb = bytes / 1024 }
+      if visits >= LIMIT then unmeasured = unmeasured + 1
+      else
+        local n, bytes, cut = measure(v, 4)
+        parts[#parts + 1] = { key = key, n = n, kb = bytes / 1024, cut = cut }
+      end
     end
   end
   table.sort(parts, function(a, b) return a.kb > b.kb end)
   local out = {}
-  for i = 1, math.min(6, #parts) do out[i] = ("%s %.0f KB"):format(parts[i].key, parts[i].kb) end
-  print("  Biggest saved data (rough): " .. table.concat(out, ", "))
+  for i = 1, math.min(6, #parts) do
+    out[i] = ("%s %s%.0f KB"):format(parts[i].key, parts[i].cut and "at least " or "", parts[i].kb)
+  end
+  local tail = unmeasured > 0 and (" (%d more not measured: too much to look through at once)"):format(unmeasured) or ""
+  print("  Biggest saved data (rough): " .. table.concat(out, ", ") .. tail)
   if ns.loadMs then
     print(("  Loading the addon's files took %.0f ms, setting up saved data %.0f ms."):format(ns.loadMs, ns.readyMs or 0))
   end

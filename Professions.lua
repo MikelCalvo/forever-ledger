@@ -297,26 +297,38 @@ ns:On("TRADE_SKILL_DATA_SOURCE_CHANGED", queueCapture)
 -- output. Read without making anything (Frank's twentieth /fl perf, November 22: the index
 -- was rebuilt at every loading screen and threw every value away each time, so Gold
 -- making worked out all 7,000 values again).
+-- Each recipe is hashed in order with its own character, profession, name and fields, and
+-- the recipes' hashes are added up, so moving a count or an output from one recipe to
+-- another changes the number (Codex review, November 22: adding each field on its own let
+-- two recipes swap their counts unseen).
 local usageSig
+local P = 2147483629   -- (a prime under 2^31: h * 257 + x stays exact in a double)
+local function mix(h, x) return (h * 257 + (x or 0)) % P end
+local function mixText(h, s)
+  if type(s) ~= "string" then return mix(h, 1) end
+  for i = 1, #s do h = mix(h, s:byte(i)) end
+  return mix(h, 2)
+end
 local function usageSignature()
   local n, sum = 0, 0
   for key, c in pairs(ns.db.chars) do
     if ns:SameMarketChar(key) then
-      n = n + 1
-      sum = (sum + #key * 3 + (c.name and #c.name or 0)) % 2147483647
+      local hc = mixText(mixText(7, key), c.name)
+      sum, n = (sum + hc) % P, n + 1
       for prof, p in pairs(c.profs or {}) do
-        sum = (sum + #prof * 5 + (tonumber(p.rank) or 0) * 13) % 2147483647
+        local hp = mix(mixText(hc, prof), math.floor((tonumber(p.rank) or 0) * 100))
+        sum, n = (sum + hp) % P, n + 1
         for recipeID, rec in pairs(p.recipes or {}) do
-          sum = (sum + (tonumber(recipeID) or 0) * 31 + (tonumber(rec.out) or 0) * 17 + (tonumber(rec.oq) or 1) * 11 + (type(rec.n) == "string" and #rec.n or 0)) % 2147483647
-          for i, r in ipairs(rec.r or {}) do
-            n = n + 1
-            sum = (sum + (tonumber(r[1]) or 0) * 7 + (tonumber(r[2]) or 0) * (i + 2)) % 2147483647
-          end
+          local h = mix(hp, tonumber(recipeID) or 0)
+          h = mix(mix(h, tonumber(rec.out) or 0), math.floor((tonumber(rec.oq) or 1) * 1000))
+          h = mixText(h, rec.n)
+          for _, r in ipairs(rec.r or {}) do h = mix(mix(h, tonumber(r[1]) or 0), math.floor((tonumber(r[2]) or 0) * 1000)) end
+          sum, n = (sum + h) % P, n + 1
         end
       end
     end
   end
-  return n * 2147483647 + sum
+  return n * P + sum
 end
 -- Rebuilt only when what it's made from changed (then every value goes, as before).
 function ns:BuildUsageIndex()
