@@ -36,6 +36,7 @@ end
 local function settings()
   local d = ns.db.settings.dashboard
   d.char = d.char or "all"
+  ns.OwnCharChoice(d)
   d.range = d.range or "week"
   return d
 end

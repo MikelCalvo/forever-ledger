@@ -649,6 +649,20 @@ function ns.CharKey()
   return key
 end
 
+-- A single character picked while playing another one: the character you're on now, once
+-- you switch (a player on Discord, November 22: "When Im changing to alts, and open Forever
+-- Ledger ... could you make it by default to chose profile from that char? ... it is
+-- remembering last selected"). All, the realm and a faction stay as picked; a character
+-- picked on purpose stays until the next switch. The Dashboard and the Ledger.
+function ns.OwnCharChoice(s)
+  local me = ns.CharKey()
+  if s.charOn == me then return end
+  local c = s.char
+  local group = c == nil or c == "all" or c == "realm" or (type(c) == "string" and c:match("^faction:") ~= nil)
+  if not group and c ~= me then s.char = me end
+  s.charOn = me
+end
+
 -- Is a saved character on the same ruleset (realm name) and faction as the one you're
 -- playing: one who could mail you items or craft for you (owner, October 3: other
 -- rulesets' characters counted in Have, recipes and values). True when either side

@@ -100,6 +100,7 @@ local function settings()
   s.tab = s.tab or "all"
   s.range = s.range or "month"
   s.char = s.char or "all"
+  ns.OwnCharChoice(s)   -- (switched characters: Core.lua)
   s.sort = s.sort or {}
   s.group = s.group or "all"
   s.rarity = s.rarity or "all"
