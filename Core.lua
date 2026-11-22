@@ -778,6 +778,8 @@ function ns.StopSlices(run) if run then run.stopped = true end end
 
 -- A stable merge sort that gives the frame back now and then inside a sliced run (Lua's
 -- table.sort can't: it calls the comparator from C). Sorts t in place by less.
+-- (The clock is looked at every 64 comparisons, inside a merge too: once per merged block
+-- left a block of thousands in one frame, Codex review, November 21.)
 function ns.SortInSlices(t, less)
   local n = #t
   if n < 2 then return t end
@@ -789,11 +791,11 @@ function ns.SortInSlices(t, less)
       while l < mid and r < hi do
         if less(a[r], a[l]) then b[k] = a[r]; r = r + 1 else b[k] = a[l]; l = l + 1 end
         k = k + 1
+        done = done + 1
+        if done >= 64 then done = 0; ns.MaybeYield() end
       end
       while l < mid do b[k] = a[l]; l = l + 1; k = k + 1 end
       while r < hi do b[k] = a[r]; r = r + 1; k = k + 1 end
-      done = done + (hi - i)
-      if done >= 256 then done = 0; ns.MaybeYield() end
     end
     a, b = b, a
     width = width * 2
@@ -1418,19 +1420,45 @@ function ns:IsOwnChar(key)
   return inv ~= nil and not inv.via
 end
 
--- A character's professions in short (name, skill, how many recipes): sync sends a partner's
+-- Whether two records of a character have the same recipes, as the recipe index reads them
+-- (realm, faction, name, and each recipe's fields and materials): sync sends a partner's
 -- characters with a new time on nearly every message, and rebuilding the recipe index for
--- each threw every value away (Frank's /fl perf, November 21).
-local function professionsInShort(c)
-  local parts = {}
-  for prof, p in pairs(type(c) == "table" and c.profs or {}) do
-    local n = 0
-    for _ in pairs(p.recipes or {}) do n = n + 1 end
-    parts[#parts + 1] = prof .. ":" .. tostring(p.rank) .. ":" .. n
-  end
-  table.sort(parts)
-  return (c.realm or "") .. "|" .. (c.faction or "") .. "|" .. table.concat(parts, ",")
+-- each threw every value away (Frank's /fl perf, November 21). Counting recipes wasn't
+-- enough: a corrected recipe, or another one in its place, left the index on the old one
+-- (Codex review, November 21). Builds nothing, so the usual case costs no leftovers.
+local NONE = {}
+local function sameFields(a, b)
+  for k, v in pairs(a) do if k ~= "r" and b[k] ~= v then return false end end
+  for k, v in pairs(b) do if k ~= "r" and a[k] ~= v then return false end end
+  return true
 end
+local function sameRecipe(a, b)
+  if type(a) ~= "table" or type(b) ~= "table" or not sameFields(a, b) then return false end
+  local ra, rb = a.r or NONE, b.r or NONE
+  if #ra ~= #rb then return false end
+  for i = 1, #ra do
+    local x, y = ra[i], rb[i]
+    if type(x) ~= "table" or type(y) ~= "table" or x[1] ~= y[1] or x[2] ~= y[2] then return false end
+  end
+  return true
+end
+local function sameRecipes(old, new)
+  if type(old) ~= "table" or type(new) ~= "table" then return false end
+  if old.realm ~= new.realm or old.faction ~= new.faction or old.name ~= new.name then return false end
+  local po, pn = old.profs or NONE, new.profs or NONE
+  for prof in pairs(pn) do if po[prof] == nil then return false end end
+  for prof, p in pairs(po) do
+    local q = pn[prof]
+    if type(p) ~= "table" or type(q) ~= "table" or p.rank ~= q.rank then return false end
+    local ro, rn = p.recipes or NONE, q.recipes or NONE
+    for id in pairs(rn) do if ro[id] == nil then return false end end
+    for id, rec in pairs(ro) do
+      if not sameRecipe(rec, rn[id]) then return false end
+    end
+  end
+  return true
+end
+ns.SameRecipes = sameRecipes   -- (tests)
 
 -- Merge characters, prices and vendor prices from another account (Import and live
 -- sync). Newer data wins. via = the sync partner's name: what comes from them is marked
@@ -1449,7 +1477,7 @@ function ns:MergeData(data, via)
     if via and ns:IsOwnChar(key) then
       -- (yours: keep your own copy)
     elseif not mine or (c.updated or 0) > (mine.updated or 0) then
-      if not mine or professionsInShort(mine) ~= professionsInShort(c) then newRecipes = true end
+      if not mine or not sameRecipes(mine, c) then newRecipes = true end
       c.via = via or c.via
       db.chars[key] = c
       nChars = nChars + 1

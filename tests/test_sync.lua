@@ -239,6 +239,21 @@ T.test("A partner's character with the same professions doesn't rebuild the reci
     T.eq(ns.db.chars[key].updated, 400, "the newer record is still kept")
     ns:MergeData({ chars = { [key] = crafter(500, { [1] = { n = "A" }, [2] = { n = "B" } }) } }, "Crafty Bastiane")
     T.eq(built, 2, "a recipe learned")
+    -- The same number of recipes, but one corrected or another in its place (Codex review,
+    -- November 21: the index kept pointing at the old recipe).
+    local function one(id, cloth) return { [id] = { n = "A", out = 900, oq = 1, r = { { 2589, cloth } } } } end
+    ns:MergeData({ chars = { [key] = crafter(600, one(1, 1)) } }, "Crafty Bastiane")
+    T.eq(built, 3, "recipes with materials now")
+    ns:MergeData({ chars = { [key] = crafter(700, one(1, 1)) } }, "Crafty Bastiane")
+    T.eq(built, 3, "the same materials")
+    ns:MergeData({ chars = { [key] = crafter(800, one(1, 10)) } }, "Crafty Bastiane")
+    T.eq(built, 4, "a recipe's materials corrected")
+    ns:MergeData({ chars = { [key] = crafter(900, one(2, 10)) } }, "Crafty Bastiane")
+    T.eq(built, 5, "another recipe in its place")
+    local c = crafter(1000, one(2, 10))
+    c.profs.Tailoring.recipes[2].oq = 2
+    ns:MergeData({ chars = { [key] = c } }, "Crafty Bastiane")
+    T.eq(built, 6, "makes more each time")
   end)
   ns.BuildUsageIndex = real
   ns.db.chars["Crafty Bastiane-Testrealm"] = nil

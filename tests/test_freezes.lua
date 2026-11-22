@@ -177,3 +177,18 @@ T.test("Slices: the merge sort orders like table.sort and keeps equal items in o
   T.same(ns.SortInSlices({}, function() return false end), {})
   T.same(ns.SortInSlices({ 3 }, function(a, b) return a < b end), { 3 })
 end)
+
+T.test("Slices: the merge sort looks at the clock every 64 comparisons, inside a big merge too", function()
+  -- (Codex review, November 21: once per merged block left 1,024 comparisons in one frame.)
+  local realYield, since, most = ns.MaybeYield, 0, 0
+  ns.MaybeYield = function() if since > most then most = since end; since = 0 end
+  local ok, err = pcall(function()
+    local list = {}
+    for i = 1, 2048 do list[i] = 2049 - i end
+    ns.SortInSlices(list, function(a, b) since = since + 1; return a < b end)
+    for i = 1, 2048 do assert(list[i] == i, "sorted") end
+  end)
+  ns.MaybeYield = realYield
+  assert(ok, err)
+  T.ok(most > 0 and most <= 64, "at most 64 comparisons between looks: " .. most)
+end)

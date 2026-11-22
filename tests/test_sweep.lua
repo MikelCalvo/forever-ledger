@@ -1026,6 +1026,33 @@ T.test("Pause: a full scan that doesn't come starts no materials scan in its pla
   Scan.active, Scan.full, Scan.heldUntil, ns.db.lastFullScan = false, false, nil, nil
 end)
 
+T.test("Sweep: gear still listed at a price too old to count has its values worked out again", function()
+  -- (Codex review, November 21: under Auto another source stood in for the old price;
+  -- once it counts again, the item's values change too.)
+  local m, realInvalidate, dropped = market(), ns.InvalidateItem, {}
+  ns.InvalidateItem = function(self, id) dropped[id] = (dropped[id] or 0) + 1; return realInvalidate(self, id) end
+  local ok, err = pcall(function()
+    m[GEAR] = { m = 150, a = 150, q = 1, l = "150:1", t = time() - 13 * 3600, src = "scan" }
+    rows, full = { row(GEAR, 150, 1) }, true
+    start()
+    answer()
+    T.eq(result.outcome, "done")
+    T.eq(m[GEAR].t, time(), "touched")
+    T.eq(dropped[GEAR], 1, "13 hours old: its values follow")
+    -- Twenty minutes old: touched again, but it counted already.
+    dropped = {}
+    S.now = S.now + 1200
+    start()
+    answer()
+    T.eq(m[GEAR].t, time(), "touched")
+    T.eq(dropped[GEAR], nil, "still fresh: values stay")
+  end)
+  ns.InvalidateItem = realInvalidate
+  m[GEAR] = nil
+  T.runTimers()
+  if not ok then error(err, 0) end
+end)
+
 ns.IsGearItem = realGear
 AH.IsThrottledMessageSystemReady, AH.HasFullBrowseResults, AH.GetBrowseResults = nil, nil, nil
 T.fire("AUCTION_HOUSE_CLOSED")

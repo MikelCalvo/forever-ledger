@@ -584,6 +584,9 @@ local function judge(id, it, now, looks, stats)
   elseif look == "add" then
     if ns:AddCheapest(id, it.min, it.q) then stats.added = stats.added + 1; if S.changedIds then S.changedIds[id] = true end end
   elseif look == "touch" then
+    -- A price too old to count (Prices.lua GetPrice: another source stood in) counts again
+    -- from now: its values change too (Codex review, November 21).
+    if now - (rec.t or 0) > (ns.db.settings.maxAgeHours or 12) * 3600 and S.changedIds then S.changedIds[id] = true end
     rec.t = now
     stats.touched = stats.touched + 1
     local ok, err = pcall(ns.CheckFlip, ns, id)
