@@ -1709,7 +1709,7 @@ function ns:ApiReport()
     "ItemLocation.CreateFromBagAndSlot",
     "C_AuctionHouse.QueryOwnedAuctions", "C_AuctionHouse.GetNumOwnedAuctions", "C_AuctionHouse.GetOwnedAuctionInfo",
     "C_AuctionHouse.CancelAuction", "TakeInboxMoney", "AutoLootMailItem", "RepairAllItems",
-    "BuyMerchantItem", "GetMerchantItemID", "C_Container.UseContainerItem", "C_Container.GetContainerItemInfo",
+    "BuyMerchantItem", "GetMerchantItemID", "GetNumBuybackItems", "GetBuybackItemInfo", "GetBuybackItemLink", "C_Container.UseContainerItem", "C_Container.GetContainerItemInfo",
     "C_TradeSkillUI.CraftRecipe", "C_TradeSkillUI.OpenTradeSkill", "LOOT_ITEM_CREATED_SELF",
     "GetNumLootItems", "GetLootSlotInfo", "GetLootSlotLink", "GetLootSourceInfo", "C_Container.GetContainerNumSlots",
     "GetNumTrainerServices", "GetTrainerServiceInfo", "GetTrainerServiceSkillReq", "GetTrainerServiceCost",

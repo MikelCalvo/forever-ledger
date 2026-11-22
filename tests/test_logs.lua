@@ -393,3 +393,52 @@ T.test("Gold at a vendor with no logged sale still counts as a trade for the par
   T.eq(#ns.db.vendorLog, 0, "nothing to log")
   T.eq(got[#got], true, "sent as a trade")
 end)
+
+-- Frank, November 22: right-clicked vendor sales on his bank account were never logged (no
+-- bag click the addon saw), only the gold. The item comes from the vendor's buyback list.
+local BUYBACK = {}
+GetNumBuybackItems = function() return #BUYBACK end
+GetBuybackItemInfo = function(i) local b = BUYBACK[i]; return "x", 1, b.price, b.qty end
+GetBuybackItemLink = function(i) return ("|cffffffff|Hitem:%d::::::::|h[x]|h|r"):format(BUYBACK[i].id) end
+
+local function soldNoClick(id, qty, price, listFirst)
+  if listFirst then BUYBACK[#BUYBACK + 1] = { id = id, qty = qty, price = price } end
+  S.money = S.money + price
+  T.fire("PLAYER_MONEY")
+  if not listFirst then
+    BUYBACK[#BUYBACK + 1] = { id = id, qty = qty, price = price }
+    T.fire("MERCHANT_UPDATE")
+  end
+end
+
+T.test("A vendor sale with no bag click is read from the buyback list", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  BUYBACK[1] = { id = 2589, qty = 5, price = 50 }   -- (sold on an earlier visit)
+  atVendor(159)
+  soldNoClick(2592, 3, 90, true)          -- the list first, then the gold
+  soldNoClick(4306, 2, 400, false)        -- the gold first, then the list
+  T.eq(#ns.db.vendorLog, 2)
+  T.same(ns.db.vendorLog[1], { t = NOW, c = ME, id = 2592, q = 3, a = 90, s = "sell" })
+  T.same(ns.db.vendorLog[2], { t = NOW, c = ME, id = 4306, q = 2, a = 400, s = "sell" })
+end)
+
+T.test("A sale already on the list isn't logged again by the next one", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  atVendor(159)
+  -- (logged from its bag click: nothing waiting when the list changes, so it's noted)
+  BUYBACK[1] = { id = 2592, qty = 3, price = 90 }
+  T.fire("MERCHANT_UPDATE")
+  soldNoClick(4306, 2, 90, true)           -- the same gold as the earlier one
+  T.eq(#ns.db.vendorLog, 1)
+  T.eq(ns.db.vendorLog[1].id, 4306)
+end)
+
+T.test("Vendor gold with nothing new on the buyback list logs nothing", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  atVendor(159)
+  S.money = S.money + 77
+  T.fire("PLAYER_MONEY")
+  T.runTimers()
+  T.eq(#ns.db.vendorLog, 0)
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+end)

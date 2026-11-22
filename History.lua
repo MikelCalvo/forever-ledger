@@ -506,6 +506,87 @@ function ns:DropBooks(key)
   filterLog(ns.db.ledgerMonths, notTheirs)
 end
 
+-- Vendor sales that no bag click explained (a bag addon's own buttons, a Sell junk button):
+-- the item is read from the vendor's buyback list, where each sale lands (Frank, November
+-- 22: right-clicked sales on his bank account were never logged, only the gold's day total).
+local buybackSeen = {}   -- [link:price:qty] = how many of these were on the list already
+local unexplained = {}   -- vendor gold with nothing logged: { at = GetTime(), amount, t, who }
+local UNEXPLAINED_SECONDS = 3
+local function buybackNow()
+  local out = {}
+  if not (GetNumBuybackItems and GetBuybackItemInfo and GetBuybackItemLink) then return out end
+  local ok, n = pcall(GetNumBuybackItems)
+  for i = 1, (ok and tonumber(n) or 0) do
+    local okInfo, _, _, price, qty = pcall(GetBuybackItemInfo, i)
+    local okLink, link = pcall(GetBuybackItemLink, i)
+    local id = okLink and type(link) == "string" and tonumber(link:match("item:(%d+)"))
+    if okInfo and id and type(price) == "number" and price > 0 then
+      qty = tonumber(qty) or 1
+      out[#out + 1] = { id = id, price = price, qty = qty, sig = ("%s:%d:%d"):format(link, price, qty) }
+    end
+  end
+  return out
+end
+local function noteBuyback()
+  buybackSeen = {}
+  for _, b in ipairs(buybackNow()) do buybackSeen[b.sig] = (buybackSeen[b.sig] or 0) + 1 end
+end
+-- What came onto the list since it was last noted.
+local function newBuyback()
+  local left, out = {}, {}
+  for k, v in pairs(buybackSeen) do left[k] = v end
+  for _, b in ipairs(buybackNow()) do
+    if (left[b.sig] or 0) > 0 then left[b.sig] = left[b.sig] - 1 else out[#out + 1] = b end
+  end
+  return out
+end
+-- What a buyback entry paid: its price is for the stack (or, if the game gives it each, times
+-- the count), whichever is the gold that came.
+local function paid(b, want)
+  if b.price == want then return want end
+  if b.price * b.qty == want then return want end
+end
+local function tryBuyback()
+  local now, logged = GetTime(), false
+  for i = #unexplained, 1, -1 do
+    if now - unexplained[i].at > UNEXPLAINED_SECONDS then table.remove(unexplained, i) end
+  end
+  while unexplained[1] do
+    local u = unexplained[1]
+    local fresh, take = newBuyback(), nil
+    for i = #fresh, 1, -1 do   -- (newest first)
+      if paid(fresh[i], u.amount) then take = { { b = fresh[i], a = u.amount } }; break end
+    end
+    if not take and #fresh >= 2 then   -- several sold in one gold change
+      local sum = 0
+      for _, b in ipairs(fresh) do sum = sum + b.price end
+      if sum == u.amount then
+        take = {}
+        for _, b in ipairs(fresh) do take[#take + 1] = { b = b, a = b.price } end
+      end
+    end
+    if not take then break end
+    table.remove(unexplained, 1)
+    for _, x in ipairs(take) do
+      buybackSeen[x.b.sig] = (buybackSeen[x.b.sig] or 0) + 1
+      addLog(ns.db.vendorLog, { t = u.t, c = u.who, id = x.b.id, q = x.b.qty, a = x.a, s = "sell" })
+      if ns.SessionSold then ns:SessionSold(x.b.id, x.b.qty) end
+      ns:Debug("Vendor sold (from the buyback list)", x.b.qty, "x", x.b.id, "for", ns.Money(x.a))
+      logged = true
+    end
+  end
+  if logged then
+    if ns.LedgerChanged then ns:LedgerChanged() end
+    if ns.BooksChanged then ns:BooksChanged(true) end
+  end
+end
+ns:On("MERCHANT_SHOW", function() unexplained = {}; noteBuyback() end)
+ns:On("MERCHANT_UPDATE", function()
+  if #unexplained > 0 then tryBuyback() end
+  -- Nothing waiting: what's new was logged from its bag click, so it's noted as seen.
+  if #unexplained == 0 then noteBuyback() end
+end)
+
 local function onMoney()
   local now = GetMoney()
   if not lastMoney then lastMoney = now; return end
@@ -534,6 +615,7 @@ local function onMoney()
 
   local now, who = time(), ns.CharKey()
   local logged = false   -- (a trade logged: the partner gets it within seconds, Sync.lua)
+  local vendorLogged = false
   for _, h in ipairs(hints) do
     local amount = (#hints > 1 and h.amount) or math.abs(delta)
     if h.log == "sale" then
@@ -546,6 +628,7 @@ local function onMoney()
     elseif h.log == "vendor" then
       addLog(ns.db.vendorLog, { t = now, c = who, id = h.item, q = h.qty, a = amount, s = h.source == "vendorSell" and "sell" or "buy" })
       logged = true
+      if h.source == "vendorSell" then vendorLogged = true end
       if h.source == "vendorSell" and ns.SessionSold then ns:SessionSold(h.item, h.qty) end
       ns:Debug("Vendor", h.source == "vendorSell" and "sold" or "bought", h.qty or "?", "x", h.item or "?", "for", ns.Money(amount))
     end
@@ -581,6 +664,11 @@ local function onMoney()
   -- another addon sells without a bag click, and the partner's Ledger then waited for the
   -- gold's minute (Frank, November 22: sold to a vendor, "over a minute and nothing").
   if source == "vendorSell" or source == "vendorBuy" then logged = true end
+  if source == "vendorSell" and delta > 0 and not vendorLogged then
+    unexplained[#unexplained + 1] = { at = GetTime(), amount = delta, t = now, who = who }
+    tryBuyback()
+    if #unexplained > 0 then C_Timer.After(0.5, tryBuyback) end   -- (the list may update a moment later)
+  end
   if logged and ns.BooksChanged then ns:BooksChanged(true) end
 end
 
