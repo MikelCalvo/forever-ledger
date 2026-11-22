@@ -99,6 +99,21 @@ T.test("A big message arrives however long it takes, while its pieces keep comin
   T.eq(ns.db.prices["Testrealm|Alliance"][70001].m, 5)
 end)
 
+-- Runs the waiting timers one at a time (a frame each) until some of ids first..last are in
+-- (the first frames may go on the message's realm names: Frank's eleventh /fl perf).
+local function framesUntilSome(key, first, last)
+  local function count()
+    local got = 0
+    for id = first, last do if ns.db.prices[key] and ns.db.prices[key][id] then got = got + 1 end end
+    return got
+  end
+  for _ = 1, 500 do
+    if count() > 0 or #S.timers == 0 then break end
+    table.remove(S.timers, 1)()
+  end
+  return count()
+end
+
 -- Frank's /fl perf, November 21: a partner's message took 166 ms in one frame.
 T.test("A big message is taken in over several frames, and the next one waits its turn", function()
   setup(false)
@@ -111,8 +126,7 @@ T.test("A big message is taken in over several frames, and the next one waits it
     debugprofilestop = function() ms = ms + 1; return ms end   -- (each look: 1 ms later; /fl perf's part names look too)
     deliver({ k = "d", prices = { [key] = prices } })
     deliver({ k = "d", prices = { [key] = { [71999] = { m = 7, q = 1, t = S.now, src = "scan" } } } })
-    local got = 0
-    for id = 71001, 71300 do if ns.db.prices[key][id] then got = got + 1 end end
+    local got = framesUntilSome(key, 71001, 71300)
     T.ok(got > 0 and got < 300, "started, not all in one frame: " .. got)
     T.eq(ns.db.prices[key][71999], nil, "the second waits for the first")
     T.runTimers()
@@ -138,8 +152,7 @@ T.test("Unlinking stops a message half taken in and the ones waiting", function(
     debugprofilestop = function() ms = ms + 1; return ms end
     deliver({ k = "d", prices = { [key] = prices } })
     deliver({ k = "d", prices = { [key] = { [72999] = { m = 7, q = 1, t = S.now, src = "scan" } } } })
-    local got = 0
-    for id = 72001, 72300 do if ns.db.prices[key][id] then got = got + 1 end end
+    local got = framesUntilSome(key, 72001, 72300)
     T.ok(got > 0 and got < 300, "started: " .. got)
     ns:SyncCommand("unpair")
     T.runTimers()
