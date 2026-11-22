@@ -63,7 +63,8 @@ local function getItemInfo(id)
     else askedAt[id] = now end
     return ...
   end
-  local t, kb = ns.DetailStart and ns.DetailStart()
+  local t, kb
+  if ns.DetailStart then t, kb = ns.DetailStart() end   -- (both values: `a and f()` keeps one)
   if t then
     local function measured(...)
       ns.DetailStop("Item details: the game asked", t, kb)
@@ -221,7 +222,8 @@ ns.VENDOR_WONT_BUY = VENDOR_WONT_BUY
 
 local sellPrice
 function ns:GetSellPrice(id)
-  local t, kb = ns.DetailStart and ns.DetailStart()
+  local t, kb
+  if ns.DetailStart then t, kb = ns.DetailStart() end   -- (both values: `a and f()` keeps one)
   if not t then return sellPrice(id) end
   local p = sellPrice(id)
   ns.DetailStop("Vendor prices: read (can vendors buy it?)", t, kb)

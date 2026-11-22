@@ -297,8 +297,9 @@ T.test("Timing by kind of work: only while switched on", function()
   T.eq(next(ns.perfDetail), nil, "off: nothing timed")
   ns:InvalidateValues(true)
   ns.perfDetailOn = true
-  ns:Options(ID)
+  local ok, err = pcall(ns.Options, ns, ID)
   ns.perfDetailOn = false
+  assert(ok, err)
   local p = ns.perfDetail["Values: an item's ways to sell worked out"]
   T.ok(p and p.n == 1, "the outermost item once")
   T.ok(#ns.DetailLines() >= 1)
