@@ -258,7 +258,9 @@ end
 -- Kept 5 minutes, or until the next full scan: worked out every 30 seconds, a writ's hover
 -- hitched again each time (Frank's AN30, November 19).
 local COST_KEEP = 300
-local costs, costsAt, costsScan = {}, -math.huge, nil
+-- costsGen: counts each time the kept costs are cleared as out of date, so the background
+-- work below knows which of its results came before that (Codex review, November 21).
+local costs, costsAt, costsScan, costsGen = {}, -math.huge, nil, 0
 local function costsStale()
   return GetTime() - costsAt > COST_KEEP or (ns.db and ns.db.lastFullScan) ~= costsScan
 end
@@ -276,7 +278,10 @@ local function workOutCost(e)
   return c
 end
 function ns:WritCost(e)
-  if costsStale() then wipe(costs); costsAt, costsScan = GetTime(), ns.db and ns.db.lastFullScan end
+  if costsStale() then
+    wipe(costs); costsAt, costsScan = GetTime(), ns.db and ns.db.lastFullScan
+    costsGen = costsGen + 1
+  end
   local c = costs[e.item]
   if c and c.ahl then ns.ahledgerUses = (ns.ahledgerUses or 0) + 1 end   -- (AHledger's credit: Values.lua)
   if c == nil then
@@ -302,21 +307,30 @@ local function refreshCosts(list, done)
   local missing = false
   for _, e in ipairs(list) do if costs[e.item] == nil then missing = true; break end end
   if not missing and not costsStale() then return end
-  local fresh, scan = {}, ns.db and ns.db.lastFullScan
+  local fresh, scan, gen, startedAt = {}, ns.db and ns.db.lastFullScan, costsGen, GetTime()
   costRun = ns.RunInSlices("Writs: working out costs", function()
     for _, e in ipairs(list) do
       ns.MaybeYield()
-      fresh[e.item] = workOutCost(e)
+      -- (What the cache held for it as this one was worked out: no frame is given back
+      -- in between.)
+      local was, g = costs[e.item], costsGen
+      fresh[#fresh + 1] = { item = e.item, c = workOutCost(e), was = was, gen = g }
     end
   end, function()
-    -- (Orders worked out on their own meanwhile, by a hover, stay.)
-    for item, c in pairs(fresh) do costs[item] = c end
-    if costsStale() then costsAt, costsScan = GetTime(), scan end
+    -- Only where nothing changed the kept cost since it was worked out here: one a hover or
+    -- a tier's average worked out meanwhile is newer, and costs cleared meanwhile as out of
+    -- date make the ones worked out here before that old (Codex review, November 21: an
+    -- old 900c put back over a hover's 1800c, then kept as fresh).
+    for _, x in ipairs(fresh) do
+      if x.gen == costsGen and costs[x.item] == x.was then costs[x.item] = x.c end
+    end
+    -- (From when this began, and only if nothing cleared them meanwhile: that set its own.)
+    if gen == costsGen and costsStale() then costsAt, costsScan = startedAt, scan end
     if done then done() end
   end, function() costRun = nil end)
 end
 ns._writsTest = { refreshCosts = refreshCosts, knownCost = knownCost,
-  forget = function() wipe(costs); costsAt = -math.huge end }   -- (tests)
+  forget = function() wipe(costs); costsAt = -math.huge; costsGen = costsGen + 1 end }   -- (tests)
 
 -- A tier's average order cost: { avg, t }, or nil until the first is worked out. Done in
 -- the background, about 4 ms a frame, and kept AVG_KEEP seconds (the old one is shown
@@ -664,7 +678,8 @@ function ns:RefreshWrits()
   end
 
   -- Costs out of date or not known yet are worked out over the next frames, then drawn.
-  refreshCosts(WRITS, function() if f and f:IsShown() then ns:RefreshWrits() end end)
+  -- (Visible, not shown: leaving the Writs view hides its parent, not this frame; Codex review.)
+  refreshCosts(WRITS, function() if f and f:IsVisible() then ns:RefreshWrits() end end)
   local list, priced = {}, 0
   local yours, sealed = ns:YourWrits()
   for _, e in ipairs(WRITS) do
@@ -673,7 +688,8 @@ function ns:RefreshWrits()
       if c then priced = priced + 1 end
       local writPrice = e.writ and ns:GetPrice(e.writ)
       list[#list + 1] = { e = e, c = c, name = (itemName(e.item) or ns.ItemName(e.item)),
-        cost = c and c.total, perRep = c and ns.WritPerRep(c.total, e.tier), writ = writPrice,
+        -- (nil, not false, where there is no price: the sort compares numbers; Codex review.)
+        cost = c and c.total or nil, perRep = c and ns.WritPerRep(c.total, e.tier) or nil, writ = writPrice or nil,
         have = yours[e] ~= nil, ready = bagHas(e.item) >= e.qty }
     end
   end
@@ -749,3 +765,5 @@ function ns:RefreshWrits()
 end
 
 ns.RefreshWrits = ns.Timed("Writs tab", ns.RefreshWrits)
+
+ns._writsTest.frame = function() return f end   -- (tests)

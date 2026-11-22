@@ -107,3 +107,75 @@ T.test("Writs: the view's costs are worked out over several frames, then kept", 
   T.runTimers()
   assert(ok, err)
 end)
+
+-- Codex review, November 21: with some orders priced and some not, the redraw after the
+-- costs came in compared "no price" (false) with a number and stopped with an error.
+T.test("Writs: the view redraws with priced and unpriced orders, sorted per rep", function()
+  local W = ns._writsTest
+  local key = ns.MarketKey()
+  ns.db.prices[key] = ns.db.prices[key] or {}
+  ns.db.prices[key][3383] = { m = 900, a = 900, q = 5, l = "900:5", t = S.now }
+  local realSettings, realRefresh, realClock = ns.db.settings.writs, ns.RefreshWrits, debugprofilestop
+  local errorsBefore, redraws, ms = #S.errors, 0, 0
+  local ok, err = pcall(function()
+    ns.db.settings.writs = nil   -- (the usual: sorted by cost per rep)
+    if not W.frame() then ns:BuildWrits(S.dummy()) end
+    local F = W.frame()
+    F.IsShown = function() return true end
+    F.IsVisible = function() return true end
+    ns.RefreshWrits = function(...) redraws = redraws + 1; return realRefresh(...) end
+    W.forget()
+    debugprofilestop = function() ms = ms + 1; return ms end   -- (each look at the clock: 1 ms)
+    ns:RefreshWrits()
+    T.runTimers()
+    T.eq(redraws, 2, "drawn, then drawn again once the costs were in")
+    T.eq(#S.errors, errorsBefore, "no error: " .. tostring(S.errors[#S.errors]))
+    T.eq(W.knownCost(ns:WritFor(264012)) and W.knownCost(ns:WritFor(264012)).total, 900)
+    -- Left for another view: its parent is hidden, this frame still says shown.
+    F.IsVisible = function() return false end
+    W.forget()
+    realRefresh(ns)
+    T.runTimers()
+    T.eq(redraws, 2, "a hidden view isn't drawn again")
+  end)
+  local F = W.frame()
+  if F then F.IsShown = function() return false end; F.IsVisible = function() return false end end
+  ns.db.settings.writs, ns.RefreshWrits, debugprofilestop = realSettings, realRefresh, realClock
+  T.runTimers()
+  assert(ok, err)
+end)
+
+-- Codex review, November 21: the background work put its old 900c back over the 1800c a
+-- hover had just worked out (the kept costs being out of date), and it was then kept.
+T.test("Writs: a cost worked out meanwhile isn't overwritten by the background's older one", function()
+  local W = ns._writsTest
+  local key = ns.MarketKey()
+  ns.db.prices[key] = ns.db.prices[key] or {}
+  ns.db.prices[key][3383] = { m = 900, a = 900, q = 5, l = "900:5", t = S.now }
+  if ns.InvalidateValues then ns:InvalidateValues(true) end
+  local e = ns:WritFor(264012)
+  local list = { e }
+  for _, w in ipairs(ns.WRITS) do if w ~= e and #list < 3 then list[#list + 1] = w end end
+  local realClock, realPlan, ms = debugprofilestop, ns.CraftPlan, 0
+  local ok, err = pcall(function()
+    debugprofilestop = function() return ms end
+    -- (Each order's plan takes 10 ms: the work gives the frame back after the first.)
+    ns.CraftPlan = function(...) local a, b = realPlan(...); ms = ms + 10; return a, b end
+    W.forget()   -- (out of date)
+    W.refreshCosts(list, nil)
+    T.eq(W.knownCost(e), nil, "not merged yet")
+    ns.db.prices[key][3383] = { m = 1800, a = 1800, q = 5, l = "1800:5", t = S.now }
+    if ns.InvalidateValues then ns:InvalidateValues(true) end
+    local hover = ns:WritCost(e)   -- (a hover: clears the out-of-date costs, works it out again)
+    T.eq(hover and hover.total, 1800)
+    T.runTimers()
+    T.eq(W.knownCost(e) and W.knownCost(e).total, 1800, "the hover's newer cost stays")
+    T.eq(ns:WritCost(e) and ns:WritCost(e).total, 1800)
+  end)
+  debugprofilestop, ns.CraftPlan = realClock, realPlan
+  ns.db.prices[key][3383] = { m = 900, a = 900, q = 5, l = "900:5", t = S.now }
+  if ns.InvalidateValues then ns:InvalidateValues(true) end
+  W.forget()
+  T.runTimers()
+  assert(ok, err)
+end)
