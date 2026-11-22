@@ -583,3 +583,15 @@ T.test("A new link's books go, with the old link's urgent books still waiting", 
   ns.db.purchases = purchases
   T.ok(m and type(m.books) == "table", "the new link's books arrived")
 end)
+
+T.test("/fl sync books reports both sides", function()
+  ns:SyncCommand("unpair")
+  setup(true)
+  local m = find(read(), "books")
+  deliver({ k = "a", books = m.books.to })
+  deliver({ k = "d", books = { from = 0, to = 555, chars = {} } })
+  read()
+  ns:SyncCommand("books")
+  ns:SyncCommand("unpair")
+  ns:SyncCommand("books")
+end)

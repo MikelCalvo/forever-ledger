@@ -38,6 +38,7 @@ local booksSent              -- books on their way: { to = cursor, waitUntil = G
 local askedFor               -- who the question about gold and sales was about
 local catchUp                -- price history days on their way: { days = { { day, markets } }, i }
 local historyGot             -- days of price history received in this catch-up: { days, items }
+local lastBooksIn            -- the last books received, for /fl sync books: { t, chars, entries, to, merged }
 
 -- In Forever, UnitName's second value is the last name ("Iveilos", "Veren"), not a server.
 local function me()
@@ -403,8 +404,15 @@ local function handle(payload, sender)
     end
   elseif payload.k == "d" then
     partnerOnline = true
+    if type(payload.books) == "table" then   -- (for /fl sync books)
+      local chars, entries = 0, 0
+      for _ in pairs(payload.books.chars or {}) do chars = chars + 1 end
+      for _, log in ipairs({ "sales", "purchases", "vendorLog" }) do entries = entries + #(payload.books[log] or {}) end
+      lastBooksIn = { t = time(), chars = chars, entries = entries, to = payload.books.to }
+    end
     -- Tagged with the partner's name, so /fl unpair can take it out again.
     local c, p, v, b, m = ns:MergeData(payload, partner())
+    if lastBooksIn and payload.books and lastBooksIn.to == payload.books.to then lastBooksIn.merged = m end
     ns:Debug(("Sync: received %d characters, %d with bags, %d prices, %d vendor prices, %d sets of books from %s."):format(c, b, p, v, m, sender))
     if c + p + v + b + m > 0 then ns:RefreshUI() end
     if type(payload.books) == "table" and payload.books.to then send({ k = "a", books = payload.books.to }, partner(), true) end   -- (urgent: the next books wait for it)
@@ -621,6 +629,32 @@ function ns:SyncCommand(args)
     end
     ns:Print(("Sync ping: sending one hidden message to %s, in two forms, 3 seconds apart."):format(name))
     try(1)
+  elseif cmd == "books" then
+    -- Where the Dashboard and Ledger's books are on their way (Frank, November 22: vendor sales
+    -- on one account never showed on the other's open Ledger). English: a diagnostic.
+    local now, st = time(), partner() and state() or {}
+    local function ago(t) return t and t > 0 and ("%ds ago"):format(now - t) or "never" end
+    ns:Print("Sync books:")
+    print(("  Partner %s, %s; their version takes books: %s; sharing gold and sales: %s"):format(tostring(partner()),
+      partnerOnline and "online" or "not online", tostring(partnerBooks), tostring(ns.db.settings.syncMoney)))
+    print(("  Sending: arrived up to %s; on their way: %s; new since: %s; trade waiting: %s; due in: %s; queue %d (urgent %d)"):format(
+      ago(st.booksTo), booksSent and ("tries %d, sent %s"):format(booksSent.tries or 0, ago(booksSent.to)) or "no",
+      tostring(booksChanged), tostring(tradePending), booksWaiting and ("%.0fs"):format(booksWaiting - GetTime()) or "-", #queue, front))
+    local b = lastBooksIn
+    print(("  Last received: %s, %s characters, %s entries, %s taken in"):format(b and ago(b.t) or "never",
+      b and b.chars or 0, b and b.entries or 0, b and tostring(b.merged) or "-"))
+    local latest = {}
+    for _, log in ipairs({ "sales", "purchases", "vendorLog" }) do
+      for _, e in ipairs(ns.db[log] or {}) do
+        if e.c and (e.t or 0) > (latest[e.c] or 0) then latest[e.c] = e.t end
+      end
+    end
+    for key, t in pairs(latest) do
+      if now - t < 86400 then
+        print(("  %s: newest trade %s, %s"):format(key, ago(t), ns:IsOwnChar(key) and "this account"
+          or ("from " .. tostring((ns.db.booksFrom or {})[key]))))
+      end
+    end
   elseif cmd == "whoami" then
     local n1, r1 = UnitName("player")
     local fn, fr = UnitFullName and UnitFullName("player")
@@ -639,7 +673,7 @@ function ns:SyncCommand(args)
     local p = partner()
     ns:Print(p and ("Paired with %s, %s. %d messages waiting to send."):format(p, partnerOnline and "online" or "not seen online yet", #queue)
       or "Not paired. Use /fl pair Charactername on both characters.")
-    print("  /fl pair Name, /fl unpair, /fl sync now (send everything), /fl sync ping Name (check whispers reach someone online)")
+    print("  /fl pair Name, /fl unpair, /fl sync now (send everything), /fl sync books (where the gold and sales are), /fl sync ping Name (check whispers reach someone online)")
   end
 end
 
