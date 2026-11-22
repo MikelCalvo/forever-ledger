@@ -1175,6 +1175,21 @@ ns.RefreshLedger = ns.Timed("Ledger tab", ns.RefreshLedger)
 ns._ledgerTest = { frame = function() return f end, rows = function() return rows end,
   drawVisible = function() drawVisible() end, amountOf = amountOf }   -- (tests)
 
+-- A trade or other money just logged on this character: an open Ledger shows it within a
+-- second (Frank, November 22: "can the ledger update while im on the page ... without
+-- causing major lag?"). The other account's come through Sync.lua's refresh. A burst (the
+-- Buy queue buying 20 in a row) is one refresh, and the list is built in slices from the
+-- rows it already has, so only the new trades are made.
+local changedQueued = false
+function ns:LedgerChanged()
+  if changedQueued or not (f and f:IsVisible()) then return end
+  changedQueued = true
+  C_Timer.After(1, function()
+    changedQueued = false
+    if f and f:IsVisible() then ns:RefreshLedger() end
+  end)
+end
+
 -- Open the Ledger on one of its sub-tabs (the Dashboard's "See all sessions").
 function ns:OpenLedgerTab(tab)
   ns:ShowTab("ledger")   -- (opening resets it to All)

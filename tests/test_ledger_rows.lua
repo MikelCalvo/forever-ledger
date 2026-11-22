@@ -145,3 +145,28 @@ T.test("Ledger rows: the All tab shows the kept rows themselves, signed where sh
   ns.db.sales, ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths = saved[1], saved[2], saved[3], saved[4]
   assert(ok, err)
 end)
+
+-- Frank, November 22: "can the ledger update while im on the page as the other account or
+-- the account im on does things without causing major lag?" A trade logged here refreshes
+-- an open Ledger a second later, once for a burst; a closed one isn't touched.
+T.test("Ledger: a trade logged here refreshes it while it's open, once for a burst", function()
+  if not L.frame() then ns:BuildLedger(S.dummy()) end
+  local F = L.frame()
+  local realVisible, realRefresh = F.IsVisible, ns.RefreshLedger
+  local refreshes = 0
+  local ok, err = pcall(function()
+    ns.RefreshLedger = function() refreshes = refreshes + 1 end
+    F.IsVisible = function() return true end
+    ns:LedgerChanged(); ns:LedgerChanged(); ns:LedgerChanged()
+    T.eq(refreshes, 0, "not at once")
+    T.runTimers()
+    T.eq(refreshes, 1, "once, a second later")
+    F.IsVisible = function() return false end
+    ns:LedgerChanged()
+    T.runTimers()
+    T.eq(refreshes, 1, "closed: nothing")
+  end)
+  F.IsVisible, ns.RefreshLedger = realVisible, realRefresh
+  T.runTimers()
+  assert(ok, err)
+end)

@@ -542,6 +542,7 @@ local function onMoney()
     end
   end
   ns:Debug("Money", source, delta > 0 and "+" or "-", ns.Money(math.abs(delta)))
+  if ns.LedgerChanged then ns:LedgerChanged() end   -- (an open Ledger shows it: Ledger.lua)
 end
 
 -- Windows that decide where money came from.
