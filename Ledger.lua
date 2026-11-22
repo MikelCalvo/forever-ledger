@@ -264,8 +264,9 @@ local function records(tab, from, charOK, match, opts)
       if keep(e) then
         local item = e.n or "?"
         local r = keptRow(e, item)
-        if not r or r.who ~= e.b then
-          local id = e.n and byName[e.n:lower()]
+        -- (Its item is found by name, and names move: Codex review, November 21.)
+        local id = e.n and byName[e.n:lower()]
+        if not r or r.who ~= e.b or r.id ~= id then
           r = keepRow(e, { t = e.t, id = id, item = item, iconKey = id or e.n, qty = e.q, total = e.a,
             where = "Auction", who = e.b, char = e.c, kind = "Auction sale" })
         end
