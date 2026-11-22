@@ -309,21 +309,27 @@ local function mixText(h, s)
   for i = 1, #s do h = mix(h, s:byte(i)) end
   return mix(h, 2)
 end
+-- A step that isn't linear, before the hashes are added up: with mix alone a recipe's hash
+-- is the rest plus each count, so counts swapped between recipes still added up the same.
+local function finish(h)
+  local a, b = h % 65521, math.floor(h / 65521) % 65521
+  return (a * (b + 1) + b * 31 + 1) % P
+end
 local function usageSignature()
   local n, sum = 0, 0
   for key, c in pairs(ns.db.chars) do
     if ns:SameMarketChar(key) then
       local hc = mixText(mixText(7, key), c.name)
-      sum, n = (sum + hc) % P, n + 1
+      sum, n = (sum + finish(hc)) % P, n + 1
       for prof, p in pairs(c.profs or {}) do
         local hp = mix(mixText(hc, prof), math.floor((tonumber(p.rank) or 0) * 100))
-        sum, n = (sum + hp) % P, n + 1
+        sum, n = (sum + finish(hp)) % P, n + 1
         for recipeID, rec in pairs(p.recipes or {}) do
           local h = mix(hp, tonumber(recipeID) or 0)
           h = mix(mix(h, tonumber(rec.out) or 0), math.floor((tonumber(rec.oq) or 1) * 1000))
           h = mixText(h, rec.n)
           for _, r in ipairs(rec.r or {}) do h = mix(mix(h, tonumber(r[1]) or 0), math.floor((tonumber(r[2]) or 0) * 1000)) end
-          sum, n = (sum + h) % P, n + 1
+          sum, n = (sum + finish(h)) % P, n + 1
         end
       end
     end
