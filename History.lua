@@ -1703,18 +1703,23 @@ local function pastEntry(id)
 end
 do
   local usualPrice, priceStats = ns.UsualPrice, ns.PriceStats
+  local LABEL = "Price history: usual prices and stats read"   -- (/fl perf detail)
   function ns:UsualPrice(id, window)
+    local t, kb = ns.DetailStart()
     local c = pastEntry(id)
     local key = window or "all"
     local hit = c.usual[key]
     if not hit then hit = { usualPrice(self, id, window) }; c.usual[key] = hit end
+    if t then ns.DetailStop(LABEL, t, kb) end
     return hit[1], hit[2]
   end
   function ns:PriceStats(id, window)
+    local t, kb = ns.DetailStart()
     local c = pastEntry(id)
     local key = window or "all"
     local hit = c.stats[key]
     if hit == nil then hit = priceStats(self, id, window) or false; c.stats[key] = hit end
+    if t then ns.DetailStop(LABEL, t, kb) end
     return hit or nil
   end
 end

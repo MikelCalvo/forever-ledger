@@ -256,3 +256,52 @@ T.test("Item details: an awaited answer changes the item's values, an unasked on
   T.eq(ns.ValuesChanges(), before, "nobody was waiting for this one")
   S.items[ID] = nil
 end)
+
+-- Frank's nineteenth /fl perf, November 22: each vendor visit threw every value away (all
+-- worked out again 30 seconds later). Only a new or changed price changes values now.
+T.test("A vendor visit changes values only for a new or changed price", function()
+  local S = T.S
+  local ID = 97910
+  local real = { GetMerchantNumItems, GetMerchantItemInfo, C_MerchantFrame }
+  local price = 50
+  local ok, err = pcall(function()
+    C_MerchantFrame = nil
+    GetMerchantNumItems = function() return 1 end
+    GetMerchantItemInfo = function() return "Test Thread", nil, price, 1, -1, nil, nil, false end
+    S.merchant[1] = ID
+    local before = ns.ValuesChanges()
+    T.fire("MERCHANT_SHOW"); T.runTimers()
+    T.eq(ns.db.vendorBuy[ID] and ns.db.vendorBuy[ID].p, 50)
+    T.ok(ns.ValuesChanges() > before, "a new price")
+    before = ns.ValuesChanges()
+    T.fire("MERCHANT_SHOW"); T.runTimers()
+    T.eq(ns.ValuesChanges(), before, "the same price again: no values change")
+    price = 60
+    T.fire("MERCHANT_SHOW"); T.runTimers()
+    T.ok(ns.ValuesChanges() > before, "a changed price")
+  end)
+  GetMerchantNumItems, GetMerchantItemInfo, C_MerchantFrame = real[1], real[2], real[3]
+  S.merchant[1] = nil
+  ns.db.vendorBuy[ID] = nil
+  T.runTimers()
+  assert(ok, err)
+end)
+
+-- /fl perf detail: work timed by kind, only while switched on.
+T.test("Timing by kind of work: only while switched on", function()
+  local ID = 97911
+  T.S.items[ID] = { name = "Detail Robe", sell = 500 }
+  ns:InvalidateValues(true)
+  ns.perfDetailOn, ns.perfDetail = false, {}
+  ns:Options(ID)
+  T.eq(next(ns.perfDetail), nil, "off: nothing timed")
+  ns:InvalidateValues(true)
+  ns.perfDetailOn = true
+  ns:Options(ID)
+  ns.perfDetailOn = false
+  local p = ns.perfDetail["Values: an item's ways to sell worked out"]
+  T.ok(p and p.n == 1, "the outermost item once")
+  T.ok(#ns.DetailLines() >= 1)
+  ns.perfDetail = {}
+  T.S.items[ID] = nil
+end)

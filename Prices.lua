@@ -63,6 +63,14 @@ local function getItemInfo(id)
     else askedAt[id] = now end
     return ...
   end
+  local t, kb = ns.DetailStart and ns.DetailStart()
+  if t then
+    local function measured(...)
+      ns.DetailStop("Item details: the game asked", t, kb)
+      return ...
+    end
+    return measured(keep(rawGetItemInfo(id)))
+  end
   return keep(rawGetItemInfo(id))
 end
 ns.GetItemInfo = getItemInfo
@@ -211,7 +219,15 @@ local VENDOR_WONT_BUY = {
 }
 ns.VENDOR_WONT_BUY = VENDOR_WONT_BUY
 
+local sellPrice
 function ns:GetSellPrice(id)
+  local t, kb = ns.DetailStart and ns.DetailStart()
+  if not t then return sellPrice(id) end
+  local p = sellPrice(id)
+  ns.DetailStop("Vendor prices: read (can vendors buy it?)", t, kb)
+  return p
+end
+sellPrice = function(id)
   if VENDOR_WONT_BUY[id] then
     if (ns.db.vendorSell[id] or 0) > 0 then ns.db.vendorSell[id] = 0 end
     return nil
@@ -274,8 +290,13 @@ local function captureMerchant()
       -- Per item. Under a copper each (ammo: 1c for 5) it keeps the fraction, which
       -- rounded to 0c before (known issue, fixed October 6); n = the stack it's sold in.
       local each = price / math.max(qty or 1, 1)
+      local was = ns.db.vendorBuy[id]
+      local p = each < 1 and math.floor(each * 10000 + 0.5) / 10000 or math.floor(each + 0.5)
+      -- Only a new or changed price changes values: that item and what leads to it, not every
+      -- value (each vendor visit threw them all away: Frank's nineteenth /fl perf).
+      if ns.InvalidateItem and not (was and was.p == p) then ns:InvalidateItem(id) end
       ns.db.vendorBuy[id] = {
-        p = each < 1 and math.floor(each * 10000 + 0.5) / 10000 or math.floor(each + 0.5),
+        p = p,
         n = (qty and qty > 1) and qty or nil,
         t = time(),
         src = "merchant",
@@ -287,7 +308,7 @@ local function captureMerchant()
       got = got + 1
     end
   end
-  if got > 0 and ns.InvalidateValues then ns:InvalidateValues() end
+  if got > 0 and not ns.InvalidateItem and ns.InvalidateValues then ns:InvalidateValues() end
   if got > 0 and ns.SyncSoon then ns:SyncSoon() end
   ns:Debug("Vendor prices captured:", got)
 end

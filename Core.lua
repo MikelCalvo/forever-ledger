@@ -819,6 +819,33 @@ local depth = 0
 -- 19: 148 MB before clearing against 44 MB in use, and freezes with almost none of our time).
 local function memKB() return collectgarbage("count") end
 ns.MemKB = memKB
+-- /fl perf detail: where a long run's time and leftovers go, by kind of work, across every
+-- run and tooltip (Frank's nineteenth /fl perf, November 22: Gold making's list still left
+-- 86 MB, and which work makes it can't be told from its parts). Off unless switched on,
+-- for this session; measured where the work starts (DetailStart, DetailStop).
+ns.perfDetailOn, ns.perfDetail = false, {}
+function ns.DetailStart()
+  if ns.perfDetailOn then return clock(), collectgarbage("count") end
+end
+function ns.DetailStop(label, t, kb)
+  if not t then return end
+  local p = ns.perfDetail[label]
+  if not p then p = { n = 0, ms = 0, kb = 0 }; ns.perfDetail[label] = p end
+  p.n, p.ms = p.n + 1, p.ms + (clock() - t)
+  local grew = collectgarbage("count") - kb
+  if grew > 0 then p.kb = p.kb + grew end
+end
+function ns.DetailLines()
+  local list = {}
+  for label, p in pairs(ns.perfDetail) do list[#list + 1] = { label = label, p = p } end
+  table.sort(list, function(a, b) return a.p.kb > b.p.kb end)
+  local out = {}
+  for i, e in ipairs(list) do
+    out[i] = ("%s: %d times, %d ms total, %.1f MB of leftovers"):format(e.label, e.p.n, e.p.ms, e.p.kb / 1024)
+  end
+  return out
+end
+
 local function note(label, ms, sub, kb)
   sub = sub or depth > 0
   local p = ns.perf[label]
@@ -1110,6 +1137,12 @@ function ns:PrintPerf(reset)
   for _, line in ipairs(ns.PerfLines(12)) do print("  " .. line) end
   local left = ns.LeftoverLine(4)
   if left then print("  " .. left) end
+  if ns.perfDetailOn then
+    print("  By kind of work (/fl perf detail; one can be inside another):")
+    local lines = ns.DetailLines()
+    if #lines == 0 then print("    none yet") end
+    for _, line in ipairs(lines) do print("    " .. line) end
+  end
   for _, line in ipairs(ns.FreezeLines(8)) do print(line) end
   -- Memory and loading, to see whether the data files (ClassicItems.lua) cost much.
   local update = (C_AddOns and C_AddOns.UpdateAddOnMemoryUsage) or UpdateAddOnMemoryUsage
@@ -1940,6 +1973,11 @@ SlashCmdList.FOREVERLEDGER = function(msg)
       ah and ah.CommoditiesSellFrame and (ah.CommoditiesSellFrame:IsVisible() and "shown" or "hidden") or "missing"))
   elseif msg == "perf" or msg == "perf reset" then
     ns:PrintPerf(msg == "perf reset")
+  elseif msg == "perf detail" then
+    ns.perfDetailOn, ns.perfDetail = not ns.perfDetailOn, {}
+    print(ns.PREFIX, ns.perfDetailOn
+      and "Timing by kind of work is on for this session: /fl perf shows it at the end. /fl perf detail again turns it off."
+      or "Timing by kind of work is off.")
   elseif msg == "de" or msg == "de reset" then
     ns:PrintDisenchants(msg == "de reset")
   elseif msg == "disenchant" then
