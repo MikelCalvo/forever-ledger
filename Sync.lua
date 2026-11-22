@@ -459,10 +459,15 @@ ns:On("CHAT_MSG_ADDON", function(prefix, msg, channel, sender)
   if not id or not i or not n then return end
   local key = name .. id
   local r = incoming[key]
-  if not r then r = { parts = {}, n = n, got = 0 }; incoming[key] = r end
+  if not r then r = { parts = {}, n = n, got = 0, from = name }; incoming[key] = r end
   -- Timed from the last piece, not the first: a big send takes minutes (Codex review,
-  -- November 5: 1,500 sales take almost 4, and were thrown away after 2).
-  r.t = GetTime()
+  -- November 5: 1,500 sales take almost 4, and were thrown away after 2). Any piece from
+  -- the same partner counts: urgent books can go ahead of a message already half sent
+  -- (Codex review of 9b4bc1d: 2,500 purchases kept a prices message waiting over 2 minutes).
+  local now = GetTime()
+  for _, other in pairs(incoming) do
+    if other.from == name then other.t = now end
+  end
   if not r.parts[i] then r.parts[i] = chunk; r.got = r.got + 1 end
   if r.got < r.n then return end
   incoming[key] = nil
@@ -541,6 +546,7 @@ local function endLink()
   local shared = s.syncMoney or s.syncBags
   s.syncMoney, s.syncBags = false, false
   queue, sending, booksSent, booksChanged, partnerBooks, partnerOnline = {}, false, nil, true, false, false
+  front = 0   -- (Codex review of 9b4bc1d: a new link inherited the old queue's urgent count)
   askedFor, catchUp, historyGot = nil, nil, nil
   stopIncoming()
   return shared

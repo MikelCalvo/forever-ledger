@@ -538,3 +538,48 @@ T.test("The books go ahead of prices already waiting to be sent", function()
   T.ok(booksAt and pricesAt, "both sent")
   T.ok(booksAt < pricesAt, ("the books finished first (piece %s, prices %s)"):format(tostring(booksAt), tostring(pricesAt)))
 end)
+
+-- Codex review of 9b4bc1d: urgent books can go ahead of a message already half sent. Its
+-- other pieces wait behind them, so pieces from the same partner keep it from being dropped.
+T.test("A half-received message waits while urgent pieces from the partner keep coming", function()
+  setup(false)
+  read()
+  local key = "Testrealm|Alliance"
+  local prices = { [key] = { [97001] = { m = 7, q = 1, t = S.now, src = "scan" } } }
+  local text = ns.Serialize({ k = "d", prices = prices })
+  local half = math.ceil(#text / 2)
+  local function piece(id, i, n, s) T.fire("CHAT_MSG_ADDON", PREFIX, ("%s:%d:%d:%s"):format(id, i, n, s), "WHISPER", PARTNER) end
+  piece("81", 1, 2, text:sub(1, half))
+  -- Another message's pieces for over 2 minutes (the books, sent urgent)
+  local other = ns.Serialize({ k = "x", pad = string.rep("z", 6000) })
+  local n = math.ceil(#other / 200)
+  for i = 1, n do
+    piece("82", i, n, other:sub((i - 1) * 200 + 1, i * 200))
+    S.now = S.now + 10
+    for _, tick in ipairs(S.tickers) do tick() end
+  end
+  T.ok(n * 10 > 120, "longer than the 2 minute limit")
+  piece("81", 2, 2, text:sub(half + 1))
+  T.runTimers()
+  T.eq(ns.db.prices[key] and ns.db.prices[key][97001] and ns.db.prices[key][97001].m, 7, "the first message arrived")
+  ns.db.prices[key][97001] = nil
+end)
+
+-- Codex review of 9b4bc1d: a new link kept the old queue's count of urgent pieces, so the
+-- new link's books could be put past the end of the queue and never sent.
+T.test("A new link's books go, with the old link's urgent books still waiting", function()
+  ns:SyncCommand("unpair")
+  local me = ns.CharKey()
+  local purchases = ns.db.purchases
+  ns.db.purchases = {}
+  for i = 1, 400 do ns.db.purchases[i] = { t = S.now - 1000 + i, c = me, id = 2589, q = 1, a = 100 + i } end
+  setup(true)               -- (big books: the first piece goes, the rest wait at the front)
+  ns:SyncCommand("pair Someone Else")
+  ns:SyncCommand("pair " .. PARTNER)
+  ns.db.settings.syncMoney = true
+  sent = {}
+  deliver({ k = "h", v = 1, books = 2, reply = true })
+  local m = find(read(), "books")
+  ns.db.purchases = purchases
+  T.ok(m and type(m.books) == "table", "the new link's books arrived")
+end)

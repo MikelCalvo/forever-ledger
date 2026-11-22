@@ -177,6 +177,7 @@ end
 local function dayStart(t)
   local d = date("*t", t)
   d.hour, d.min, d.sec = 0, 0, 0
+  d.isdst = nil   -- (midnight works out its own summer time: noon's can differ, Codex review of 9b4bc1d)
   return time(d)
 end
 
