@@ -463,12 +463,30 @@ function ns:MergeBooks(b, via)
       for day, src in pairs(c.money or {}) do money[day] = src end
     end
   end
+  -- A few new entries each go into their place (the log is in time order); sorting all of it
+  -- each time, thousands of purchases, took 20 ms in one frame when the partner's books came
+  -- (Frank, November 22: "felt like a slight hiccup"). Many (a first or long-away send): sorted.
   local function replace(list, new)
     filterLog(list, function(e) return not (theirs[e.c] and bookTime(e) >= from) end)
-    for _, e in ipairs(new) do
-      if theirs[e.c] then list[#list + 1] = e end
+    local adding = 0
+    for _, e in ipairs(new) do if theirs[e.c] then adding = adding + 1 end end
+    if adding > 200 then
+      for _, e in ipairs(new) do
+        if theirs[e.c] then list[#list + 1] = e end
+      end
+      table.sort(list, function(x, y) return (x.t or 0) < (y.t or 0) end)
+      return
     end
-    table.sort(list, function(x, y) return (x.t or 0) < (y.t or 0) end)
+    for _, e in ipairs(new) do
+      if theirs[e.c] then
+        local t, lo, hi = e.t or 0, 1, #list + 1
+        while lo < hi do
+          local mid = math.floor((lo + hi) / 2)
+          if (list[mid].t or 0) <= t then lo = mid + 1 else hi = mid end
+        end
+        table.insert(list, lo, e)
+      end
+    end
   end
   for _, name in ipairs(BOOK_LOGS) do
     ns.db[name] = ns.db[name] or {}

@@ -407,7 +407,7 @@ local function handle(payload, sender)
     local c, p, v, b, m = ns:MergeData(payload, partner())
     ns:Debug(("Sync: received %d characters, %d with bags, %d prices, %d vendor prices, %d sets of books from %s."):format(c, b, p, v, m, sender))
     if c + p + v + b + m > 0 then ns:RefreshUI() end
-    if type(payload.books) == "table" and payload.books.to then send({ k = "a", books = payload.books.to }, partner()) end
+    if type(payload.books) == "table" and payload.books.to then send({ k = "a", books = payload.books.to }, partner(), true) end   -- (urgent: the next books wait for it)
   elseif payload.k == "a" then
     -- The partner has the books up to here.
     if booksSent and payload.books == booksSent.to then
@@ -468,7 +468,15 @@ ns:On("CHAT_MSG_ADDON", function(prefix, msg, channel, sender)
   incoming[key] = nil
   local data, err = ns.Deserialize(table.concat(r.parts))
   if not data then ns:Debug("Sync: couldn't read a message from", name, err); return end
-  inbox[#inbox + 1] = { data, name }
+  -- The books and their replies are taken in first: the partner's trades for an open Ledger
+  -- (Frank, November 22: about 30 seconds behind bags and prices being taken in).
+  if type(data) == "table" and (data.k == "a" or (data.k == "d" and data.books)) then
+    local at = 1
+    while inbox[at] and inbox[at].first do at = at + 1 end   -- (behind ones put first already)
+    table.insert(inbox, at, { data, name, first = true })
+  else
+    inbox[#inbox + 1] = { data, name }
+  end
   nextMessage()
 end)
 
