@@ -1008,7 +1008,7 @@ function ns:RefreshLedger()
   -- leftovers for each of 24 refreshes in 20 minutes).
   local sort = s.sort[s.tab] or { key = s.tab == "resale" and "profit" or "t", desc = true }
   local order = tostring(sort.key) .. (sort.desc and ":desc" or ":asc")
-  local stamp = { s.tab, s.range, tostring(s.char), match, tostring(s.group), tostring(s.rarity), math.floor(time() / 60), order }
+  local stamp = { s.tab, s.range, tostring(s.char), match, tostring(s.group), tostring(s.rarity), math.floor(time() / 60), order, tostring(ns.ledgerRev or 0) }
   for _, k in ipairs(LOGS) do
     local l = ns.db[k] or {}
     local last = l[#l]

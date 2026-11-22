@@ -342,3 +342,39 @@ T.test("Ledger: an item's old name never takes a sale from the item that has tha
   ns.db.sales, ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths = real[1], real[2], real[3], real[4]
   ns.db.itemNames[A], ns.db.itemNames[B] = nil, nil
 end)
+
+-- Codex review, November 22: a second vendor purchase in the same second merges into the
+-- first entry, so the log's length and last time stay the same, and the Ledger's kept list
+-- went on showing the old total. Every write to the logs counts now (ns.ledgerRev).
+T.test("Ledger: a vendor trade merged into the one before it shows its new total", function()
+  local L = ns._ledgerTest
+  local real = { ns.db.sales, ns.db.purchases, ns.db.ledgerMonths, ns.db.settings.ledger,
+    ns.IsCharChoice, ns.CharChoiceHas, ns.CharacterOptions }
+  local ok, err = pcall(function()
+    ns.IsCharChoice = ns.IsCharChoice or function() return true end
+    ns.CharChoiceHas = ns.CharChoiceHas or function() return true end
+    ns.CharacterOptions = ns.CharacterOptions or function() return { { value = "all", label = "All" } } end
+    ns.db.sales, ns.db.purchases, ns.db.ledgerMonths = {}, {}, {}
+    ns.db.settings.ledger = { tab = "all", range = "all", char = "all", sort = {}, group = "all", rarity = "all" }
+    atVendor(159)
+    buy(1, 10)
+    if not L.frame() then ns:BuildLedger(S.dummy()) end
+    local F = L.frame()
+    F.IsShown = function() return true end
+    F.sf.GetVerticalScroll = function() return 0 end
+    F.sf.GetHeight = function() return 200 end
+    ns:RefreshLedger(); T.runTimers()
+    local function total()
+      for _, r in ipairs(F.cache and F.cache.list or {}) do if r.id == 159 then return r.total end end
+    end
+    T.eq(total(), 10)
+    buy(1, 10)   -- (the same second: merged into the first)
+    T.eq(#ns.db.vendorLog, 1); T.eq(ns.db.vendorLog[1].q, 2)
+    ns:RefreshLedger(); T.runTimers()
+    T.eq(total(), 20, "the merged total, not the kept list's")
+  end)
+  ns.db.sales, ns.db.purchases, ns.db.ledgerMonths, ns.db.settings.ledger = real[1], real[2], real[3], real[4]
+  ns.IsCharChoice, ns.CharChoiceHas, ns.CharacterOptions = real[5], real[6], real[7]
+  T.runTimers()
+  assert(ok, err)
+end)

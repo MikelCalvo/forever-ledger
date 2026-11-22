@@ -22,9 +22,16 @@ ns.LEDGER_LOG_DAYS = LOG_DAYS   -- (Ledger.lua: how far back other money has its
 local OTHER_LOGGED = { ahFee = true, ahDepositBack = true, repair = true, mailIn = true, mailOut = true,
   tradeIn = true, tradeOut = true, loot = true, quest = true, training = true, flight = true,
   otherIn = true, otherOut = true }
+-- Counts every write to the Ledger's logs, a new entry or one changed (a trade merged into
+-- the one before it, the partner's books, a fold into months), for the Ledger's kept list:
+-- the count of entries and the last one's time don't change when a trade merges (Codex
+-- review, November 22: a second vendor purchase in the same second left the old total showing).
+ns.ledgerRev = ns.ledgerRev or 0
+local function bumpLedger() ns.ledgerRev = ns.ledgerRev + 1 end
 local OTHER_MERGE_SECONDS = 300
 local function logOther(source, amount, who, now)   -- (also ns.LogOtherMoney, for the tests)
   if not OTHER_LOGGED[source] or amount <= 0 then return end
+  bumpLedger()
   local list = ns.db.otherLog
   local last = list[#list]
   -- Not across midnight: merged into tomorrow, a day's money would be counted on both days
@@ -175,6 +182,7 @@ local function foldEntry(e, kind, index)
 end
 
 local function foldLedger()
+  bumpLedger()
   local months = ns.db.ledgerMonths
   local index = {}
   for _, m in ipairs(months) do index[monthKey(m)] = m end
@@ -339,6 +347,7 @@ local function sourceFor(delta)
 end
 
 local function addLog(list, entry)
+  bumpLedger()
   -- Vendor trades of the same item within a minute are one entry: selling 20 of
   -- something one by one made 20 (owner's log, October 3).
   local last = list[#list]
@@ -432,6 +441,7 @@ end
 -- sender may have folded old days together (Codex review, November 5). via = the partner,
 -- remembered in booksFrom so /fl unpair can take these out again.
 function ns:MergeBooks(b, via)
+  bumpLedger()
   local theirs, n = {}, 0
   local from = b.from or 0
   local firstDay = ns.LocalDay(from)
@@ -465,11 +475,13 @@ function ns:MergeBooks(b, via)
     if b[name] then replace(ns.db[name], b[name]) end
   end
   if b.months then replace(ns.db.ledgerMonths, b.months) end
+  bumpLedger()
   return n
 end
 
 -- /fl unpair: what came from a partner goes.
 function ns:DropBooks(key)
+  bumpLedger()
   ns.db.gold[key], ns.db.money[key] = nil, nil
   local function notTheirs(e) return e.c ~= key end
   for _, name in ipairs(BOOK_LOGS) do filterLog(ns.db[name] or {}, notTheirs) end
