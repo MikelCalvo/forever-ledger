@@ -47,9 +47,24 @@ local function clear()
   ns.depositRevision = (ns.depositRevision or 0) + 1
   if ns.InvalidateValues then ns:InvalidateValues(true) end
 end
+-- Bags matter to values only through a live quote at the open auction house, and only for
+-- items that came into or left them: every bag change (each purchase, each loot) threw
+-- every value away, all worked out again within 30 seconds (Frank's ninth /fl perf,
+-- November 21: Gold making's shuffles 123 MB of leftovers). Opening and closing the
+-- auction house still start over (clear, below).
 ns:On("BAG_UPDATE_DELAYED", function()
+  local old = locations
   locations = nil
-  if ns.InvalidateValues then ns:InvalidateValues() end
+  if not old then return end   -- (not read since the last change: no value used it)
+  if not (ns.IsAHOpen and ns:IsAHOpen()) then return end   -- (no live quotes: estimates only)
+  if not ns.InvalidateItem then
+    if ns.InvalidateValues then ns:InvalidateValues() end
+    return
+  end
+  bagLocation(0)   -- (reads the bags again)
+  local now = locations or {}
+  for id in pairs(old) do if not now[id] then ns:InvalidateItem(id) end end
+  for id in pairs(now) do if not old[id] then ns:InvalidateItem(id) end end
 end)
 ns:On("AUCTION_HOUSE_SHOW", clear)
 ns:On("AUCTION_HOUSE_CLOSED", clear)

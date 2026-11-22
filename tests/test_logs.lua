@@ -308,3 +308,14 @@ T.test("The local day: the same answer, and the clock's tables read once a secon
   T.eq(ns.LocalDay(t), first, "and back again")
   date = realDate
 end)
+
+T.test("The local day: entries at different times in one quarter hour read the clock's tables once", function()
+  local realDate, looks = date, 0
+  date = function(...) looks = looks + 1; return realDate(...) end
+  local t0 = math.floor(os.time({ year = 2026, month = 3, day = 15, hour = 12 }) / 900) * 900 + 1000 * 900
+  local want = ns.LocalDay(t0)
+  local before = looks
+  for i = 1, 100 do T.eq(ns.LocalDay(t0 + i * 8), want) end
+  T.eq(looks, before, "the same quarter hour: no new date tables")
+  date = realDate
+end)

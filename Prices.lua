@@ -177,7 +177,7 @@ local function canSell(id)
             unsellableNames = {}
           end)
         end
-        if ns.InvalidateValues then ns:InvalidateValues(true) end
+        if ns.InvalidateItem then ns:InvalidateItem(id) elseif ns.InvalidateValues then ns:InvalidateValues(true) end
       end
     end)
   end
@@ -501,7 +501,9 @@ function ns:RemoveBought(id, qty, each)
   ns.LadderTypical(rec)
   ns:Debug("Took", qty - left, "bought", ns.ItemName(id) or id, "off the saved listings.")
   if ns.CheckFlip then ns:CheckFlip(id) end
-  if ns.InvalidateValues then ns:InvalidateValues(true) end
+  -- (Only this item and what leads to it: after every Buy queue purchase the whole cache was
+  -- thrown away, and Gold making started its list over. Frank's ninth /fl perf, November 21.)
+  if ns.InvalidateItem then ns:InvalidateItem(id) elseif ns.InvalidateValues then ns:InvalidateValues(true) end
   if ns.RefreshFlipsIfShown then C_Timer.After(0.5, function() ns:RefreshFlipsIfShown() end) end
 end
 
@@ -553,7 +555,7 @@ function ns:DropBelow(id, price, quiet)
   end
   if quiet then return gone end
   ns:Debug("Auction house list: cheapest", ns.ItemName(id) or id, "is now", ns.Money(price) .. ";", gone, "cheaper saved listings are gone.")
-  if ns.InvalidateValues then ns:InvalidateValues(true) end
+  if ns.InvalidateItem then ns:InvalidateItem(id) elseif ns.InvalidateValues then ns:InvalidateValues(true) end
   if ns.RefreshFlipsIfShown then C_Timer.After(0.5, function() ns:RefreshFlipsIfShown() end) end
   return gone
 end

@@ -54,13 +54,24 @@ local PURCHASE_SECONDS = 65
 -- The last answer is kept for the same second: usual prices, price stats and sell speeds
 -- ask for today thousands of times a list, and each look made two date tables (Frank's
 -- eighth /fl perf, November 21: the deals part of Gold making made 135 MB of leftovers).
+-- The clock's offset from UTC is kept for each quarter hour too: the Ledger reads the day of
+-- thousands of entries at different times (ninth /fl perf: 49 MB of leftovers). Every time
+-- zone is a whole number of quarter hours from UTC and changes summer time on a whole local
+-- hour or half hour, so the offset never changes inside a quarter hour of UTC.
 local lastT, lastDay
+local offsets, nOffsets = {}, 0
 local function localDay(t)
   t = t or time()
   if t == lastT then return lastDay end
-  local utc = date("!*t", t)
-  utc.isdst = date("*t", t).isdst
-  local offset = t - time(utc)   -- seconds ahead of UTC, summer time included
+  local q = math.floor(t / 900)
+  local offset = offsets[q]
+  if not offset then
+    local utc = date("!*t", t)
+    utc.isdst = date("*t", t).isdst
+    offset = t - time(utc)   -- seconds ahead of UTC, summer time included
+    if nOffsets >= 4096 then offsets, nOffsets = {}, 0 end
+    offsets[q], nOffsets = offset, nOffsets + 1
+  end
   lastT, lastDay = t, math.floor((t + offset) / 86400)
   return lastDay
 end

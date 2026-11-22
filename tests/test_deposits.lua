@@ -130,3 +130,42 @@ T.test("Resale deals cannot spend a profit eaten by the deposit", function()
   end)
   ns.DealUsualPrice, ns.PriceStats = realUsual, realStats; assert(ok, err)
 end)
+
+T.test("A bag change refreshes only the items that came or went, and only at the auction house", function()
+  -- (Frank's ninth /fl perf, November 21: every bag change threw every value away.)
+  local realAH, realOpen, realC, realLocation = C_AuctionHouse, ns.IsAHOpen, C_Container, ItemLocation
+  local realItem, realAll = ns.InvalidateItem, ns.InvalidateValues
+  local OTHER, NEW = 99021, 99022
+  local items, open, dropped, all = { ID, OTHER }, true, {}, 0
+  local ok, err = pcall(function()
+    ns.neutralAH = false; ns.db.vendorSell[ID] = 1000
+    ns.IsAHOpen = function() return open end
+    C_AuctionHouse = {
+      GetItemKeyInfo = function() return { isCommodity = false } end,
+      CalculateItemDeposit = function() return 777 end,
+    }
+    C_Container = { GetContainerNumSlots = function(bag) return bag == 0 and #items or 0 end,
+      GetContainerItemInfo = function(_, slot) return items[slot] and { itemID = items[slot] } or nil end }
+    ItemLocation = { CreateFromBagAndSlot = function(_, bag, slot) return { bag = bag, slot = slot } end }
+    T.fire("BAG_UPDATE_DELAYED")
+    ns.InvalidateItem = function(_, id) dropped[id] = true end
+    ns.InvalidateValues = function() all = all + 1 end
+    T.eq((ns:AuctionDeposit(ID)), 777, "a live quote: the bags were read")
+    items = { ID, NEW }   -- OTHER sold, NEW bought
+    T.fire("BAG_UPDATE_DELAYED")
+    T.same(dropped, { [OTHER] = true, [NEW] = true }, "only what came or went")
+    T.eq(all, 0, "not every value")
+    dropped = {}
+    items = { ID }
+    T.fire("BAG_UPDATE_DELAYED")
+    T.same(dropped, { [NEW] = true }, "the bags as last read, not as first read")
+    dropped, open = {}, false
+    items = { ID, OTHER }
+    T.fire("BAG_UPDATE_DELAYED")
+    T.same(dropped, {}, "away from the auction house: estimates only, nothing changes")
+    T.eq(all, 0)
+  end)
+  ns.InvalidateItem, ns.InvalidateValues = realItem, realAll
+  C_AuctionHouse, ns.IsAHOpen, C_Container, ItemLocation = realAH, realOpen, realC, realLocation
+  ns.neutralAH = nil; T.fire("BAG_UPDATE_DELAYED"); T.runTimers(); assert(ok, err)
+end)

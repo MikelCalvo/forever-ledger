@@ -107,17 +107,18 @@ local function settings()
 end
 
 -- Item IDs by name: auction sales are saved by name only (the mail names the item, not its
--- ID). From the names the game has given (saved in itemNames), rebuilt when that grows.
--- (Counted once per redraw, not per sale.)
-local idByName, idByNameSize = {}, -1
+-- ID). From the names the game has given (saved in itemNames). Only names not seen before
+-- are added: Live watch saves new names all the time, and the whole index was built again
+-- for each (Frank's ninth /fl perf, November 21). A renamed item keeps its old name too.
+local idByName, indexed, indexedFrom = {}, {}, nil
 local function nameIndex()
   local names = ns.db.itemNames or {}
-  local count = 0
-  for _ in pairs(names) do count = count + 1 end
-  if count ~= idByNameSize then
-    idByName, idByNameSize = {}, count
-    for id, n in pairs(names) do
-      if type(n) == "string" then idByName[n:lower()] = idByName[n:lower()] or id end
+  if names ~= indexedFrom then idByName, indexed, indexedFrom = {}, {}, names end
+  for id, n in pairs(names) do
+    if indexed[id] ~= n and type(n) == "string" then
+      local low = n:lower()
+      idByName[low] = idByName[low] or id
+      indexed[id] = n
     end
   end
   return idByName
@@ -208,7 +209,10 @@ local function records(tab, from, charOK, match, opts)
 
   if tab == "sales" or tab == "purchases" or tab == "resale" or tab == "all" then
     local sales, buys = {}, {}
+    local part = ns.SlicePart or function() end   -- (each part on its own in /fl perf)
+    part("names")
     local byName = nameIndex()
+    part("logs")
     for _, e in ipairs(ns.db.sales) do
       ns.MaybeYield()
       if keep(e) then
@@ -267,6 +271,7 @@ local function records(tab, from, charOK, match, opts)
       sales, buys = only(sales), only(buys)
     end
 
+    part("grouping")
     if tab == "sales" then out = groupSimilar(sales) elseif tab == "purchases" then out = groupSimilar(buys)
     elseif tab == "all" then
       -- Everything, money in (+) and out (-); the other money is added below.
@@ -321,6 +326,7 @@ local function records(tab, from, charOK, match, opts)
     end
   end
   if tab == "other" or tab == "all" then
+    if ns.SlicePart then ns.SlicePart("other money") end
     -- Other money (repairs, mail, loot, quests...). Auction and vendor money isn't here:
     -- the lists above have it item by item. One by one with its time from the moment the
     -- character's otherLog began (within the last 30 days; Frank, November 14), as day
@@ -389,6 +395,7 @@ local function records(tab, from, charOK, match, opts)
   -- Search: the item's name, or (All) the type too. In quotes, that one item's name exactly
   -- (By item's double-click puts one there: Silk Cloth, not Bolt of Silk Cloth too).
   if match ~= "" then
+    if ns.SlicePart then ns.SlicePart("search") end
     local exact = match:match('^"(.+)"$')
     local kept = {}
     for _, r in ipairs(out) do
@@ -901,7 +908,12 @@ function ns:RefreshLedger()
       -- Sorted here too, a few hundred rows at a time (sorting thousands in one go took 100
       -- ms: Frank's /fl perf, November 21).
       local less = ledgerLess(sort)
-      local function sorted(l) ns.SortInSlices(l, less); l.sortedBy = order; return l end
+      local function sorted(l)
+        if ns.SlicePart then ns.SlicePart("sorting") end
+        ns.SortInSlices(l, less); l.sortedBy = order
+        if ns.SlicePart then ns.SlicePart(nil) end
+        return l
+      end
       if not itemTab then return { stamp = stamp, tab = tab, list = sorted(records(tab, from, charOK, match)) } end
       local g, r = group, rarity
       local function itemOK(id)
@@ -914,6 +926,7 @@ function ns:RefreshLedger()
         return records(tab, from, charOK, match, { seen = seen, itemOK = filtered and itemOK or nil }), seen
       end
       local list, seen = run()
+      if ns.SlicePart then ns.SlicePart("choices") end
       local gopts, ropts, hasG, hasR = itemChoices(seen)
       -- A choice none of these items has any more (another range or character): Any.
       if not hasG[g] or not hasR[r] then
