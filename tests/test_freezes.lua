@@ -213,7 +213,7 @@ end)
 -- every item's recent days of price history.
 T.test("Slices: a hello's count of price history days gives frames back", function()
   local market = "Slice test market|Alliance"
-  local d = ns.LocalDay(S.now)
+  local d = ns.LocalDay(T.S.now)
   local hist = {}
   for i = 1, 150 do hist[95000 + i] = ("%d:100:120|%d:90:95"):format(d - 2, d - 1) end
   ns.db.history = ns.db.history or {}
