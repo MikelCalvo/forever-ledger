@@ -27,6 +27,12 @@ local function dummy()
   o.IsVisible = function() return false end
   o.GetWidth = function() return 600 end
   o.GetHeight = function() return 400 end
+  -- (Numbers the theme's widgets do sums with when a tab is built: test_ledger_rows.)
+  o.GetStringWidth = function() return 50 end
+  o.GetStringHeight = function() return 12 end
+  o.GetVerticalScroll = function() return 0 end
+  o.GetVerticalScrollRange = function() return 0 end
+  o.GetEffectiveScale = function() return 1 end
   o.GetFrameLevel = function() return 1 end
   o.GetName = function() return nil end
   return o
