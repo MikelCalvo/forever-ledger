@@ -55,3 +55,40 @@ T.test("Ledger rows: a jump down the list and back, then a refresh, with gaps in
   T.runTimers()
   assert(ok, err)
 end)
+
+-- Frank's twenty-first /fl perf, November 22: each build of the Ledger list made a new row
+-- for every trade, 294 MB of leftovers in 7 minutes while the other account synced. Rows
+-- are kept between builds now; grouping and the All tab work on copies.
+T.test("Ledger rows: kept between builds, and grouping never changes a kept row", function()
+  local T0 = time() - 3600
+  local savedSales, savedBuys, savedVendor = ns.db.sales, ns.db.purchases, ns.db.vendorLog
+  local ok, err = pcall(function()
+    ns.db.sales, ns.db.vendorLog = {}, {}
+    ns.db.purchases = {
+      { t = T0, c = "Row Tester-Testrealm", id = 97801, q = 2, a = 100 },
+      { t = T0 + 10, c = "Row Tester-Testrealm", id = 97801, q = 3, a = 150 },   -- (grouped with the first)
+    }
+    local all = function() return true end
+    local first = ns.LedgerRecords("purchases", 0, all, "")
+    T.eq(#first, 1, "two purchases close together as one row")
+    T.eq(first[1].qty, 5); T.eq(first[1].total, 250)
+    local again = ns.LedgerRecords("purchases", 0, all, "")
+    T.eq(again[1].qty, 5, "the kept rows weren't changed by the first grouping")
+    T.eq(again[1].total, 250)
+    local both = ns.LedgerRecords("all", 0, all, "")
+    local buy
+    for _, r in ipairs(both) do if r.kind == "Auction purchase" then buy = r end end
+    T.eq(buy and buy.amount, -250, "All: money out")
+    local after = ns.LedgerRecords("purchases", 0, all, "")
+    T.eq(after[1].amount, nil, "Purchases: the All tab's sign isn't on its row")
+    -- A changed entry (a vendor trade merged into it) gets a new row.
+    ns.db.purchases[2] = nil
+    local one = ns.LedgerRecords("purchases", 0, all, "")
+    T.eq(one[1].qty, 2)
+    ns.db.purchases[1].q, ns.db.purchases[1].a = 4, 200
+    one = ns.LedgerRecords("purchases", 0, all, "")
+    T.eq(one[1].qty, 4, "the entry changed: its row too"); T.eq(one[1].total, 200)
+  end)
+  ns.db.sales, ns.db.purchases, ns.db.vendorLog = savedSales, savedBuys, savedVendor
+  assert(ok, err)
+end)

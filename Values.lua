@@ -336,6 +336,11 @@ local changes = 0
 function ns.ValuesChanges() return changes end
 function ns:InvalidateValues(now)
   changes = changes + 1
+  -- (/fl perf detail: who asked. Frank's twenty-first /fl perf, November 22: values kept 15
+  -- minutes were still all worked out again within 3.)
+  if ns.perfDetailOn and ns.DetailCount then
+    ns.DetailCount((now and "Values: all thrown away at once, asked by %s" or "Values: all marked out of date, asked by %s"):format(ns.DetailCaller()))
+  end
   if now then
     cache, listCache, cacheTime, dirty = {}, {}, GetTime(), false; thrownAway = thrownAway + 1
     usedBy, changed, anyChanged = {}, {}, false
@@ -365,16 +370,18 @@ local function dropUsers()
   for id in pairs(changed) do n = n + 1; todo[n] = id end
   changed, anyChanged = {}, false
   local seen = {}
+  local dropped = n
   while n > 0 do
     local id = todo[n]; todo[n] = nil; n = n - 1
     local u = usedBy[id]
     if u then
       usedBy[id] = nil
       for user in pairs(u) do
-        if not seen[user] then seen[user] = true; dropItem(user); n = n + 1; todo[n] = user end
+        if not seen[user] then seen[user] = true; dropItem(user); n = n + 1; todo[n] = user; dropped = dropped + 1 end
       end
     end
   end
+  if ns.DetailCount then ns.DetailCount("Values: items worked out again after a change (with what leads to them)", dropped) end
 end
 
 local best
@@ -565,6 +572,7 @@ local function freshCache()
   -- next look picks the changes up. Only full resets count for its redo.)
   if ns.InSlices and ns.InSlices() then return end
   if (dirty and age > 30) or age > VALUES_KEEP then
+    if ns.DetailCount then ns.DetailCount(dirty and "Values: all thrown away (marked out of date)" or "Values: all thrown away (15 minutes on)") end
     cache, listCache, cacheTime, dirty = {}, {}, GetTime(), false
     usedBy, changed, anyChanged = {}, {}, false
     if ns.PerfNote then ns.PerfNote("Values thrown away (count only)", 0) end

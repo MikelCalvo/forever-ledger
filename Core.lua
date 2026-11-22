@@ -835,13 +835,26 @@ function ns.DetailStop(label, t, kb)
   local grew = collectgarbage("count") - kb
   if grew > 0 then p.kb = p.kb + grew end
 end
+-- A count only (no time): how often something happened, for /fl perf detail.
+function ns.DetailCount(label, n)
+  if not ns.perfDetailOn then return end
+  local p = ns.perfDetail[label]
+  if not p then p = { n = 0, ms = 0, kb = 0 }; ns.perfDetail[label] = p end
+  p.n = p.n + (n or 1)
+end
+-- Where the code that called the caller of this is ("Values.lua:342"), for those counts.
+function ns.DetailCaller()
+  local s = debugstack and debugstack(3, 1, 0) or ""
+  return s:match("([%w_]+%.lua:%d+)") or "?"
+end
 function ns.DetailLines()
   local list = {}
   for label, p in pairs(ns.perfDetail) do list[#list + 1] = { label = label, p = p } end
   table.sort(list, function(a, b) return a.p.kb > b.p.kb end)
   local out = {}
   for i, e in ipairs(list) do
-    out[i] = ("%s: %d times, %d ms total, %.1f MB of leftovers"):format(e.label, e.p.n, e.p.ms, e.p.kb / 1024)
+    if e.p.ms == 0 and e.p.kb == 0 then out[i] = ("%s: %d"):format(e.label, e.p.n)   -- (a count: DetailCount)
+    else out[i] = ("%s: %d times, %d ms total, %.1f MB of leftovers"):format(e.label, e.p.n, e.p.ms, e.p.kb / 1024) end
   end
   return out
 end
@@ -1665,7 +1678,7 @@ function ns:ApiReport()
     "GetProfessions", "GetNumSkillLines",
     "C_AuctionHouse.SendSearchQuery", "C_AuctionHouse.ReplicateItems", "C_AuctionHouse.GetReplicateItemTimeLeft","C_AuctionHouse.GetCommoditySearchResultInfo",
     "C_AuctionHouse.GetItemSearchResultInfo", "C_MerchantFrame.GetItemInfo", "GetMerchantItemInfo",
-    "TooltipDataProcessor.AddTooltipPostCall", "IsPlayerSpell", "C_Spell.GetSpellName", "C_Item.GetItemInfo", "C_Item.IsItemDataCachedByID", "C_Item.GetItemCount", "GetItemCount",
+    "TooltipDataProcessor.AddTooltipPostCall", "IsPlayerSpell", "C_Spell.GetSpellName", "C_Item.GetItemInfo", "C_Item.IsItemDataCachedByID", "C_Item.RequestLoadItemDataByID", "C_Item.GetItemCount", "GetItemCount",
     "GetInboxHeaderInfo", "GetInboxInvoiceInfo", "GetInboxItem", "GetInboxNumItems",
     -- Your auctions (Auctions.lua).
     "C_AuctionHouse.CalculateCommodityDeposit", "C_AuctionHouse.CalculateItemDeposit", "C_AuctionHouse.GetItemKeyInfo",

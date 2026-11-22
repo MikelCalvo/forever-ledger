@@ -306,3 +306,50 @@ T.test("Timing by kind of work: only while switched on", function()
   ns.perfDetail = {}
   T.S.items[ID] = nil
 end)
+
+-- Frank's twenty-first /fl perf, November 22: a 259 ms freeze in which 902 item details
+-- arrived, all asked for at once by Gold making's list. Items the game hasn't loaded are
+-- asked for 20 a frame now; until then they read as not loaded, as before.
+T.test("Item details: items not loaded are asked for a few each frame", function()
+  local S = T.S
+  local realC = C_Item
+  local sent = {}
+  local ok, err = pcall(function()
+    C_Item = {
+      IsItemDataCachedByID = function(id) return id < 97950 end,
+      RequestLoadItemDataByID = function(id) sent[#sent + 1] = id end,
+    }
+    S.items[97940] = { name = "Loaded Thing" }
+    T.eq(ns.GetItemInfo(97940), "Loaded Thing", "a loaded item reads at once")
+    for id = 97951, 98000 do S.items[id] = { name = "Late " .. id } end
+    for id = 97951, 98000 do T.eq(ns.GetItemInfo(id), nil) end
+    T.eq(#sent, 0, "nothing asked for while reading")
+    T.eq(ns._itemRequestsTest.send(), true); T.eq(#sent, 20, "20 the first frame")
+    T.eq(ns._itemRequestsTest.send(), true); T.eq(#sent, 40)
+    T.eq(ns._itemRequestsTest.send(), false); T.eq(#sent, 50, "the rest, then done")
+    T.eq(ns.GetItemInfo(97951), nil, "still waiting for its answer: not asked again")
+    T.eq(ns._itemRequestsTest.send(), false); T.eq(#sent, 50)
+    T.fire("GET_ITEM_INFO_RECEIVED", 97951, true)
+    T.eq(ns.GetItemInfo(97951), "Late 97951", "read once its answer came")
+  end)
+  C_Item = realC
+  for id = 97940, 98000 do S.items[id] = nil end
+  assert(ok, err)
+end)
+
+-- /fl perf detail counts every full clearing of values and who asked (Frank's twenty-first
+-- /fl perf: values kept 15 minutes were still all worked out again within 3).
+T.test("Timing by kind of work: full clearings of values are counted, with who asked", function()
+  ns.perfDetailOn, ns.perfDetail = true, {}
+  local ok, err = pcall(function() ns:InvalidateValues(true) end)
+  ns.perfDetailOn = false
+  assert(ok, err)
+  local found
+  for label, p in pairs(ns.perfDetail) do
+    if label:find("Values: all thrown away at once, asked by", 1, true) then found = p.n end
+  end
+  T.eq(found, 1)
+  local line = ns.DetailLines()[1]
+  T.ok(line and not line:find("ms total", 1, true), "a count prints as a count: " .. tostring(line))
+  ns.perfDetail = {}
+end)

@@ -202,6 +202,31 @@ end
 -- (Sorted a few hundred at a time inside the Ledger list's run: in one go it was most of
 -- that run's slowest 51 ms, Frank's eighth /fl perf, November 21.)
 local function byTime(a, b) return a.t < b.t end
+-- A row as a copy, to change without changing the kept one (keptRow, below).
+local function copyRow(r)
+  local c = {}
+  for k, v in pairs(r) do c[k] = v end
+  c.src = nil
+  return c
+end
+
+-- Each log entry's row, kept between builds while the list on screen still holds it
+-- (weak both ways): rebuilt only when the entry or its item's name changed. Every build
+-- made a new row for each of thousands of trades (Frank's twenty-first /fl perf, November
+-- 22: 294 MB of leftovers in 7 minutes with the Ledger open while the other account
+-- synced). Kept rows are only read: grouping and the All tab change copies.
+local rowOf = setmetatable({}, { __mode = "kv" })
+local function keptRow(e, item)
+  local r = rowOf[e]
+  local s = r and r.src
+  if s and s[1] == e.t and s[2] == e.q and s[3] == e.a and s[4] == e.c and r.item == item then return r end
+end
+local function keepRow(e, r)
+  r.src = { e.t, e.q, e.a, e.c }
+  rowOf[e] = r
+  return r
+end
+
 local function groupSimilar(list)
   ns.SortInSlices(list, byTime)
   local out, last = {}, nil
@@ -209,6 +234,7 @@ local function groupSimilar(list)
     ns.MaybeYield()
     if last and not r.month and not last.month and r.item == last.item and r.where == last.where and r.char == last.char and r.who == last.who
       and r.each and last.each and math.abs(r.each - last.each) < 1 and r.t - last.t <= GROUP_SECONDS then
+      if last.src then last = copyRow(last); out[#out] = last end   -- (a kept row stays as it is)
       last.qty = (last.qty or 1) + (r.qty or 1)
       last.total = last.total + r.total
       last.t = r.t
@@ -236,25 +262,40 @@ local function records(tab, from, charOK, match, opts)
     for _, e in ipairs(ns.db.sales) do
       ns.MaybeYield()
       if keep(e) then
-        local id = e.n and byName[e.n:lower()]
-        sales[#sales + 1] = { t = e.t, id = id, item = e.n or "?", iconKey = id or e.n, qty = e.q, total = e.a,
-          where = "Auction", who = e.b, char = e.c, kind = "Auction sale" }
+        local item = e.n or "?"
+        local r = keptRow(e, item)
+        if not r or r.who ~= e.b then
+          local id = e.n and byName[e.n:lower()]
+          r = keepRow(e, { t = e.t, id = id, item = item, iconKey = id or e.n, qty = e.q, total = e.a,
+            where = "Auction", who = e.b, char = e.c, kind = "Auction sale" })
+        end
+        sales[#sales + 1] = r
       end
     end
     for _, e in ipairs(ns.db.purchases) do
       ns.MaybeYield()
       if keep(e) then
-        -- No quantity means a non-commodity purchase, which is always one item.
-        buys[#buys + 1] = { t = e.t, id = e.id, item = nameOf(e.id), iconKey = e.id, qty = e.q or 1, total = e.a,
-          where = "Auction", char = e.c, kind = "Auction purchase" }
+        local item = nameOf(e.id)
+        local r = keptRow(e, item)
+        if not r or r.id ~= e.id then
+          -- No quantity means a non-commodity purchase, which is always one item.
+          r = keepRow(e, { t = e.t, id = e.id, item = item, iconKey = e.id, qty = e.q or 1, total = e.a,
+            where = "Auction", char = e.c, kind = "Auction purchase" })
+        end
+        buys[#buys + 1] = r
       end
     end
     for _, e in ipairs(ns.db.vendorLog) do
       ns.MaybeYield()
       if keep(e) and e.id then
         local sold = e.s == "sell"
-        local r = { t = e.t, id = e.id, item = nameOf(e.id), iconKey = e.id, qty = e.q, total = e.a, where = "Vendor",
-          char = e.c, kind = sold and "Sold to vendor" or "Bought from vendor" }
+        local item = nameOf(e.id)
+        local r = keptRow(e, item)
+        local kind = sold and "Sold to vendor" or "Bought from vendor"
+        if not r or r.id ~= e.id or r.kind ~= kind then
+          r = keepRow(e, { t = e.t, id = e.id, item = item, iconKey = e.id, qty = e.q, total = e.a, where = "Vendor",
+            char = e.c, kind = kind })
+        end
         if sold then sales[#sales + 1] = r else buys[#buys + 1] = r end
       end
     end
@@ -264,9 +305,13 @@ local function records(tab, from, charOK, match, opts)
       if keep(m) then
         local auction = m.k == "sale" or m.k == "buy"
         local sold = m.k == "sale" or m.k == "vsell"
-        local r = { t = m.t, month = true, id = m.id, item = m.id and nameOf(m.id) or m.n or "?", iconKey = m.id or m.n,
-          qty = m.q, total = m.a, where = auction and "Auction" or "Vendor", char = m.c,
-          kind = auction and (sold and "Auction sales" or "Auction purchases") or (sold and "Sold to vendors" or "Bought from vendors") }
+        local item = m.id and nameOf(m.id) or m.n or "?"
+        local kind = auction and (sold and "Auction sales" or "Auction purchases") or (sold and "Sold to vendors" or "Bought from vendors")
+        local r = keptRow(m, item)
+        if not r or r.id ~= m.id or r.kind ~= kind then
+          r = keepRow(m, { t = m.t, month = true, id = m.id, item = item, iconKey = m.id or m.n,
+            qty = m.q, total = m.a, where = auction and "Auction" or "Vendor", char = m.c, kind = kind })
+        end
         if sold then sales[#sales + 1] = r else buys[#buys + 1] = r end
       end
     end
@@ -295,8 +340,16 @@ local function records(tab, from, charOK, match, opts)
     if tab == "sales" then out = groupSimilar(sales) elseif tab == "purchases" then out = groupSimilar(buys)
     elseif tab == "all" then
       -- Everything, money in (+) and out (-); the other money is added below.
-      for _, r in ipairs(groupSimilar(sales)) do r.amount = r.total; out[#out + 1] = r end
-      for _, r in ipairs(groupSimilar(buys)) do r.amount = -r.total; out[#out + 1] = r end
+      -- (A kept row is copied: the Sales and Purchases tabs show the same row without a sign.)
+      for _, r in ipairs(groupSimilar(sales)) do
+        if r.src then r = copyRow(r) end
+        r.amount = r.total; out[#out + 1] = r
+      end
+      for _, r in ipairs(groupSimilar(buys)) do
+        ns.MaybeYield()
+        if r.src then r = copyRow(r) end
+        r.amount = -r.total; out[#out + 1] = r
+      end
     else
       -- By item: every item bought or sold, with how many, the averages, and (for items
       -- both bought and sold) the profit on the ones sold, each and in all. Auction sales
