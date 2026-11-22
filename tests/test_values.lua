@@ -380,3 +380,16 @@ T.test("One item's new price: values that lead to it follow, the others stay", f
   T.ok(ns:GetValue(60070) > before, "again, after values were worked out once more")
   ns:InvalidateValues(true)
 end)
+
+T.test("The deal check after a watch pass keeps values; after a full scan they start over", function()
+  -- (Frank's twelfth /fl perf, November 21: every pass threw every value away.)
+  local before = ns.ValuesStamp()
+  ns:CheckDeals()
+  T.runTimers()
+  T.eq(ns.ValuesStamp(), before, "a watch pass: each saved price refreshed its own item")
+  ns.fullScanDone = true
+  ns:CheckDeals()
+  ns.fullScanDone = nil
+  T.runTimers()
+  T.ok(ns.ValuesStamp() ~= before, "a full scan: everything again")
+end)
