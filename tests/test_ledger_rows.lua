@@ -9,6 +9,11 @@ local ME = ns.CharKey()
 
 T.test("Ledger rows: a jump down the list and back, then a refresh, with gaps in the rows", function()
   local real = { ns.db.sales, ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths, ns.db.settings.ledger }
+  -- (Dashboard.lua's character choices aren't loaded in the tests: everyone counts.)
+  local realChoice = { ns.IsCharChoice, ns.CharChoiceHas, ns.CharacterOptions }
+  ns.IsCharChoice = ns.IsCharChoice or function() return true end
+  ns.CharChoiceHas = ns.CharChoiceHas or function() return true end
+  ns.CharacterOptions = ns.CharacterOptions or function() return { { value = "all", label = "All" } } end
   local ok, err = pcall(function()
     ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths = {}, {}, {}
     ns.db.sales = {}
@@ -37,11 +42,14 @@ T.test("Ledger rows: a jump down the list and back, then a refresh, with gaps in
     local _, max = made()
     T.ok(max >= 80, "rows far down made: " .. max)
     T.eq(L.rows()[25], nil, "a gap in the rows")
-    ns:RefreshLedger()   -- (hid every row with rows[i]:Hide(), and stopped at the gap)
+    for _, r in pairs(L.rows()) do r.Hide = function(self) self.hidden = true end end
+    ns:RefreshLedger()   -- (hid every row with rows[i]:Hide(): an error at the gap, or stopped there)
     T.runTimers()
+    T.ok(L.rows()[80] and L.rows()[80].hidden, "a far row out of view is hidden too")
   end)
   ns.db.sales, ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths, ns.db.settings.ledger =
     real[1], real[2], real[3], real[4], real[5]
+  ns.IsCharChoice, ns.CharChoiceHas, ns.CharacterOptions = realChoice[1], realChoice[2], realChoice[3]
   local F = L.frame()
   if F then F.IsShown = function() return false end end
   T.runTimers()
