@@ -109,16 +109,36 @@ end
 -- Item IDs by name: auction sales are saved by name only (the mail names the item, not its
 -- ID). From the names the game has given (saved in itemNames). Only names not seen before
 -- are added: Live watch saves new names all the time, and the whole index was built again
--- for each (Frank's ninth /fl perf, November 21). A renamed item keeps its old name too.
-local idByName, indexed, indexedFrom = {}, {}, nil
+-- for each (Frank's ninth /fl perf, November 21). A renamed item keeps its old name too, but
+-- only where no item has that name now (Codex review, November 21: an old name took a sale
+-- from the item that has it now); a rename (rare) builds the current names again.
+local idByName, aliases, indexed, indexedFrom = {}, {}, {}, nil
 local function nameIndex()
   local names = ns.db.itemNames or {}
-  if names ~= indexedFrom then idByName, indexed, indexedFrom = {}, {}, names end
+  if names ~= indexedFrom then
+    aliases, indexed, indexedFrom = {}, {}, names
+    idByName = setmetatable({}, { __index = aliases })
+  end
+  local renamed = false
   for id, n in pairs(names) do
     if indexed[id] ~= n and type(n) == "string" then
-      local low = n:lower()
-      idByName[low] = idByName[low] or id
+      local was = indexed[id]
+      if was then
+        local old = was:lower()
+        aliases[old] = aliases[old] or id
+        renamed = true
+      else
+        local low = n:lower()
+        idByName[low] = rawget(idByName, low) or id
+      end
       indexed[id] = n
+    end
+  end
+  if renamed then
+    idByName = setmetatable({}, { __index = aliases })
+    for id, n in pairs(indexed) do
+      local low = n:lower()
+      idByName[low] = rawget(idByName, low) or id
     end
   end
   return idByName

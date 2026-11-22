@@ -319,3 +319,26 @@ T.test("The local day: entries at different times in one quarter hour read the c
   T.eq(looks, before, "the same quarter hour: no new date tables")
   date = realDate
 end)
+
+T.test("Ledger: an item's old name never takes a sale from the item that has that name now", function()
+  -- (Codex review, November 21: item A renamed, then item B named what A was called.)
+  local real = { ns.db.sales, ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths }
+  local A, B = 97501, 97502
+  local all = function() return true end
+  local function saleId()
+    local rows = ns.LedgerRecords("sales", 0, all, "")
+    return rows[1] and rows[1].id
+  end
+  ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths = {}, {}, {}
+  ns.db.sales = { { t = NOW, c = ME, n = "Review Old Ore", q = 1, a = 10 } }
+  ns.db.itemNames[A] = "Review Old Ore"
+  T.eq(saleId(), A, "A's name")
+  ns.db.itemNames[A] = "Review New Ore"
+  T.eq(saleId(), A, "A's old name still finds it while nothing else has it")
+  ns.db.itemNames[B] = "Review Old Ore"
+  T.eq(saleId(), B, "B has that name now")
+  ns.db.sales = { { t = NOW, c = ME, n = "Review New Ore", q = 1, a = 10 } }
+  T.eq(saleId(), A, "A's new name")
+  ns.db.sales, ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths = real[1], real[2], real[3], real[4]
+  ns.db.itemNames[A], ns.db.itemNames[B] = nil, nil
+end)
