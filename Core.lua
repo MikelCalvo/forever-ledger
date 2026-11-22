@@ -493,6 +493,10 @@ OWN_MERGE.money = "sum"
 local function renameData(t, kind, newKey, newValue)
   local renames
   for k, v in pairs(t) do
+    -- (Gives the frame back inside a sliced run: sync's message, its own tables, is walked
+    -- whole, and that was most of a 55 ms frame. Frank's eleventh /fl perf, November 21.
+    -- At load it runs in one go: MaybeYield does nothing outside a run.)
+    if ns.MaybeYield then ns.MaybeYield() end
     if type(v) == "table" then renameData(v, kind or OWN_MERGE[k], newKey, newValue)
     elseif type(v) == "string" then
       local nv = newValue(v, k)
@@ -1468,11 +1472,14 @@ ns.SameRecipes = sameRecipes   -- (tests)
 function ns:MergeData(data, via)
   local db, nChars, nPrices, nVendor, nBags = ns.db, 0, 0, 0, 0
   local newRecipes = false
+  if ns.SlicePart then ns.SlicePart("realm names") end   -- (in /fl perf, when in slices)
   ns.PlainRealmData(data)   -- (from someone still on a version that files by server)
   -- (and from one that saved under an empty realm name: November 21)
   -- (Each character to its own realm, learned from both sides' records.)
   if ns.RealmName() and ns.HasBlankRealmData(data, ns.RealmName(), db) then ns.FixBlankRealm(data, ns.RealmName(), db) end
+  if ns.SlicePart then ns.SlicePart("recipes") end
   for key, c in pairs(data.chars or {}) do
+    if ns.MaybeYield then ns.MaybeYield() end   -- (each character's recipes are compared: sameRecipes)
     local mine = db.chars[key]
     if via and ns:IsOwnChar(key) then
       -- (yours: keep your own copy)

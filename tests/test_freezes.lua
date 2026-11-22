@@ -192,3 +192,19 @@ T.test("Slices: the merge sort looks at the clock every 64 comparisons, inside a
   assert(ok, err)
   T.ok(most > 0 and most <= 64, "at most 64 comparisons between looks: " .. most)
 end)
+
+T.test("Slices: putting a sync message's realm names right looks at the clock as it goes", function()
+  -- (Frank's eleventh /fl perf, November 21: the whole message was walked in one frame.)
+  local realYield, looks = ns.MaybeYield, 0
+  ns.MaybeYield = function() looks = looks + 1 end
+  local ok, err = pcall(function()
+    local items = {}
+    for i = 1, 1000 do items[i] = { m = i, l = i .. ":1" } end
+    local data = { prices = { ["CAMWOW US2 Realm 3 PvE|Alliance"] = items } }
+    ns.PlainRealmData(data)
+    assert(data.prices["PvE|Alliance"] == items, "the market put under the plain realm")
+  end)
+  ns.MaybeYield = realYield
+  assert(ok, err)
+  T.ok(looks >= 1000, "a look per record: " .. looks)
+end)

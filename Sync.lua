@@ -355,6 +355,7 @@ local function handle(payload, sender)
     if payload.hc then startCatchUp(payload.hc) end
   elseif payload.k == "hd" then
     partnerOnline = true
+    if ns.SlicePart then ns.SlicePart("a day of price history") end   -- (in /fl perf)
     local n = 0
     for market, packed in pairs(type(payload.m) == "table" and payload.m or {}) do
       n = n + ns:MergeHistoryDay(market, payload.d, packed)
