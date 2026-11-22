@@ -13,6 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - `ForeverLedgerAPI` for other addons: your own scanned prices, price levels, the cost of buying a number of an item and the usual price (thanks to vulpeep; see docs/DEVELOPING.md).
 
 ### Changed
+- Dashboard and Ledger: a single character picked in the Characters choice switches to the character you log in with, so an alt shows its own gold and trades; All, the whole realm and a faction stay as picked.
 - Full scans now also count listings that ran out of time, alongside those that sold, so a sell chance can be worked out later from your own scans.
 
 ### Fixed
