@@ -455,8 +455,9 @@ T.test("A sale logged from its bag click isn't logged again from the buyback lis
   T.eq(ns.db.vendorLog[2].id, 4306, "not the clicked sale again")
 end)
 
--- Codex review, November 22: the list holds 12; the 13th identical sale pushes its twin off
--- and nothing looks new.
+-- Codex review, November 22: the list holds 12; a sale can push its twin off the far end,
+-- so nothing looks new. Only the list's new order can show it; an unchanged list proves
+-- nothing, and then only the gold counts.
 local function sellOnList(id, price)
   S.money = S.money + price
   T.fire("PLAYER_MONEY")
@@ -466,31 +467,79 @@ local function sellOnList(id, price)
   S.now = S.now + 3
   T.runTimers()
 end
+local function fullList(fill)
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  atVendor(159)
+  for n = 1, 12 do BUYBACK[n] = fill(n) end
+  T.fire("MERCHANT_SHOW")
+end
 
-T.test("The 13th identical sale on a full buyback list is still logged", function()
+T.test("The 13th identical sale on a full buyback list counts as gold only", function()
   for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
   atVendor(159)
   for _ = 1, 13 do sellOnList(2589, 10) end
   S.now = NOW
   T.eq(#ns.db.vendorLog, 1, "one entry (the same item within a minute)")
-  T.eq(ns.db.vendorLog[1].q, 13)
-  T.eq(ns.db.vendorLog[1].a, 130)
+  T.eq(ns.db.vendorLog[1].q, 12, "the 13th can't be told from nothing")
 end)
 
-T.test("A full list whose twin can't be told apart logs only the gold", function()
-  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
-  atVendor(159)
-  for n = 1, 12 do BUYBACK[n] = { id = n % 2 == 0 and 2589 or 2592, qty = 1, price = 10 } end
-  T.fire("MERCHANT_SHOW")
-  sellOnList(2589, 10)   -- (2592 leaves, 2589 comes: a 10c entry of two items)
+T.test("A full list's new order shows a sale that pushed its twin off", function()
+  fullList(function(n) return { id = n % 2 == 0 and 2589 or 2592, qty = 1, price = 10 } end)
+  sellOnList(2589, 10)   -- (a 2592 leaves, a 2589 comes: new)
+  sellOnList(2589, 10)   -- (a 2589 leaves, a 2589 comes: the same entries, moved along one)
   S.now = NOW
-  -- (it did change: one 2589 more, so it's logged as new)
   T.eq(#ns.db.vendorLog, 1)
   T.eq(ns.db.vendorLog[1].id, 2589)
-  sellOnList(2589, 10)   -- (a 2589 leaves, a 2589 comes: nothing looks new)
+  T.eq(ns.db.vendorLog[1].q, 2)
+end)
+
+T.test("Two sales paid together that push their twins off are found by the new order", function()
+  fullList(function(n) return n <= 2 and { id = 2589, qty = 1, price = 10 } or { id = 2592, qty = 1, price = 20 } end)
+  S.money = S.money + 20
+  T.fire("PLAYER_MONEY")
+  table.remove(BUYBACK, 1); table.remove(BUYBACK, 1)
+  BUYBACK[11] = { id = 2589, qty = 1, price = 10 }
+  BUYBACK[12] = { id = 2589, qty = 1, price = 10 }
+  T.fire("MERCHANT_UPDATE")
+  S.now = S.now + 6
+  T.runTimers()
   S.now = NOW
   T.eq(#ns.db.vendorLog, 1)
-  T.eq(ns.db.vendorLog[1].q, 1, "two items fit 10c: not guessed")
+  T.same(ns.db.vendorLog[1], { t = NOW, c = ME, id = 2589, q = 2, a = 20, s = "sell" }, "two of the 10c item, not one 20c")
+end)
+
+T.test("A full list that didn't change doesn't name an old item for vendor gold", function()
+  fullList(function() return { id = 2589, qty = 1, price = 10 } end)
+  T.fire("MERCHANT_UPDATE")   -- (an update with nothing changed)
+  S.money = S.money + 10
+  T.fire("PLAYER_MONEY")
+  S.now = S.now + 6
+  T.runTimers()
+  S.now = NOW
+  T.eq(#ns.db.vendorLog, 0)
+end)
+
+T.test("A bag click's sale bought back doesn't take a later sale's entry", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  atVendor(159)
+  local realC = C_Container
+  C_Container = { GetContainerItemInfo = function() return { itemID = 2592, stackCount = 1 } end }
+  local ok, err = pcall(ns._historyTest.sellHint, 0, 1)
+  C_Container = realC
+  assert(ok, err)
+  S.money = S.money + 10
+  T.fire("PLAYER_MONEY")      -- (logged from the click; its entry is never read)
+  BuybackItem(1)
+  S.money = S.money - 10
+  T.fire("PLAYER_MONEY")
+  BUYBACK[1] = { id = 2592, qty = 1, price = 10 }   -- (sold again, no click)
+  T.fire("MERCHANT_UPDATE")
+  S.money = S.money + 10
+  T.fire("PLAYER_MONEY")
+  T.runTimers()
+  local sold = 0
+  for _, e in ipairs(ns.db.vendorLog) do if e.s == "sell" then sold = sold + e.q end end
+  T.eq(sold, 2, "both sales")
 end)
 
 T.test("An item that left the buyback list is new when sold again", function()
