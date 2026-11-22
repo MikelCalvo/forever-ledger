@@ -1303,7 +1303,11 @@ local function usualNow(id, market, now)
   if d and d.kind == "usual" then return d end
 end
 function ns:CheckDeals()
-  ns:InvalidateValues(true)   -- the scan just changed prices
+  -- A full scan just changed thousands of prices: every value starts over. After a watch
+  -- pass, each price saved already refreshed its own item and what leads to it (Prices.lua
+  -- record); throwing every value away after each pass made Gold making start its list
+  -- over every time (Frank's twelfth /fl perf, November 21).
+  if ns.fullScanDone or not ns.InvalidateItem then ns:InvalidateValues(true) end
   if ns.RefreshDealsIfShown then ns:RefreshDealsIfShown() end
   dealRun = dealRun + 1
   local run, full, now, key = dealRun, ns.fullScanDone, time(), ns.MarketKey()
