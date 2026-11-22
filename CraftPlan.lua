@@ -117,6 +117,10 @@ function ns.CraftPlan(need, sourceOf, opts)
     local e = entry(st, id)
     local total = 0
     for i = 1, n do
+      -- opts.yield: a sliced run's caller (the Writs view's costs) gets frames back between
+      -- units (Frank's sixteenth /fl perf, November 21: one order, 128 ms). Only when asked:
+      -- a caller inside pcall (a tier's average) can't give a frame back in Lua 5.1.
+      if opts.yield and ns.MaybeYield then ns.MaybeYield() end
       if (st.left[id] or 0) > 0 then
         st.left[id] = st.left[id] - 1   -- made earlier in the plan, paid for then
       elseif ownedOf(st, id) > 0 then

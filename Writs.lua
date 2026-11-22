@@ -264,7 +264,8 @@ local costs, costsAt, costsScan, costsGen = {}, -math.huge, nil, 0
 local function costsStale()
   return GetTime() - costsAt > COST_KEEP or (ns.db and ns.db.lastFullScan) ~= costsScan
 end
-local function workOutCost(e)
+-- yield: frames are given back while it's planned (only from the sliced run below).
+local function workOutCost(e, yield)
   local ahlBefore = ns.ahledgerUses or 0
   local cache = {}
   local function src(id)
@@ -272,7 +273,7 @@ local function workOutCost(e)
     return cache[id]
   end
   local need = { [e.item] = e.qty }
-  local total, plan = ns.CraftPlan(need, src)
+  local total, plan = ns.CraftPlan(need, src, yield and { yield = true } or nil)
   local c = total and { total = total, plan = plan, need = need, src = src } or false
   if c and (ns.ahledgerUses or 0) ~= ahlBefore then c.ahl = true end
   return c
@@ -311,10 +312,10 @@ local function refreshCosts(list, done)
   costRun = ns.RunInSlices("Writs: working out costs", function()
     for _, e in ipairs(list) do
       ns.MaybeYield()
-      -- (What the cache held for it as this one was worked out: no frame is given back
-      -- in between.)
+      -- (What the cache held for it when this one began. Frames are given back while it's
+      -- planned, so a hover or a clear meanwhile shows up as a change below.)
       local was, g = costs[e.item], costsGen
-      fresh[#fresh + 1] = { item = e.item, c = workOutCost(e), was = was, gen = g }
+      fresh[#fresh + 1] = { item = e.item, c = workOutCost(e, true), was = was, gen = g }
     end
   end, function()
     -- Only where nothing changed the kept cost since it was worked out here: one a hover or

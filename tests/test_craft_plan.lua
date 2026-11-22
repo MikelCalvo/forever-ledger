@@ -154,3 +154,30 @@ T.test("Craft plan: a big plan doesn't look over the whole rest for every unit",
   T.eq(plan[BOLT].bought + plan[BOLT].made, 400)
   T.ok(reads < 400 * 1000, ("%d looks at the listings for 400 bolts"):format(reads))
 end)
+
+-- Frank's sixteenth /fl perf, November 21: one writ order took 128 ms in one frame. Asked
+-- to (opts.yield), the plan gives frames back between units inside a sliced run, with the
+-- same answer; not asked (a tier's average, inside pcall), it never does.
+T.test("Craft plan: gives frames back only when asked, with the same answer", function()
+  local function sourceOf(id)
+    if id == 1 then return { ladder = { { 100, 5 }, { 300, 100 } }, recipe = { makes = 1, mats = { { 2, 2 } } } } end
+    if id == 2 then return { ladder = { { 60, 100 } } } end
+  end
+  local wantTotal = ns.CraftPlan({ [1] = 30 }, sourceOf)
+  local realClock, ms = debugprofilestop, 0
+  local asked, notAsked
+  local ok, err = pcall(function()
+    debugprofilestop = function() ms = ms + 1; return ms end   -- (each look at the clock: 1 ms)
+    ns.RunInSlices("Plan yield test", function() return ns.CraftPlan({ [1] = 30 }, sourceOf, { yield = true }) end,
+      function(total) asked = total end)
+    T.eq(asked, nil, "asked: not all in the first frame")
+    for _ = 1, 200 do if asked then break end T.runTimers() end
+    ns.RunInSlices("Plan no yield test", function() return ns.CraftPlan({ [1] = 30 }, sourceOf) end,
+      function(total) notAsked = total end)
+    T.eq(notAsked, wantTotal, "not asked: done in the first frame")
+  end)
+  debugprofilestop = realClock
+  T.runTimers()
+  assert(ok, err)
+  T.eq(asked, wantTotal, "the same total")
+end)
