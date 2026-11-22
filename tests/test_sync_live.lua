@@ -487,3 +487,27 @@ T.test("Price history: the market is checked for each changed item, not once at 
   T.eq(#items, 1, "only the item merged after the market became this one")
   T.eq(items[1], 72302)
 end)
+
+-- Frank, November 22: "Solid minute no update ... after making some sales to a vendor on
+-- alt". Gold alone still goes within a minute; a logged trade within seconds.
+T.test("A trade's books go within seconds, gold alone within a minute", function()
+  ns:SyncCommand("unpair")
+  setup(true)
+  local m = find(read(), "books")
+  deliver({ k = "a", books = m.books.to })
+  local realAfter, waits = C_Timer.After, {}
+  local ok, err = pcall(function()
+    C_Timer.After = function(s, fn) waits[#waits + 1] = s; return realAfter(s, fn) end
+    ns:BooksChanged()
+    T.eq(waits[#waits], 60, "gold: within a minute")
+    ns:BooksChanged(true)
+    T.eq(waits[#waits], 5, "a trade: within seconds, ahead of the gold's minute")
+    local n = #waits
+    ns:BooksChanged()
+    T.eq(#waits, n, "more gold meanwhile: nothing later queued")
+  end)
+  C_Timer.After = realAfter
+  local books = countBooks(read())
+  assert(ok, err)
+  T.eq(books, 1, "one send for all of it")
+end)

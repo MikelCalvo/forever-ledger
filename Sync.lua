@@ -13,7 +13,8 @@ local SEND_GAP = 0.3         -- seconds between messages, about 800 characters a
 local THROTTLE_WAIT = 1.5    -- seconds to wait when the game says we're sending too fast
 local PRICE_HOURS = 48       -- only prices this recent are sent
 local DEBOUNCE = 5           -- seconds to wait after a change before sending
-local BOOKS_WAIT = 60        -- gold and sales changes go at most this often
+local BOOKS_WAIT = 60        -- gold changes go at most this often
+local BOOKS_TRADE_WAIT = 5   -- a sale, purchase or vendor trade goes this soon (the partner's open Ledger)
 local BOOKS_OVERLAP = 300    -- each send repeats this many seconds (recent entries can change)
 local BOOKS_FULL_DAYS = 20   -- away longer: send everything (older entries become monthly totals)
 local BOOKS_REPLY_WAIT = 60  -- seconds after the last message before sending them again
@@ -30,7 +31,8 @@ local test                   -- running /fl sync test
 local ping                   -- running /fl sync ping: { name, ok, failed }
 local counter = 0
 local booksChanged = true    -- anything new for the partner's Dashboard and Ledger
-local booksWaiting = false
+local booksWaiting = false   -- (when the books are due to go, or false)
+local tradePending = false   -- (a trade logged since the books last went: they go soon)
 local partnerBooks = false   -- the partner's version takes them (said in its hello)
 local booksSent              -- books on their way: { to = cursor, waitUntil = GetTime(), tries }
 local askedFor               -- who the question about gold and sales was about
@@ -225,7 +227,7 @@ function ns:SyncSend(full)
     local wait = (#queue * SEND_GAP) + BOOKS_REPLY_WAIT
     local these = { to = now, waitUntil = GetTime() + wait, tries = (booksSent and booksSent.tries or 0) + 1 }
     booksSent = these
-    booksChanged = false
+    booksChanged, tradePending = false, false
     if these.tries < BOOKS_TRIES then
       C_Timer.After(wait + 1, function()
         if booksSent == these then ns:SyncSend(false) end
@@ -247,12 +249,19 @@ function ns:SyncSoon()
   soon = C_Timer.NewTimer(DEBOUNCE, function() soon = nil; ns:SyncSend(false) end)
 end
 
--- Gold changed or a sale was logged (History.lua).
-function ns:BooksChanged()
+-- Gold changed, or (trade) a sale, purchase or vendor trade was logged (History.lua). Gold
+-- alone goes within a minute; a trade within seconds, so the partner's open Ledger shows it
+-- (Frank, November 22: "Solid minute no update ... after making some sales to a vendor on alt").
+function ns:BooksChanged(trade)
   booksChanged = true
-  if booksWaiting or not partner() or not partnerOnline then return end
-  booksWaiting = true
-  C_Timer.After(BOOKS_WAIT, function()
+  if trade then tradePending = true end
+  if not partner() or not partnerOnline then return end
+  local wait = tradePending and BOOKS_TRADE_WAIT or BOOKS_WAIT
+  local due = GetTime() + wait
+  if booksWaiting and booksWaiting <= due then return end   -- (due as soon already)
+  booksWaiting = due
+  C_Timer.After(wait, function()
+    if booksWaiting ~= due then return end   -- (a sooner one took its place)
     booksWaiting = false
     ns:SyncSend(false)
   end)

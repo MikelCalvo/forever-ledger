@@ -503,16 +503,19 @@ local function onMoney()
   if ns.SessionMoney then ns:SessionMoney(source, delta) end
 
   local now, who = time(), ns.CharKey()
+  local logged = false   -- (a trade logged: the partner gets it within seconds, Sync.lua)
   for _, h in ipairs(hints) do
     local amount = (#hints > 1 and h.amount) or math.abs(delta)
     if h.log == "sale" then
       local d = (h.deposit and h.deposit > 0 and h.deposit < amount) and h.deposit or nil
       addLog(ns.db.sales, { t = now, c = who, n = h.item, a = amount - (d or 0), dep = d, cut = h.cut, q = h.qty, b = h.buyer })
+      logged = true
       -- Looted in a running session: it counts as this gold now, not as loot too (Sessions.lua).
       if ns.SessionSold then ns:SessionSold(h.item, h.qty, h.arrived) end
       ns:Debug("Sale", h.qty or "?", "x", h.item or "?", "to", h.buyer or "?", "for", ns.Money(amount))
     elseif h.log == "vendor" then
       addLog(ns.db.vendorLog, { t = now, c = who, id = h.item, q = h.qty, a = amount, s = h.source == "vendorSell" and "sell" or "buy" })
+      logged = true
       if h.source == "vendorSell" and ns.SessionSold then ns:SessionSold(h.item, h.qty) end
       ns:Debug("Vendor", h.source == "vendorSell" and "sold" or "bought", h.qty or "?", "x", h.item or "?", "for", ns.Money(amount))
     end
@@ -529,6 +532,7 @@ local function onMoney()
       -- Non-commodity purchases (gear) are always one item.
       local id = (h and h.item) or lastShownItem
       addLog(ns.db.purchases, { t = now, c = who, id = id, q = (h and h.qty) or 1, a = amount })
+      logged = true
       -- It comes by mail: shopping lists count it as had until it's taken (ShoppingLists.lua).
       if ns.NoteBoughtToMail then ns:NoteBoughtToMail(id, (h and h.qty) or 1) end
       -- Gear: the addon doesn't save prices from gear pages (one page shows one stat
@@ -543,6 +547,7 @@ local function onMoney()
   end
   ns:Debug("Money", source, delta > 0 and "+" or "-", ns.Money(math.abs(delta)))
   if ns.LedgerChanged then ns:LedgerChanged() end   -- (an open Ledger shows it: Ledger.lua)
+  if logged and ns.BooksChanged then ns:BooksChanged(true) end
 end
 
 -- Windows that decide where money came from.
