@@ -172,6 +172,12 @@ local function utcOffset()
   utc.isdst = date("*t", now).isdst
   return now - time(utc)
 end
+-- Local midnight of the day a time falls on (for that day's own summer time).
+local function dayStart(t)
+  local d = date("*t", t)
+  d.hour, d.min, d.sec = 0, 0, 0
+  return time(d)
+end
 
 ---------------------------------------------------------------------------
 -- Records for each sub-tab
@@ -475,7 +481,11 @@ local function records(tab, from, charOK, match, opts)
           if day >= fromDay and (not covered or day == partial[key]) then
             for s, amt in pairs(src) do
               if OTHER[s] then
-                local t = day * DAY - offset + DAY / 2
+                -- At the very start of its day (00:00:01, worked out for that day, so a summer
+                -- time change can't move it to the day before): a total has no time of its own,
+                -- and at noon a day's totals sat above everything from that morning (Frank's
+                -- screenshot, November 22: the other account's mail and deposits at the top).
+                local t = dayStart(day * DAY - offset + DAY / 2) + 1
                 if covered then   -- the first day: only what came before the log
                   amt = amt - ((loggedOnStart[key] or {})[s] or 0)
                   t = since[key] - 1

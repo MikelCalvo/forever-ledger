@@ -170,3 +170,27 @@ T.test("Ledger: a trade logged here refreshes it while it's open, once for a bur
   T.runTimers()
   assert(ok, err)
 end)
+
+-- Frank's screenshot, November 22: the other account's day totals (mail sent, deposits back)
+-- sat at the top of the day, above that morning's trades, as they were dated noon. They're
+-- dated to the very start of their day now: the same date, below the day's own times.
+T.test("Ledger: a day total sits at the start of its day, below that morning's entries", function()
+  local saved = { ns.db.money, ns.db.otherLog, ns.db.otherLogSince, ns.db.sales, ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths }
+  local ok, err = pcall(function()
+    ns.db.sales, ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths = {}, {}, {}, {}
+    local morning = time({ year = 2026, month = 11, day = 22, hour = 8, min = 30 })
+    local partner = "Day Tester-Testrealm"
+    ns.db.money = { [partner] = { [ns.LocalDay(morning)] = { mailOut = 1080 } } }
+    ns.db.otherLog = { { t = morning, c = ME, s = "quest", a = 250 } }
+    ns.db.otherLogSince = { [ME] = morning - 86400 * 2 }
+    local rows = ns.LedgerRecords("other", 0, function() return true end, "")
+    local total, quest
+    for _, r in ipairs(rows) do if r.day then total = r elseif r.kind then quest = r end end
+    T.ok(total and quest, "both rows")
+    T.ok(total.t < quest.t, "the day total is dated before that morning's quest")
+    T.eq(date("%Y-%m-%d", total.t), date("%Y-%m-%d", morning), "on the same day")
+  end)
+  ns.db.money, ns.db.otherLog, ns.db.otherLogSince = saved[1], saved[2], saved[3]
+  ns.db.sales, ns.db.purchases, ns.db.vendorLog, ns.db.ledgerMonths = saved[4], saved[5], saved[6], saved[7]
+  assert(ok, err)
+end)

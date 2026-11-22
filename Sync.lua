@@ -76,15 +76,22 @@ end
 ---------------------------------------------------------------------------
 -- Sending: split into chunks, send at a steady pace, back off if throttled
 ---------------------------------------------------------------------------
+-- Pieces of urgent messages (the books: trades the partner's open Ledger is waiting for) go
+-- at the front, in their own order: behind bags, characters and prices they waited minutes
+-- (Frank, November 22: vendor sales on the alt "took quite a while" to show). A message's
+-- pieces are put back together by its id, so pieces of two messages can interleave.
+local front = 0   -- (urgent pieces at the front of the queue)
 local function pump()
-  if #queue == 0 then sending = false; return end
+  if #queue == 0 then sending = false; front = 0; return end
   sending = true
   local m = table.remove(queue, 1)
+  if m.urgent then front = front - 1 end
   local ok, result = pcall(C_ChatInfo.SendAddonMessage, PREFIX, m.text, "WHISPER", m.to)
   lastSentTo = GetTime()
   local sent = ok and (result == nil or result == true or result == 0)
   if not sent then
     table.insert(queue, 1, m)
+    if m.urgent then front = front + 1 end
     ns:Debug("Sync: throttled, waiting", ok and tostring(result) or tostring(result))
     C_Timer.After(THROTTLE_WAIT, pump)
     return
@@ -93,7 +100,7 @@ local function pump()
   C_Timer.After(SEND_GAP, pump)
 end
 
-local function send(payload, to)
+local function send(payload, to, urgent)
   if not to then return 0 end
   to = fullName(to)
   counter = counter + 1
@@ -101,7 +108,14 @@ local function send(payload, to)
   local text = ns.Serialize(payload)
   local n = math.ceil(#text / CHUNK)
   for i = 1, n do
-    queue[#queue + 1] = { to = to, text = ("%s:%d:%d:"):format(id, i, n) .. text:sub((i - 1) * CHUNK + 1, i * CHUNK) }
+    local piece = { to = to, text = ("%s:%d:%d:"):format(id, i, n) .. text:sub((i - 1) * CHUNK + 1, i * CHUNK) }
+    if urgent then
+      piece.urgent = true
+      front = front + 1
+      table.insert(queue, front, piece)
+    else
+      queue[#queue + 1] = piece
+    end
   end
   if not sending then pump() end
   return n
@@ -124,6 +138,7 @@ end
 local function failed()
   local unsent = #queue > 0
   queue = {}
+  front = 0
   sending = false
   if unsent and partner() then
     local st = state()
@@ -223,7 +238,7 @@ function ns:SyncSend(full)
   if nWho + nData == 0 and not books then return end
   local n = nWho > 0 and send(who, to) or 0
   if books then
-    n = n + send({ k = "d", books = books }, to)
+    n = n + send({ k = "d", books = books }, to, true)   -- (ahead of bags and prices)
     local wait = (#queue * SEND_GAP) + BOOKS_REPLY_WAIT
     local these = { to = now, waitUntil = GetTime() + wait, tries = (booksSent and booksSent.tries or 0) + 1 }
     booksSent = these

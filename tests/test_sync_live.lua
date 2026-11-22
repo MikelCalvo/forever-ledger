@@ -511,3 +511,30 @@ T.test("A trade's books go within seconds, gold alone within a minute", function
   assert(ok, err)
   T.eq(books, 1, "one send for all of it")
 end)
+
+-- Frank, November 22: vendor sales on the alt "took quite a while" to show on the main,
+-- with bags and prices ahead of them in the queue. The books go to the front now.
+T.test("The books go ahead of prices already waiting to be sent", function()
+  ns:SyncCommand("unpair")
+  setup(true)
+  local m = find(read(), "books")
+  deliver({ k = "a", books = m.books.to })
+  read()
+  S.now = S.now + 5
+  local market = ns.MarketKey()
+  ns.db.prices[market] = ns.db.prices[market] or {}
+  for i = 1, 300 do ns.db.prices[market][96500 + i] = { m = 100 + i, a = 110 + i, q = 5, t = S.now } end
+  ns:SyncSend(false)        -- (prices: many pieces, the first goes at once)
+  ns:BooksChanged(true)     -- (a trade: the books, while the prices are still going)
+  T.runTimers()
+  -- (read() gives the messages in the order their last pieces went.)
+  local messages = read()
+  local booksAt, pricesAt
+  for k, msg in ipairs(messages) do
+    if msg.books then booksAt = booksAt or k
+    elseif msg.prices and next(msg.prices) then pricesAt = pricesAt or k end
+  end
+  for i = 1, 300 do ns.db.prices[market][96500 + i] = nil end
+  T.ok(booksAt and pricesAt, "both sent")
+  T.ok(booksAt < pricesAt, ("the books finished first (piece %s, prices %s)"):format(tostring(booksAt), tostring(pricesAt)))
+end)
