@@ -577,6 +577,10 @@ local function onMoney()
   end
   ns:Debug("Money", source, delta > 0 and "+" or "-", ns.Money(math.abs(delta)))
   if ns.LedgerChanged then ns:LedgerChanged() end   -- (an open Ledger shows it: Ledger.lua)
+  -- Gold at a vendor counts as a trade even with no entry to log: the Sell junk button or
+  -- another addon sells without a bag click, and the partner's Ledger then waited for the
+  -- gold's minute (Frank, November 22: sold to a vendor, "over a minute and nothing").
+  if source == "vendorSell" or source == "vendorBuy" then logged = true end
   if logged and ns.BooksChanged then ns:BooksChanged(true) end
 end
 

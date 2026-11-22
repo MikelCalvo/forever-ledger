@@ -378,3 +378,18 @@ T.test("Ledger: a vendor trade merged into the one before it shows its new total
   T.runTimers()
   assert(ok, err)
 end)
+
+-- Frank, November 22: sold to a vendor on one account, "over a minute and nothing" on the
+-- other's open Ledger. Gold at a vendor with no bag click (Sell junk, another addon) still
+-- goes to the partner within seconds, as a trade.
+T.test("Gold at a vendor with no logged sale still counts as a trade for the partner", function()
+  atVendor(159)
+  local real, got = ns.BooksChanged, {}
+  ns.BooksChanged = function(_, trade) got[#got + 1] = trade or false end
+  S.money = S.money + 500
+  local ok, err = pcall(T.fire, "PLAYER_MONEY")
+  ns.BooksChanged = real
+  assert(ok, err)
+  T.eq(#ns.db.vendorLog, 0, "nothing to log")
+  T.eq(got[#got], true, "sent as a trade")
+end)
