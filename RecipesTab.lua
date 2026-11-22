@@ -872,12 +872,48 @@ end
 
 -- A profession's list for the choices above, built a little each frame (Frank's /fl perf,
 -- November 21: 47-101 ms in one go on opening the tab or changing a choice). Kept until a
--- choice, the recipe book, values or your recipe types change, or a minute passes.
+-- choice or what the list is made from changes (the recipe book, where recipes come from,
+-- which character knows what at which skill, values, your recipe types), or a minute
+-- passes (Codex review, November 21: a recipe just learned, a vendor just seen or a
+-- material's new price waited for the minute).
+-- Values change all the time while Live watch reads the auction house, so their changes
+-- are taken in at most every VALUES_EVERY seconds (then the tab is drawn again).
+local VALUES_EVERY = 10
+local valuesSeen, valuesSeenAt, valuesTimer = nil, -math.huge, false
+local function valuesKey()
+  local now, v = GetTime(), ns.ValuesChanges and ns.ValuesChanges() or 0
+  if v ~= valuesSeen then
+    if now - valuesSeenAt >= VALUES_EVERY then
+      valuesSeen, valuesSeenAt = v, now
+    elseif not valuesTimer then
+      valuesTimer = true
+      C_Timer.After(VALUES_EVERY - (now - valuesSeenAt), function()
+        valuesTimer = false
+        if f and f:IsVisible() then ns:RefreshRecipes() end
+      end)
+    end
+  end
+  return valuesSeen
+end
+-- Each character's skill and recipes in this profession (a recipe learned here, or by
+-- your other account's character, changes its count or time).
+local function charsKey(prof)
+  local parts = {}
+  for key, c in pairs(ns.db.chars) do
+    local p = c.profs and c.profs[prof]
+    if p then parts[#parts + 1] = ("%s=%s:%s:%s"):format(key, tostring(p.rank), tostring(p.updated), tostring(p.recipeCount)) end
+  end
+  table.sort(parts)
+  return table.concat(parts, ",")
+end
+-- Returns the choices alone, and the whole stamp.
 local function listStamp(prof, s, match)
   local sort = s.sort
-  return table.concat({ prof, tostring(s.view), tostring(s.group), tostring(s.type), tostring(s.least),
+  local choices = table.concat({ prof, tostring(s.view), tostring(s.group), tostring(s.type), tostring(s.least),
     tostring(s.skill), tostring(s.source), tostring(s.custom), tostring(sort and sort.key), tostring(sort and sort.desc),
-    match, tostring(ns.recipeBookStamp or 0), tostring(ns.ValuesStamp and ns.ValuesStamp() or 0), tostring(listGen),
+    match }, "\1")
+  return choices, table.concat({ choices, tostring(ns.recipeBookStamp or 0), tostring(ns.recipeSourceStamp or 0),
+    charsKey(prof), tostring(ns.ValuesStamp and ns.ValuesStamp() or 0), tostring(valuesKey()), tostring(listGen),
     tostring(math.floor(time() / 60)) }, "\1")
 end
 
@@ -948,23 +984,29 @@ end
 
 -- Returns how many rows are shown, the profession's recipe count, and whether the list is
 -- still being worked out. The last list of the same profession stays on screen meanwhile.
-local recipeRun, recipeBuilding
+local recipeRun, recipeBuilding, buildingChoices
 local function recipeRows(prof, width, lay)
   local s = settings()
   local match = (f.search:GetText() or ""):lower()
-  local stamp = listStamp(prof, s, match)
+  local choices, stamp = listStamp(prof, s, match)
   local cached = f.rcache and f.rcache.stamp == stamp and f.rcache
-  if not cached and recipeBuilding ~= stamp then
-    -- (A choice changed during a build: that build is dropped.)
+  if cached then
+    -- Back to a list still kept: a build for something else isn't wanted any more (Codex
+    -- review, November 21: another profession's build finished and took its place).
+    if recipeBuilding then ns.StopSlices(recipeRun); recipeBuilding, buildingChoices = nil, nil end
+  elseif buildingChoices ~= choices then
+    -- (A choice changed during a build: that build is dropped. When only what the list is
+    -- made from changed, the build under way finishes first and the next starts then, so
+    -- changes coming often can't keep it from ever finishing.)
     ns.StopSlices(recipeRun)
-    recipeBuilding = stamp
+    recipeBuilding, buildingChoices = stamp, choices
     if ns.FreshValues then ns.FreshValues() end   -- (values out of date go now: in slices they're kept)
     local inside = true
     recipeRun = ns.RunInSlices("Recipes list", function() return buildList(prof, s, match) end, function(result)
       if recipeBuilding ~= stamp then return end
-      recipeBuilding, result.stamp, f.rcache = nil, stamp, result
+      recipeBuilding, buildingChoices, result.stamp, f.rcache = nil, nil, stamp, result
       if not inside then ns:RefreshRecipes() end
-    end, function() if recipeBuilding == stamp then recipeBuilding = nil end end)
+    end, function() if recipeBuilding == stamp then recipeBuilding, buildingChoices = nil, nil end end)
     inside = false
     cached = f.rcache and f.rcache.stamp == stamp and f.rcache   -- (done within the first slice)
   end
@@ -1257,4 +1299,4 @@ function ns:RefreshRecipes()
 end
 
 ns.RefreshRecipes = ns.Timed("Recipes tab", ns.RefreshRecipes)
-ns._recipesTest = { buildList = buildList, settings = settings, groupChoices = groupChoices }   -- (tests)
+ns._recipesTest = { buildList = buildList, settings = settings, groupChoices = groupChoices, listStamp = listStamp, valuesKey = valuesKey }   -- (tests)

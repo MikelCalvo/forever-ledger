@@ -80,3 +80,36 @@ T.test("Professions: the group choices are worked out over several frames", func
   T.eq(result and result.opts[2].value, "test_even")
   T.ok(result and result.sets[96002] and result.sets[96002].test_even, "kept for the list's filter")
 end)
+
+-- Codex review, November 21: the kept list missed a recipe just learned (here or by the
+-- other account's character), a source just seen and a material's new price until the
+-- minute turned.
+T.test("Professions: the kept list's stamp changes with what the list is made from", function()
+  local R = ns._recipesTest
+  local s = R.settings()
+  local key = "Stamp Tester-Testrealm"
+  local realChar, realNow, realSource = ns.db.chars[key], S.now, ns.recipeSourceStamp
+  local ok, err = pcall(function()
+    ns.db.chars[key] = { name = "Stamp Tester", profs = { Stampcraft = { rank = 100, updated = 1, recipeCount = 3, recipes = {} } } }
+    local c1, s1 = R.listStamp("Stampcraft", s, "")
+    ns.db.chars[key].profs.Stampcraft.recipeCount, ns.db.chars[key].profs.Stampcraft.updated = 4, 2   -- (a recipe learned)
+    local c2, s2 = R.listStamp("Stampcraft", s, "")
+    T.eq(c2, c1, "the same choices")
+    T.ok(s2 ~= s1, "a recipe learned: a new stamp")
+    ns.recipeSourceStamp = (ns.recipeSourceStamp or 0) + 1   -- (RecipeBook.lua's addSource)
+    local _, s3 = R.listStamp("Stampcraft", s, "")
+    T.ok(s3 ~= s2, "a source seen: a new stamp")
+    -- Values: taken in at most every 10 seconds, with a redraw queued for then.
+    S.now = S.now + 20
+    local v1 = R.valuesKey()
+    local timers = #S.timers
+    ns:InvalidateItem(2589)
+    T.eq(R.valuesKey(), v1, "not within 10 seconds")
+    T.eq(#S.timers, timers + 1, "a redraw for when they're taken in")
+    S.now = S.now + 10
+    T.ok(R.valuesKey() ~= v1, "then taken in")
+  end)
+  ns.db.chars[key], S.now, ns.recipeSourceStamp = realChar, realNow, realSource
+  T.runTimers()
+  assert(ok, err)
+end)

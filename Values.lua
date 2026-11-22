@@ -324,7 +324,13 @@ local listCache = {}    -- itemID = full options list at depth 0 (tooltips, find
 -- while it worked its list out over several frames: Codex review, November 21).
 local thrownAway = 0
 function ns.ValuesStamp() return thrownAway end
+-- Counts every change to what values are worked out from, one item or all (the Recipes
+-- tab's kept list: Codex review, November 21: a material's new price left a craft's old
+-- profit showing).
+local changes = 0
+function ns.ValuesChanges() return changes end
 function ns:InvalidateValues(now)
+  changes = changes + 1
   if now then
     cache, listCache, cacheTime, dirty = {}, {}, GetTime(), false; thrownAway = thrownAway + 1
     usedBy, changed, anyChanged = {}, {}, false
@@ -346,6 +352,7 @@ function ns:InvalidateItem(id)
   if not id then return end
   dropItem(id)
   changed[id], anyChanged = true, true
+  changes = changes + 1
 end
 -- Everything that leads to the changed items goes too.
 local function dropUsers()

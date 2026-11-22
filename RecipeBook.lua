@@ -49,6 +49,8 @@ local function addSource(recipeName, s)
   ns.db.recipeSources[recipeName] = list
   s.conf, s.t = "seen", time()
   list[s.kind .. (s.npcID or s.npc or "?")] = s
+  -- (The Recipes tab's kept list: its Where from and skill come from here; Codex review.)
+  ns.recipeSourceStamp = (ns.recipeSourceStamp or 0) + 1
 end
 
 ---------------------------------------------------------------------------
