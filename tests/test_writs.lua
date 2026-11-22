@@ -78,3 +78,32 @@ T.test("Writs: a sealed writ's average is worked out in the background, then kep
   local lines = ns:WritTooltipLines(262888)
   T.ok(lines and lines[1]:find("on average", 1, true), "the sealed writ's line has it")
 end)
+
+T.test("Writs: the view's costs are worked out over several frames, then kept", function()
+  -- (Frank's thirteenth /fl perf, November 21: opening the Writs view took 967 ms.)
+  local W = ns._writsTest
+  local key = ns.MarketKey()
+  ns.db.prices[key] = ns.db.prices[key] or {}
+  ns.db.prices[key][3383] = { m = 900, a = 900, q = 5, l = "900:5", t = S.now }
+  local e = ns:WritFor(264012)
+  W.forget()
+  local realClock, ms = debugprofilestop, 0
+  local finished = 0
+  local ok, err = pcall(function()
+    debugprofilestop = function() ms = ms + 1; return ms end   -- (each look at the clock: 1 ms)
+    W.refreshCosts(ns.WRITS, function() finished = finished + 1 end)
+    local known = 0
+    for _, w in ipairs(ns.WRITS) do if W.knownCost(w) ~= nil then known = known + 1 end end
+    T.ok(known < #ns.WRITS, "not all in the first frame: " .. known)
+    T.runTimers()
+    T.eq(finished, 1, "the view is told once they're all in")
+    for _, w in ipairs(ns.WRITS) do T.ok(W.knownCost(w) ~= nil, "every order worked out") end
+    T.eq(W.knownCost(e) and W.knownCost(e).total, 900, "the same cost as asked for on its own")
+    W.refreshCosts(ns.WRITS, function() finished = finished + 1 end)
+    T.runTimers()
+    T.eq(finished, 1, "kept: nothing worked out again")
+  end)
+  debugprofilestop = realClock
+  T.runTimers()
+  assert(ok, err)
+end)

@@ -259,26 +259,64 @@ end
 -- hitched again each time (Frank's AN30, November 19).
 local COST_KEEP = 300
 local costs, costsAt, costsScan = {}, -math.huge, nil
+local function costsStale()
+  return GetTime() - costsAt > COST_KEEP or (ns.db and ns.db.lastFullScan) ~= costsScan
+end
+local function workOutCost(e)
+  local ahlBefore = ns.ahledgerUses or 0
+  local cache = {}
+  local function src(id)
+    if not cache[id] then cache[id] = source(id) end
+    return cache[id]
+  end
+  local need = { [e.item] = e.qty }
+  local total, plan = ns.CraftPlan(need, src)
+  local c = total and { total = total, plan = plan, need = need, src = src } or false
+  if c and (ns.ahledgerUses or 0) ~= ahlBefore then c.ahl = true end
+  return c
+end
 function ns:WritCost(e)
-  local scan = ns.db and ns.db.lastFullScan
-  if GetTime() - costsAt > COST_KEEP or scan ~= costsScan then wipe(costs); costsAt, costsScan = GetTime(), scan end
+  if costsStale() then wipe(costs); costsAt, costsScan = GetTime(), ns.db and ns.db.lastFullScan end
   local c = costs[e.item]
   if c and c.ahl then ns.ahledgerUses = (ns.ahledgerUses or 0) + 1 end   -- (AHledger's credit: Values.lua)
   if c == nil then
-    local ahlBefore = ns.ahledgerUses or 0
-    local cache = {}
-    local function src(id)
-      if not cache[id] then cache[id] = source(id) end
-      return cache[id]
-    end
-    local need = { [e.item] = e.qty }
-    local total, plan = ns.CraftPlan(need, src)
-    c = total and { total = total, plan = plan, need = need, src = src } or false
-    if c and (ns.ahledgerUses or 0) ~= ahlBefore then c.ahl = true end
+    c = workOutCost(e)
     costs[e.item] = c
   end
   return c or nil
 end
+
+-- The Writs view: every order's cost worked out a little each frame (Frank's thirteenth
+-- /fl perf, November 21: opening it worked all of them out in one go, 967 ms). The costs
+-- already known (even out of date) are shown meanwhile, then the view is drawn again.
+-- Returns an order's known cost (nil: not worked out yet, false: no price), never working
+-- one out.
+local costRun
+local function knownCost(e)
+  local c = costs[e.item]
+  if c and c.ahl then ns.ahledgerUses = (ns.ahledgerUses or 0) + 1 end
+  return c
+end
+local function refreshCosts(list, done)
+  if costRun and not costRun.stopped then return end
+  local missing = false
+  for _, e in ipairs(list) do if costs[e.item] == nil then missing = true; break end end
+  if not missing and not costsStale() then return end
+  local fresh, scan = {}, ns.db and ns.db.lastFullScan
+  costRun = ns.RunInSlices("Writs: working out costs", function()
+    for _, e in ipairs(list) do
+      ns.MaybeYield()
+      fresh[e.item] = workOutCost(e)
+    end
+  end, function()
+    -- (Orders worked out on their own meanwhile, by a hover, stay.)
+    for item, c in pairs(fresh) do costs[item] = c end
+    if costsStale() then costsAt, costsScan = GetTime(), scan end
+    if done then done() end
+  end, function() costRun = nil end)
+end
+ns._writsTest = { refreshCosts = refreshCosts, knownCost = knownCost,
+  forget = function() wipe(costs); costsAt = -math.huge end }   -- (tests)
 
 -- A tier's average order cost: { avg, t }, or nil until the first is worked out. Done in
 -- the background, about 4 ms a frame, and kept AVG_KEEP seconds (the old one is shown
@@ -625,11 +663,13 @@ function ns:RefreshWrits()
     h.fs:SetTextColor(col[1], col[2], col[3], 1)
   end
 
+  -- Costs out of date or not known yet are worked out over the next frames, then drawn.
+  refreshCosts(WRITS, function() if f and f:IsShown() then ns:RefreshWrits() end end)
   local list, priced = {}, 0
   local yours, sealed = ns:YourWrits()
   for _, e in ipairs(WRITS) do
     if (s.tier == "all" or e.tier == s.tier or (s.tier == "mine" and yours[e])) and (s.prof == "all" or e.prof == s.prof) then
-      local c = ns:WritCost(e)
+      local c = knownCost(e)   -- (nil until worked out: refreshCosts, above)
       if c then priced = priced + 1 end
       local writPrice = e.writ and ns:GetPrice(e.writ)
       list[#list + 1] = { e = e, c = c, name = (itemName(e.item) or ns.ItemName(e.item)),
@@ -674,7 +714,7 @@ function ns:RefreshWrits()
       prof = e.prof,
       rep = tostring(t.rep),
       where = e.who or dim(e.zone and "not confirmed" or "not known yet"),
-      cost = x.ready and "|cff7fd39cyou have it|r" or x.cost and (ns.MoneyShort(x.cost) .. dim(" " .. howText(x.c, e))) or dim("no price"),
+      cost = x.ready and "|cff7fd39cyou have it|r" or x.cost and (ns.MoneyShort(x.cost) .. dim(" " .. howText(x.c, e))) or dim(x.c == nil and "working out..." or "no price"),
       -- Below zero the pouch pays more than the order costs: the gain per point, in green
       -- (Frank's AH9, November 20: every order read "free", so the column told them apart by nothing).
       perRep = x.perRep and (x.perRep < 0 and ("|cff7fd39c+" .. ns.MoneyShort(-x.perRep) .. "|r") or ns.MoneyShort(x.perRep)) or dim("?"),
@@ -700,7 +740,7 @@ function ns:RefreshWrits()
     if sealed[k] then opened[#opened + 1] = ("%d Sealed %s's Writ"):format(sealed[k], TIERS[k].label) end
   end
   f.summary:SetText(("%d orders, %d with a price.   %s"):format(#list, priced,
-    #opened > 0 and (T:AccentCode() .. "Still sealed in your bags: " .. table.concat(opened, ", ") .. ": open them to see their orders.|r") or dim(priced < #list and "Orders without a price: nothing listed at your last full scan, and no materials priced." or "Hover an order for the cheapest way to get it.")))
+    #opened > 0 and (T:AccentCode() .. "Still sealed in your bags: " .. table.concat(opened, ", ") .. ": open them to see their orders.|r") or dim((costRun and not costRun.stopped) and "Working out the costs..." or priced < #list and "Orders without a price: nothing listed at your last full scan, and no materials priced." or "Hover an order for the cheapest way to get it.")))
   if s.tier == "mine" and #list == 0 and #opened == 0 then
     f.summary:SetText(dim("No Craftsman's Writs in your bags or bank. They drop from mobs and chests, or buy one on the auction house."))
   end
