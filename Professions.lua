@@ -292,16 +292,14 @@ ns:On("TRADE_SKILL_DATA_SOURCE_CHANGED", queueCapture)
 ---------------------------------------------------------------------------
 -- Which of your characters use each item
 ---------------------------------------------------------------------------
--- What the index and values are made from, as one number: counted characters, their
--- professions' ranks (Enchanting's sets disenchanting) and every recipe's materials and
--- output. Read without making anything (Frank's twentieth /fl perf, November 22: the index
--- was rebuilt at every loading screen and threw every value away each time, so Gold
--- making worked out all 7,000 values again).
--- Each recipe is hashed in order with its own character, profession, name and fields, and
--- the recipes' hashes are added up, so moving a count or an output from one recipe to
--- another changes the number (Codex review, November 22: adding each field on its own let
--- two recipes swap their counts unseen).
-local usageSig
+-- What the index and values were last built from, to tell whether anything changed: each
+-- counted character's name, each profession's rank (Enchanting's sets disenchanting) and
+-- each recipe's contents. Checked without making anything (Frank's twentieth /fl perf,
+-- November 22: the index was rebuilt at every loading screen and threw every value away
+-- each time, so Gold making worked out all 7,000 values again).
+-- Each recipe is compared on its own, not as part of a sum (Codex reviews, November 22: two
+-- recipes' changes could cancel out in any added-up number, as two real Blacksmithing
+-- recipes showed).
 local P = 2147483629   -- (a prime under 2^31: h * 257 + x stays exact in a double)
 local function mix(h, x) return (h * 257 + (x or 0)) % P end
 local function mixText(h, s)
@@ -309,38 +307,63 @@ local function mixText(h, s)
   for i = 1, #s do h = mix(h, s:byte(i)) end
   return mix(h, 2)
 end
--- A step that isn't linear, before the hashes are added up: with mix alone a recipe's hash
--- is the rest plus each count, so counts swapped between recipes still added up the same.
-local function finish(h)
-  local a, b = h % 65521, math.floor(h / 65521) % 65521
-  return (a * (b + 1) + b * 31 + 1) % P
+-- One recipe's contents in order: its name, output, output count, each material and count.
+local function recipeHash(rec)
+  local h = mix(mix(7, tonumber(rec.out) or 0), math.floor((tonumber(rec.oq) or 1) * 1000))
+  h = mixText(h, rec.n)
+  for _, r in ipairs(rec.r or {}) do h = mix(mix(h, tonumber(r[1]) or 0), math.floor((tonumber(r[2]) or 0) * 1000)) end
+  return mix(h, #(rec.r or {}))
 end
-local function usageSignature()
-  local n, sum = 0, 0
+local built   -- [charKey] = { name, n = professions, profs = { [prof] = { rank, n = recipes, recipes = { [id] = hash } } } }; n = characters
+local function sameAsBuilt()
+  if not built then return false end
+  local chars = 0
   for key, c in pairs(ns.db.chars) do
     if ns:SameMarketChar(key) then
-      local hc = mixText(mixText(7, key), c.name)
-      sum, n = (sum + finish(hc)) % P, n + 1
+      chars = chars + 1
+      local b = built[key]
+      if not b or b.name ~= c.name then return false end
+      local profs = 0
       for prof, p in pairs(c.profs or {}) do
-        local hp = mix(mixText(hc, prof), math.floor((tonumber(p.rank) or 0) * 100))
-        sum, n = (sum + finish(hp)) % P, n + 1
+        profs = profs + 1
+        local bp = b.profs[prof]
+        if not bp or bp.rank ~= p.rank then return false end
+        local count = 0
         for recipeID, rec in pairs(p.recipes or {}) do
-          local h = mix(hp, tonumber(recipeID) or 0)
-          h = mix(mix(h, tonumber(rec.out) or 0), math.floor((tonumber(rec.oq) or 1) * 1000))
-          h = mixText(h, rec.n)
-          for _, r in ipairs(rec.r or {}) do h = mix(mix(h, tonumber(r[1]) or 0), math.floor((tonumber(r[2]) or 0) * 1000)) end
-          sum, n = (sum + finish(h)) % P, n + 1
+          count = count + 1
+          if bp.recipes[recipeID] ~= recipeHash(rec) then return false end
         end
+        if count ~= bp.n then return false end
       end
+      if profs ~= b.n then return false end
     end
   end
-  return n * P + sum
+  return chars == built.n
+end
+local function rememberBuilt()
+  local out = { n = 0 }
+  for key, c in pairs(ns.db.chars) do
+    if ns:SameMarketChar(key) then
+      out.n = out.n + 1
+      local b = { name = c.name, n = 0, profs = {} }
+      for prof, p in pairs(c.profs or {}) do
+        b.n = b.n + 1
+        local bp = { rank = p.rank, n = 0, recipes = {} }
+        for recipeID, rec in pairs(p.recipes or {}) do
+          bp.n = bp.n + 1
+          bp.recipes[recipeID] = recipeHash(rec)
+        end
+        b.profs[prof] = bp
+      end
+      out[key] = b
+    end
+  end
+  built = out
 end
 -- Rebuilt only when what it's made from changed (then every value goes, as before).
 function ns:BuildUsageIndex()
-  local sig = usageSignature()
-  if ns.usage and sig == usageSig then return end
-  usageSig = sig
+  if ns.usage and sameAsBuilt() then return end
+  rememberBuilt()
   local usage, byReagent = {}, {}
   -- Only characters who could craft for you: same ruleset and faction (Core.lua).
   for key, c in pairs(ns.db.chars) do

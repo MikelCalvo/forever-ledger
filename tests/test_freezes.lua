@@ -345,3 +345,47 @@ T.test("Recipe index: two recipes swapping their counts is a change", function()
   ns:BuildUsageIndex()
   assert(ok, err)
 end)
+
+-- Codex review, November 22: two real Blacksmithing recipes (Volcanic Hammer, Girdle of the
+-- Dawn) with corrected counts gave the same added-up fingerprint. Each recipe is compared on
+-- its own now, so no pair of changes can cancel out.
+T.test("Recipe index: paired corrections in two recipes are a change", function()
+  local key = "Pair Tester-Testrealm"
+  local function rows(hammer, girdle)
+    return {
+      [16984] = { n = "Volcanic Hammer", out = 12792, r = { { 12359, 30 }, { 7077, 4 }, { 7910, 4 }, { 8170, hammer } } },
+      [23632] = { n = "Girdle of the Dawn", out = 19051, r = { { 12359, 8 }, { 6037, 6 }, { 12811, girdle } } },
+    }
+  end
+  ns.db.chars[key] = { name = "Pair Tester", profs = { Blacksmithing = { rank = 265, recipes = rows(4, 2) } } }
+  ns:BuildUsageIndex()
+  local realAll, all = ns.InvalidateValues, 0
+  ns.InvalidateValues = function() all = all + 1 end
+  local ok, err = pcall(function()
+    ns.db.chars[key].profs.Blacksmithing.recipes = rows(5, 1)
+    ns:BuildUsageIndex()
+    T.eq(all, 1, "Codex's pair: rebuilt")
+    -- Many pairs of opposite changes, each pair in two recipes.
+    local recs = {}
+    for i = 1, 200 do recs[97700 + i] = { n = "Pair " .. i, out = 96700 + i, r = { { 96000 + i % 7, 3 + i % 5 } } } end
+    ns.db.chars[key].profs.Blacksmithing.recipes = recs
+    ns:BuildUsageIndex()
+    local missed = 0
+    for i = 1, 199, 2 do
+      local before = all
+      local a, b = recs[97700 + i].r[1], recs[97700 + i + 1].r[1]
+      a[2], b[2] = a[2] + 1, b[2] - 1
+      ns:BuildUsageIndex()
+      if all == before then missed = missed + 1 end
+    end
+    T.eq(missed, 0, "every pair of opposite changes rebuilt")
+    ns:BuildUsageIndex()
+    local before = all
+    ns:BuildUsageIndex()
+    T.eq(all, before, "and nothing changed: kept")
+  end)
+  ns.InvalidateValues = realAll
+  ns.db.chars[key] = nil
+  ns:BuildUsageIndex()
+  assert(ok, err)
+end)

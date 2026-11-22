@@ -353,3 +353,18 @@ T.test("Timing by kind of work: full clearings of values are counted, with who a
   T.ok(line and not line:find("ms total", 1, true), "a count prints as a count: " .. tostring(line))
   ns.perfDetail = {}
 end)
+
+-- Codex review, November 22: with no way to ask the game for an item, one it says isn't
+-- loaded is read directly, as before.
+T.test("Item details: read directly when the game can't be asked for them", function()
+  local S = T.S
+  local realC = C_Item
+  local ok, err = pcall(function()
+    C_Item = { IsItemDataCachedByID = function() return false end }
+    S.items[97990] = { name = "Direct Read" }
+    T.eq(ns.GetItemInfo(97990), "Direct Read")
+  end)
+  C_Item = realC
+  S.items[97990] = nil
+  assert(ok, err)
+end)

@@ -92,7 +92,8 @@ ns._itemRequestsTest = { send = sendRequests, waiting = function() return qTail 
 local arrived = {}
 local function notLoaded(id)
   local cached = C_Item and C_Item.IsItemDataCachedByID
-  if not cached or arrived[id] then return false end
+  -- (Without a way to ask, it's read directly as before: Codex review, November 22.)
+  if not cached or not C_Item.RequestLoadItemDataByID or arrived[id] then return false end
   local ok, yes = pcall(cached, id)
   return ok and yes == false
 end
