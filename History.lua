@@ -518,18 +518,21 @@ local recent = {}        -- new on the list: { b = entry, at = GetTime() }
 local explained = {}     -- sold with a bag click and logged: { id, qty, at }
 local unexplained = {}   -- vendor gold with nothing logged: { at = GetTime(), amount, t, who }
 local UNEXPLAINED_SECONDS = 5
+local function buybackEntry(i)
+  local okInfo, _, _, price, qty = pcall(GetBuybackItemInfo, i)
+  local okLink, link = pcall(GetBuybackItemLink, i)
+  local id = okLink and type(link) == "string" and tonumber(link:match("item:(%d+)"))
+  if okInfo and id and type(price) == "number" and price > 0 then
+    qty = tonumber(qty) or 1
+    return { id = id, price = price, qty = qty, sig = ("%s:%d:%d"):format(link, price, qty) }
+  end
+end
 local function buybackNow()
   local out = {}
   if not (GetNumBuybackItems and GetBuybackItemInfo and GetBuybackItemLink) then return out end
   local ok, n = pcall(GetNumBuybackItems)
   for i = 1, (ok and tonumber(n) or 0) do
-    local okInfo, _, _, price, qty = pcall(GetBuybackItemInfo, i)
-    local okLink, link = pcall(GetBuybackItemLink, i)
-    local id = okLink and type(link) == "string" and tonumber(link:match("item:(%d+)"))
-    if okInfo and id and type(price) == "number" and price > 0 then
-      qty = tonumber(qty) or 1
-      out[#out + 1] = { id = id, price = price, qty = qty, sig = ("%s:%d:%d"):format(link, price, qty) }
-    end
+    out[#out + 1] = buybackEntry(i)
   end
   return out
 end
@@ -595,6 +598,7 @@ local function optionPays(o, want)
   for _, b in ipairs(o) do sum = sum + b.price end
   return sum == want
 end
+local function isSale(b, e) return b.id == e.id and (not e.qty or b.qty == e.qty) end
 -- New entries move into recent (each once); old ones, and ones a bag click's log explains,
 -- leave it. The list as it is now is noted, so an entry that left and comes back is new.
 local function scanBuyback()
@@ -621,11 +625,36 @@ local function scanBuyback()
   end
   for i = #explained, 1, -1 do
     local e = explained[i]
+    local done = false
     for j = #recent, 1, -1 do
       local b = recent[j].b
-      if b.id == e.id and (not e.qty or b.qty == e.qty) then
-        table.remove(recent, j); table.remove(explained, i)
+      if isSale(b, e) then
+        table.remove(recent, j); table.remove(explained, i); done = true
         break
+      end
+    end
+    -- A bag click's sale can also come on as a full list's new order: it's among the entries
+    -- that came on, so the ways without it go and it leaves the rest (Codex review, November
+    -- 22: its shift was left for a later sale's gold to take).
+    for s = #shifts, 1, -1 do
+      if done then break end
+      local kept = {}
+      for _, o in ipairs(shifts[s].options) do
+        for k, b in ipairs(o) do
+          if isSale(b, e) then
+            local rest = {}
+            for m, other in ipairs(o) do if m ~= k then rest[#rest + 1] = other end end
+            kept[#kept + 1] = rest
+            break
+          end
+        end
+      end
+      if #kept > 0 then
+        table.remove(explained, i); done = true
+        local left = {}
+        for _, o in ipairs(kept) do if #o > 0 then left[#left + 1] = o end end
+        -- (an empty way: that sale was all that came on, so the new order is explained)
+        if #left < #kept then table.remove(shifts, s) else shifts[s].options = left end
       end
     end
   end
@@ -682,10 +711,18 @@ local function tryBuyback()
 end
 ns:On("MERCHANT_SHOW", function() unexplained, recent, explained, shifts = {}, {}, {}, {}; noteBuyback() end)
 ns:On("MERCHANT_UPDATE", function() tryBuyback() end)
--- Buying a sale back: a bag click's sale whose entry was never read mustn't take the entry
--- of a later sale of the same item (Codex review, November 22).
+-- Buying a sale back: a bag click's sale of that item whose entry was never read mustn't
+-- take the entry of a later sale of the same item; other sales keep theirs (Codex reviews,
+-- November 22).
 ns:OnReady(function()
-  if BuybackItem then hooksecurefunc("BuybackItem", function() explained = {} end) end
+  if not (BuybackItem and GetBuybackItemInfo and GetBuybackItemLink) then return end
+  hooksecurefunc("BuybackItem", function(index)
+    local b = buybackEntry(index)
+    if not b then return end
+    for i = #explained, 1, -1 do
+      if isSale(b, explained[i]) then table.remove(explained, i); return end
+    end
+  end)
 end)
 
 local function onMoney()

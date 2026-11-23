@@ -529,7 +529,9 @@ T.test("A bag click's sale bought back doesn't take a later sale's entry", funct
   assert(ok, err)
   S.money = S.money + 10
   T.fire("PLAYER_MONEY")      -- (logged from the click; its entry is never read)
+  BUYBACK[1] = { id = 2592, qty = 1, price = 10 }
   BuybackItem(1)
+  BUYBACK[1] = nil
   S.money = S.money - 10
   T.fire("PLAYER_MONEY")
   BUYBACK[1] = { id = 2592, qty = 1, price = 10 }   -- (sold again, no click)
@@ -540,6 +542,60 @@ T.test("A bag click's sale bought back doesn't take a later sale's entry", funct
   local sold = 0
   for _, e in ipairs(ns.db.vendorLog) do if e.s == "sell" then sold = sold + e.q end end
   T.eq(sold, 2, "both sales")
+end)
+
+local function clicked(id, qty, price)
+  local realC = C_Container
+  C_Container = { GetContainerItemInfo = function() return { itemID = id, stackCount = qty } end }
+  local ok, err = pcall(ns._historyTest.sellHint, 0, 1)
+  C_Container = realC
+  assert(ok, err)
+  S.money = S.money + price
+  T.fire("PLAYER_MONEY")
+end
+local function soldBy(id)
+  local q = 0
+  for _, e in ipairs(ns.db.vendorLog) do if e.s == "sell" and e.id == id then q = q + e.q end end
+  return q
+end
+
+T.test("Buying back another item keeps a bag click's sale from taking a later sale's gold", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  BUYBACK[1] = { id = 4306, qty = 1, price = 50 }   -- (sold on an earlier visit)
+  atVendor(159)
+  clicked(2592, 3, 90)                 -- (logged from the click; its entry comes late)
+  BuybackItem(1)                       -- (the old one bought back)
+  table.remove(BUYBACK, 1)
+  S.money = S.money - 50
+  T.fire("PLAYER_MONEY")
+  T.fire("MERCHANT_UPDATE")
+  BUYBACK[#BUYBACK + 1] = { id = 2592, qty = 3, price = 90 }   -- (the clicked sale's entry)
+  T.fire("MERCHANT_UPDATE")
+  S.money = S.money + 90               -- (another sale, no click, its entry after the gold)
+  T.fire("PLAYER_MONEY")
+  BUYBACK[#BUYBACK + 1] = { id = 2589, qty = 2, price = 90 }
+  T.fire("MERCHANT_UPDATE")
+  T.runTimers()
+  T.eq(soldBy(2592), 3, "the clicked sale once")
+  T.eq(soldBy(2589), 2, "the other sale named")
+end)
+
+T.test("A bag click's sale that reorders a full list doesn't name a later sale", function()
+  fullList(function(n) return n == 1 and { id = 2592, qty = 1, price = 10 } or { id = 2589, qty = 1, price = 20 } end)
+  clicked(2592, 1, 10)
+  table.remove(BUYBACK, 1)
+  BUYBACK[12] = { id = 2592, qty = 1, price = 10 }   -- (pushed its twin off: a new order)
+  T.fire("MERCHANT_UPDATE")
+  S.money = S.money + 10               -- (another 10c sale, no click, its entry after)
+  T.fire("PLAYER_MONEY")
+  table.remove(BUYBACK, 1)
+  BUYBACK[12] = { id = 2770, qty = 1, price = 10 }
+  T.fire("MERCHANT_UPDATE")
+  S.now = S.now + 6
+  T.runTimers()
+  S.now = NOW
+  T.eq(soldBy(2592), 1, "the clicked sale once")
+  T.eq(soldBy(2770), 1, "the other sale named")
 end)
 
 T.test("An item that left the buyback list is new when sold again", function()
