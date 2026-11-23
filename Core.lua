@@ -284,6 +284,14 @@ function ns.PlainRealm(s) return (s:gsub("CAMWOW%s+%S+%s+Realm%s+%d+%s+", "")) e
 -- realm, so an empty one hid every price and sell speed and started a second record of the
 -- character (a CurseForge comment and a Discord report the same day). The last good name is
 -- kept per character (charRealm) and used whenever the game's is empty or hidden.
+-- A string the addon may read: nil for a hidden (secret) value or anything not a string.
+-- Since November 23 an NPC's GUID can be hidden (Frank's BugSack: RecipeBook.lua matching
+-- a trainer's GUID, 29 times), so read unit GUIDs and names through this.
+function ns.Readable(s)
+  if (issecretvalue and issecretvalue(s)) or type(s) ~= "string" then return nil end
+  return s
+end
+
 local function readRealm()
   if not GetRealmName then return end
   local ok, realm = pcall(GetRealmName)
