@@ -5,7 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-22
+
+### Highlights
+- Δ **No more freezes**: Gold making, the Ledger, the Recipes tab and Writs open and refresh without holding up the game, and Live watch and sync with your other account leave far less memory for the game to clear.
+- + **Russian**: the addon's text in Russian, with the right word forms for numbers (thanks to zergzorg).
+- + **Coins**: money shows the game's own gold, silver and copper coins, as in your bags (thanks to vulpeep). Settings, Appearance switches back to colored letters.
+- + **Profit %**: sort Vendor flips by the best return on what you spend (thanks to yippp).
+- ~ **Sync in seconds**: your other account's sales and purchases reach your Ledger within seconds instead of up to a minute.
+- ✓ **Vendor sales with bag addons**: sales made with a bag addon's buttons or a Sell junk button are logged by item, not only as the day's gold.
+- ✓ **Your auctions**: one you cancel, or one missing from the game's answer for a moment, no longer counts as sold (thanks to vulpeep).
+
 ### Added
+- Help: a **Languages** topic (which languages there are, and how to help translate).
 - Writs: every writ is now recognized by its item ID (from the game's own data, thanks to Codex), so the 30 that were found by their English name also work on clients in other languages. Tiers, counts and rewards still come from the guide list, since the game data doesn't include them.
 - **Coins**: money shows the game's gold, silver and copper coins, as in your bags (thanks to vulpeep). Settings, Appearance, **Show money as** switches to colored letters instead. The Dashboard shows the two biggest coins; hover a tile for the exact amount.
 - **Russian**: the addon's text in Russian, with the right word forms for numbers (1 предмет, 2 предмета, 5 предметов; thanks to zergzorg). Other languages load nothing extra.
