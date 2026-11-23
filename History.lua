@@ -599,9 +599,14 @@ local function optionPays(o, want)
   return sum == want
 end
 -- A bag click's sale is its item and count for the gold it paid: another copy of the item
--- sold for other gold isn't it (Codex review, November 22: damaged copies pay less).
+-- sold for other gold isn't it (Codex review, November 22: damaged copies pay less). When
+-- the gold that came isn't what the item sells for (a buyback in the same gold change took
+-- some off), either could be its entry's, so both match it: its own entry mustn't be left
+-- for another sale's gold (Codex review, November 22).
 local function isSale(b, e)
-  return b.id == e.id and (not e.qty or b.qty == e.qty) and (not e.a or paid(b, e.a) ~= nil)
+  if b.id ~= e.id or (e.qty and b.qty ~= e.qty) then return false end
+  if not e.a then return true end
+  return paid(b, e.a) ~= nil or (e.expect ~= nil and paid(b, e.expect) ~= nil)
 end
 -- New entries move into recent (each once); old ones, and ones a bag click's log explains,
 -- leave it. The list as it is now is noted, so an entry that left and comes back is new.
@@ -780,7 +785,9 @@ local function onMoney()
       logged = true
       if h.source == "vendorSell" then
         vendorLogged = true
-        explained[#explained + 1] = { id = h.item, qty = h.qty, a = amount, at = GetTime() }   -- (its buyback entry isn't new gold)
+        -- (its buyback entry isn't new gold; expect: what the item sells for, if that isn't the gold)
+        local expect = h.amount ~= amount and h.amount or nil
+        explained[#explained + 1] = { id = h.item, qty = h.qty, a = amount, expect = expect, at = GetTime() }
       end
       if h.source == "vendorSell" and ns.SessionSold then ns:SessionSold(h.item, h.qty) end
       ns:Debug("Vendor", h.source == "vendorSell" and "sold" or "bought", h.qty or "?", "x", h.item or "?", "for", ns.Money(amount))
