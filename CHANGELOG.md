@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- Dashboard: the profit tile is now **Trading profit** (auction house and vendors), and its hover adds up the rest of your money (loot, quests, training, flights, mail and trades), so it matches how your gold changed. A week of farming showed a loss there while gold went up.
+
 ## [0.29.0] - 2026-11-22
 
 ### Highlights
