@@ -715,8 +715,8 @@ ns:On("MERCHANT_UPDATE", function() tryBuyback() end)
 -- take the entry of a later sale of the same item; other sales keep theirs (Codex reviews,
 -- November 22).
 ns:OnReady(function()
-  if not (BuybackItem and GetBuybackItemInfo and GetBuybackItemLink) then return end
-  hooksecurefunc("BuybackItem", function(index)
+  if not BuybackItem then return end
+  hooksecurefunc("BuybackItem", function(index)   -- (buybackEntry's calls are pcalls)
     local b = buybackEntry(index)
     if not b then return end
     for i = #explained, 1, -1 do
