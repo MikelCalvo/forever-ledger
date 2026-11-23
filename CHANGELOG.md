@@ -18,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 - Help: a **Languages** topic (which languages there are, and how to help translate).
+- Settings: when a search finds no setting, **Search Help** looks for the same words in Help (the language, for one, has no setting: it follows the game's).
 - Writs: every writ is now recognized by its item ID (from the game's own data, thanks to Codex), so the 30 that were found by their English name also work on clients in other languages. Tiers, counts and rewards still come from the guide list, since the game data doesn't include them.
 - **Coins**: money shows the game's gold, silver and copper coins, as in your bags (thanks to vulpeep). Settings, Appearance, **Show money as** switches to colored letters instead. The Dashboard shows the two biggest coins; hover a tile for the exact amount.
 - **Russian**: the addon's text in Russian, with the right word forms for numbers (1 предмет, 2 предмета, 5 предметов; thanks to zergzorg). Other languages load nothing extra.

@@ -200,6 +200,12 @@ ns.HELP_FAQ = {
 local NAV_W = 190
 local hv
 
+-- Settings' Search Help button: the Help tab, searching for the same words.
+function ns:SearchHelp(text)
+  ns:ShowTab("help")   -- (opening the tab clears its search)
+  if hv and hv.search then hv.search:SetText(text or "") end
+end
+
 -- The sidebar's groups, like Settings'; Getting started stands on its own.
 local HELP_GROUPS = {
   ["The Gold making tab"] = "Gold making", ["Auction house scans"] = "Gold making", ["Tooltips"] = "Gold making", ["Shuffles and vendor flips"] = "Gold making",
