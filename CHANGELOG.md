@@ -8,12 +8,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 - Crates: a **Have** column with how many of each crate you have (bags, bank and your other characters; hover for where), and filters for the level (Apprentice to Artisan), the kind (Herbs, Ore, Ingots, Textiles, Fabrics, Parts, Curiosities) and **Only ones I have**.
 - Writs: a filter for the zone the customer is in; right-click an order to search the auction house for the writ itself; **List** also puts the writ on the Writs shopping list when you have none.
+- Writs: what each order asks for is checked in game. Taking an order reads how many it wants; handing it in notes the customer, the zone and the reputation it gave; opening a coin pouch notes what it paid (the hover shows the average for that tier). Each order's hover says what has been checked. All 150 orders and all 30 crates match the game's own items (build of November 24).
 
 ### Fixed
 - An error at trainers (and when trading or looting a recipe) now that the game hides some characters' IDs and names from addons: the recipe book skips what it can't read.
 
 ### Changed
 - Dashboard: the profit tile is now **Trading profit** (auction house and vendors), and its hover adds up the rest of your money (loot, quests, training, flights, mail and trades), so it matches how your gold changed. A week of farming showed a loss there while gold went up.
+- Writs: **Per rep** is the order's cost divided by its reputation. The coin pouch is no longer taken off, since its money varies; the guides' fixed amounts made cheap orders look like they paid you.
+- Crates: **Total** and **Per Favor** no longer take the turn-in's money off (a coin pouch at best, and it varies), so Per Favor is what the crate takes, divided by 10.
 
 ## [0.29.0] - 2026-11-22
 

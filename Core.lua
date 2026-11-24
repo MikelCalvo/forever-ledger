@@ -32,6 +32,8 @@ local DEFAULTS = {
   crates = {},      -- [crate itemID] = { name, level, bundles = { { { qty, name }, ... } } } read from tooltips
   vendorSellChanged = {}, -- [itemID] = local day its vendor sell price was seen to change (older price history is ignored)
   favor = {},       -- [charKey] = Merchant's Favor held
+  writSeen = {},    -- [writ questID] = { qty, who, map, zone, rep, money, t } learned from the quest (Writs.lua)
+  pouches = {},     -- [Coin Pouch itemID] = { n, sum, lo, hi, from = writ tier key or "crate" } (Writs.lua)
   inventory = {},   -- [charKey] = { bags = { [itemID] = count }, bank = { ... }, t, bankT, via = sync partner's name if theirs } (Inventory.lua)
   itemNames = {},   -- [itemID] = name, remembered so lists don't flicker (Prices.lua ns.ItemName)
   disenchants = {}, -- { t, id, ilvl, q, cls, mats = { [itemID] = count } } (Disenchant.lua, last 1000)
@@ -1724,6 +1726,9 @@ function ns:ApiReport()
     "C_Map.GetBestMapForUnit", "C_Map.SetUserWaypoint",
     "C_QuestLog.GetAllCompletedQuestIDs", "GetQuestsCompleted", "C_QuestLog.GetTitleForQuestID",
     "C_QuestLog.RequestLoadQuestByID", "GetQuestGreenRange", "IsInInstance", "GetInstanceInfo",
+    -- Writs learned in game (Writs.lua): the quest's amount, the customer, the reputation.
+    "C_QuestLog.GetQuestObjectives", "C_QuestLog.IsOnQuest", "GetQuestID", "C_Map.GetMapInfo",
+    "C_Reputation.GetNumFactions", "C_Reputation.GetFactionDataByIndex", "GetFactionInfo", "FACTION_STANDING_INCREASED",
     "C_ChatInfo.SendAddonMessage", "C_ChatInfo.RegisterAddonMessagePrefix", "ChatFrame_AddMessageEventFilter",
     "C_AuctionHouse.PostItem", "C_AuctionHouse.PostCommodity", "C_AuctionHouse.ConfirmCommoditiesPurchase",
     -- Buy queue (BuyQueue.lua): buying needs these, each from a click or a mouse wheel tick.

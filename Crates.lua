@@ -5,15 +5,15 @@ local T = ns.Theme
 -- Waylaid Crates: fill one with any bundle from its list (read from the crate's
 -- tooltip), turn it in for Merchant's Favor. This works out the cheapest bundle at
 -- today's prices, the total with the crate's own price, and gold per Favor.
--- Every turn-in pays the same (TURN_IN_FAVOR, TURN_IN_PAY).
+-- Every turn-in gives the same Favor (TURN_IN_FAVOR); its money isn't counted.
 ---------------------------------------------------------------------------
 local FAVOR = 3402
 local PREFIX = "Waylaid Crate"
--- What a turn-in pays: every filled crate becomes a Sealed Apprentice Crate, which pays
--- 5s and 10 Merchant's Favor whatever the crate's tier or quality (owner's turn-ins,
--- beta, October 3). The first turn-in is a one-time quest with more; not counted.
+-- What a turn-in gives: every filled crate becomes a Sealed Apprentice Crate, which gives
+-- 10 Merchant's Favor whatever the crate's tier or quality (owner's turn-ins, beta, October
+-- 3). Its money (5s then; a coin pouch at best now, and that varies: Frank, November 24)
+-- isn't counted, so the cost is what the crate takes. The first turn-in is a one-time quest.
 local TURN_IN_FAVOR = 10
-local TURN_IN_PAY = 500
 
 local function dim(t) return "|cff888888" .. t .. "|r" end
 local function money(v) return v and ns.Money(math.floor(v + 0.5)) or dim("?") end
@@ -364,13 +364,10 @@ function ns:CrateReport(id)
   r.have, r.haveBags, r.haveBank, r.haveAlts, r.haveBy = cb + cbank + calts, cb, cbank, calts, cby
   r.tier, r.kind = crateKind(id, info.name)
   r.cratePrice = (not r.owned) and rec and not rec.none and rec.m or nil
-  r.favor, r.pay = TURN_IN_FAVOR, TURN_IN_PAY
+  r.favor = TURN_IN_FAVOR
   if r.cheapest then
     r.total = r.cheapest.cost + (r.cratePrice or 0)
-    -- What it really costs once the turn-in's money is back. Below zero, the crate is
-    -- a straight gold profit (the "raw gold shuffle" with cheap crates).
-    r.net = r.total - (r.pay or 0)
-    if r.favor and r.favor > 0 then r.perFavor = math.max(r.net, 0) / r.favor; r.sortKey = r.net / r.favor end
+    if r.favor and r.favor > 0 then r.perFavor = r.total / r.favor; r.sortKey = r.perFavor end
   end
   return r
 end
@@ -442,7 +439,10 @@ ns:On("CURRENCY_DISPLAY_UPDATE", function(currencyID)
   if currencyID and currencyID ~= FAVOR then return end
   local q = favorNow()
   if not q then return end
-  if lastFavor and q > lastFavor then ns:Debug("Merchant's Favor:", "+" .. (q - lastFavor)) end
+  if lastFavor and q > lastFavor then
+    ns:Debug("Merchant's Favor:", "+" .. (q - lastFavor))
+    if ns.NoteCrateTurnIn then ns:NoteCrateTurnIn() end   -- (the coin pouch it gives: Writs.lua)
+  end
   lastFavor = q
   if ns.db then ns.db.favor[ns.CharKey()] = q end
 end)
@@ -476,10 +476,8 @@ function ns:CrateTooltipText(id)
   local parts = {}
   for _, p in ipairs(r.cheapest.parts) do parts[#parts + 1] = p.qty .. " " .. p.name end
   local per = ""
-  if r.net and r.net < 0 then
-    per = (", turn-in pays %s more than that"):format(money(-r.net))
-  elseif r.perFavor then
-    per = (", about %s per Favor after the turn-in's money"):format(money(r.perFavor))
+  if r.perFavor then
+    per = (", about %s per Favor"):format(money(r.perFavor))
   end
   return ("Cheapest fill: %s, %s%s"):format(table.concat(parts, " + "), money(r.cheapest.cost), per)
 end
@@ -693,8 +691,9 @@ function ns:RefreshCrates()
   end)
 
   local favor = ns.db.favor[ns.CharKey()]
-  f.info:SetText(("Cheapest way to fill each Waylaid Crate at your last scan's prices, best Favor per gold first. After your first turn-in (a one-time quest), every crate pays 5s and 10 Merchant's Favor; Net cost takes the 5s off, and shows green if a crate somehow pays for itself. You have %s Merchant's Favor on this character.%s Click a crate for every bundle."):format(
-    favor and tostring(favor) or "?", unread > 0 and (" %d crates still loading."):format(unread) or ""))
+  local pouch = ns.PouchText and ns:PouchText("crate")
+  f.info:SetText(("Cheapest way to fill each Waylaid Crate at your last scan's prices, least gold per Favor first. Every turn-in gives 10 Merchant's Favor; its money varies, so it isn't counted%s. You have %s Merchant's Favor on this character.%s Click a crate for every bundle."):format(
+    pouch and (" (coin pouches from crates: " .. pouch .. ")") or "", favor and tostring(favor) or "?", unread > 0 and (" %d crates still loading."):format(unread) or ""))
 
   f.content:SetWidth(width)
   local y, n, nd = 0, 0, 0
@@ -719,8 +718,8 @@ function ns:RefreshCrates()
       fill = #parts > 0 and table.concat(parts, " + ") .. (r.cheapest.have and dim(" (have)") or "") or dim("no prices yet"),
       fillCost = r.cheapest and money(r.cheapest.cost) or dim("?"),
       cratePrice = r.owned and dim("owned") or money(r.cratePrice),
-     total = r.net and (r.net < 0 and ("|cff7fd39c+" .. money(-r.net) .. "|r") or money(r.net)) or dim("?"),
-      perFavor = r.net and r.net <= 0 and "|cff7fd39cfree|r" or r.perFavor and ("|cff7fd39c" .. money(r.perFavor) .. "|r") or dim("?"),
+      total = r.total and money(r.total) or dim("?"),
+      perFavor = r.perFavor and ("|cff7fd39c" .. money(r.perFavor) .. "|r") or dim("?"),
     }
     for key, fs in pairs(row.cells) do
       fs:ClearAllPoints()
