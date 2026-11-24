@@ -477,10 +477,11 @@ local function readLog()
   end
 end
 local function readLogLater()
-  if readLogSoon then return end
-  readLogSoon = true
+  if readLogSoon and GetTime() - readLogSoon < 5 then return end   -- (one waiting read at a time)
+  readLogSoon = GetTime()
   C_Timer.After(1, readLog)
 end
+ns.WritReadLog = readLog   -- (tests)
 ns:On("QUEST_ACCEPTED", readLogLater)
 ns:On("QUEST_LOG_UPDATE", readLogLater)
 ns:On("PLAYER_ENTERING_WORLD", readLogLater)

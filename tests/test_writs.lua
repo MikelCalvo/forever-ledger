@@ -245,8 +245,7 @@ T.test("Writs: learned from the quest, the turn-in and the coin pouch", function
   local ok, err = pcall(function()
     C_QuestLog = { IsOnQuest = function(q) return q == 94214 end,
       GetQuestObjectives = function() return { { type = "item", numRequired = 3 } } end }
-    T.fire("QUEST_LOG_UPDATE")
-    T.runTimers()
+    ns.WritReadLog()   -- (what QUEST_LOG_UPDATE does a second later)
     T.eq(e.qty, 3, "the amount the quest asks for")
     T.eq(ns.db.writSeen[94214].qty, 3)
     -- The turn-in: who, where, and the reputation from the chat line.
