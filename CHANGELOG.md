@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- Crates: a **Have** column with how many of each crate you have (bags, bank and your other characters; hover for where), and filters for the level (Apprentice to Artisan), the kind (Herbs, Ore, Ingots, Textiles, Fabrics, Parts, Curiosities) and **Only ones I have**.
+- Writs: a filter for the zone the customer is in; right-click an order to search the auction house for the writ itself; **List** also puts the writ on the Writs shopping list when you have none.
+
 ### Fixed
 - An error at trainers (and when trading or looting a recipe) now that the game hides some characters' IDs and names from addons: the recipe book skips what it can't read.
 
