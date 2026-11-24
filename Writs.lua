@@ -520,7 +520,7 @@ ns.WritRepFromChat = repFromChat
 -- The turn-in window (QUEST_COMPLETE): who and where. QUEST_TURNED_IN: the money, then the
 -- reputation a moment later. lastTurnIn tells the bags which coin pouch came from what.
 local pending, lastTurnIn
-local arrived, assignPouch   -- (coin pouches, below)
+local arrived, assignPouch, gained   -- (coin pouches, below)
 ns:On("QUEST_COMPLETE", function()
   local quest = GetQuestID and num(GetQuestID())
   if not (quest and byQuest[quest]) then pending = nil return end
@@ -534,6 +534,7 @@ ns:On("QUEST_TURNED_IN", function(quest, _, money)
   local e = quest and byQuest[quest]
   if not e then return end
   lastTurnIn = { from = e.tier, t = GetTime(), quest = quest }
+  gained = nil   -- (the quest's own money isn't a coin pouch's)
   assignPouch()
   local p = pending and pending.quest == quest and pending or nil
   pending = nil
@@ -568,7 +569,7 @@ end
 -- Coin pouches: one turning up within 10 s of a turn-in (either first) came from it; one
 -- leaving the bags with money arriving within 3 s (either first) was opened, and paid that.
 -- Not at a vendor or the mailbox, where a pouch leaving and money arriving mean something else.
-local pouchCount, lastMoney, opened, gained = {}, nil, nil, nil
+local pouchCount, lastMoney, opened = {}, nil, nil
 assignPouch = function()
   if not (arrived and lastTurnIn and math.abs(arrived.t - lastTurnIn.t) < 10) then return end
   local p = ns.db.pouches[arrived.id] or { n = 0, sum = 0 }
@@ -581,7 +582,9 @@ local function busy()
     or (TradeFrame and TradeFrame:IsShown())
 end
 local function pair()
-  if not (opened and gained) or math.abs(opened.t - gained.t) > 3 then return end
+  if not (opened and gained) then return end
+  local dt = gained.t - opened.t   -- (money up to 3 s after, or a moment before: auto loot)
+  if dt > 3 or dt < -1 then return end
   local p = ns.db.pouches[opened.id] or { n = 0, sum = 0 }
   p.n, p.sum = p.n + 1, p.sum + gained.amount
   p.lo, p.hi = math.min(p.lo or gained.amount, gained.amount), math.max(p.hi or 0, gained.amount)
@@ -601,7 +604,7 @@ ns:On("BAG_UPDATE_DELAYED", function()
   for id, n in pairs(now) do
     local was = pouchCount[id]
     if was and n > was then
-      arrived = { id = id, t = GetTime() }
+      arrived, gained = { id = id, t = GetTime() }, nil   -- (money before a pouch came isn't from opening it)
       assignPouch()
     elseif was and n < was and not busy() then
       opened = { id = id, t = GetTime() }
