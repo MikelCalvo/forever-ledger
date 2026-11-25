@@ -20,11 +20,18 @@ local function saved() return ns.db and ns.db.ahPos and ns.db.ahPos[ns.CharKey()
 local function busy() return InCombatLockdown and InCombatLockdown() end
 
 -- Where the game has just put the window (it places it as it opens, and again as other
--- windows open), before the saved spot goes over it.
+-- windows open), before the saved spot goes over it. Noted every time, shown or not, unless
+-- the window is still at the saved spot (the game didn't move it): Codex review, November
+-- 25: a new place the game chose while it was closed was missed, so right-click put it back
+-- at the old one.
 local function noteGamePoint()
   local f = AuctionHouseFrame
   local p = f and { f:GetPoint(1) }
-  if p and p[1] then gamePoint = p end
+  if not (p and p[1]) then return end
+  local s = saved()
+  if s and p[1] == s[1] and p[3] == s[2] and math.floor((p[4] or 0) + 0.5) == s[3]
+    and math.floor((p[5] or 0) + 0.5) == s[4] then return end
+  gamePoint = p
 end
 
 -- The saved spot, if there is one and moving is on.
@@ -89,25 +96,23 @@ local function make()
   end)
   handle:SetScript("OnLeave", function() GameTooltip:Hide() end)
   f:HookScript("OnShow", function() C_Timer.After(0, apply) end)
-  -- After the game places its windows: the game's own spot noted, then ours. (Opening a
-  -- window places them through FramePositionDelegate's own method, not the global.)
+  -- After the game places its windows (opening one goes through the public
+  -- UpdateUIPanelPositions too, Codex review, November 25): the game's own spot noted,
+  -- then ours.
   local function placed()
-    if f:IsShown() then noteGamePoint(); apply() end
+    noteGamePoint()
+    apply()
   end
   if UpdateUIPanelPositions then hooksecurefunc("UpdateUIPanelPositions", placed) end
-  if FramePositionDelegate and FramePositionDelegate.UpdateUIPanelPositions then
-    hooksecurefunc(FramePositionDelegate, "UpdateUIPanelPositions", placed)
-  end
 end
 
 -- A frame later: Blizzard loads its auction house window the first time it opens, maybe
 -- after this event reaches us. Then the window is still where the game put it.
 local function setUp()
-  local first = not handle
   make()
   if not handle then return end
   handle:SetShown(on())
-  if first then noteGamePoint() end
+  noteGamePoint()
   apply()
 end
 ns.SetUpAHMove = setUp   -- (tests)

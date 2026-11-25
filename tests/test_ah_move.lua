@@ -55,6 +55,15 @@ T.test("Auction house window: dragged, kept per character, put back", function()
   handle.scripts.OnMouseUp(handle, "RightButton")
   T.eq(ns.db.ahPos[ns.CharKey()], nil)
   T.same(f.pts[1], GAME)
+  -- Codex review, November 25: the game picked a new place while the window was closed;
+  -- the next opening notes it, so right-click puts it there, not at the old one.
+  ns.db.ahPos[ns.CharKey()] = { "TOPLEFT", "BOTTOMLEFT", 50, 60 }
+  f.pts = { { "TOPLEFT", "UIParent", "TOPLEFT", 150, -180 } }
+  ns.SetUpAHMove()
+  T.eq(f.pts[1][4], 50, "opened at the saved spot")
+  ns.SetUpAHMove()   -- (again, already at the saved spot: that isn't the game's)
+  handle.scripts.OnMouseUp(handle, "RightButton")
+  T.same(f.pts[1], { "TOPLEFT", "UIParent", "TOPLEFT", 150, -180 })
   AuctionHouseFrame, UpdateUIPanelPositions = savedAH, savedUpdate
   ns.db.ahPos = {}
 end)
