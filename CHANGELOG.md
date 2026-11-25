@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- Price window: a dropdown of times for the graph. **Today**, **Past 24 hours**, **This week** (Monday to Sunday) and **Past 7 days** show the price hour by hour, with a mark every hour, or every midnight and noon, and a line at the time now; **Month**, **3 months**, **6 months** and **Year** show it day by day. Prices are now kept hour by hour for a week (then by day, as before).
 - Crates: a **Have** column with how many of each crate you have (bags, bank and your other characters; hover for where), and filters for the level (Apprentice to Artisan), the kind (Herbs, Ore, Ingots, Textiles, Fabrics, Parts, Curiosities) and **Only ones I have**.
 - Writs: a filter for the zone the customer is in; right-click an order to search the auction house for the writ itself; **List** also puts the writ on the Writs shopping list when you have none.
 - Writs: what each order asks for is checked in game. Taking an order reads how many it wants; handing it in notes the customer, the zone and the reputation it gave; opening a coin pouch notes what it paid (the hover shows the average for that tier). Each order's hover says what has been checked. All 150 orders and all 30 crates match the game's own items (build of November 24).

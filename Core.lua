@@ -10,7 +10,7 @@ end
 ns.PREFIX = "|cffb9a2ffForever Ledger:|r"
 
 local DEFAULTS = {
-  schema = 11,
+  schema = 12,
   charRealm = {},   -- [full name] = the realm last read for that character, for when the game gives none (schema 11)
   profAliases = {}, -- [the game's name for a profession] = English key (Professions.lua, schema 10)
   chars = {},       -- [charKey] = { name, realm, class, level, faction, updated, profs = { [profName] = { rank, max, updated, recipes = {...} } } }
@@ -48,6 +48,7 @@ local DEFAULTS = {
   suffixNames = {},   -- [version name, "of the Whale"] = the bonus ID full scans saw for it (Prices.lua)
   -- soldSnap = { t, market, items = { [itemID] = "price:count" } }: the last full scan's counts (Prices.lua), no default
   historyQty = {},    -- [marketKey][itemID] = "day:listed|..." most listed seen each day (last 30 days)
+  historyHourly = {}, -- [marketKey][itemID] = "hour:cheapest:typical:listed|..." the last 7 days hour by hour (History.lua)
   dungeons = {},      -- [dungeon name] = { runs, secs, coin, drops = { [itemID] = runs it dropped in } } (Dungeons.lua, archived November 14: kept, nothing adds to it)
   ledgerMonths = {},  -- ledger entries older than 30 days, as monthly totals per item: { { t = month start, c, k = "sale" | "buy" | "vsell" | "vbuy", id or n, q, a, cnt, mx } } (History.lua, kept a year)
   historySold2 = {},  -- [marketKey][itemID] = "day:bought:minutes:closeMinutes:expired|..." units that vanished though they couldn't have expired, and those gone from the last time band (expired) (sell speed, since October 2)
@@ -498,6 +499,7 @@ local function addUp(into, from)
   return into
 end
 OWN_MERGE.money = "sum"
+OWN_MERGE.historyHourly = "day"   -- (the same hour twice: the cheaper price, like a day)
 
 -- Renames keys (newKey) and string values (newValue) everywhere in t; two records that end
 -- up under one key are combined. kind: inside a table with its own way of combining (OWN_MERGE).
@@ -1404,6 +1406,11 @@ ns:On("ADDON_LOADED", function(name)
   if ForeverLedgerDB.schema < 11 then
     ForeverLedgerDB.charRealm = ForeverLedgerDB.charRealm or {}
     ForeverLedgerDB.schema = 11
+  end
+  -- Schema 12 (November 24): historyHourly, prices hour by hour for the last week (History.lua).
+  if ForeverLedgerDB.schema < 12 then
+    ForeverLedgerDB.historyHourly = ForeverLedgerDB.historyHourly or {}
+    ForeverLedgerDB.schema = 12
   end
   -- Settings per character (below): while a character used its own, the shared settings
   -- were also kept under settingsAccount. If the game ever saved the stand-in instead of
