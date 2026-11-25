@@ -11,13 +11,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Writs: what each order asks for is checked in game. Taking an order reads how many it wants; handing it in notes the customer, the zone and the reputation it gave; opening a coin pouch notes what it paid (the hover shows the average for that tier). Each order's hover says what has been checked. All 150 orders and all 30 crates match the game's own items (build of November 24).
 
 ### Fixed
+- Session tracker: **Gold** and **Loot** no longer run into each other when both show gold, silver and copper; the tracker widens to fit them.
 - An error at trainers (and when trading or looting a recipe) now that the game hides some characters' IDs and names from addons: the recipe book skips what it can't read.
-- Crates in other languages: a Spanish client found none of a crate's items (the names came through as "de polvo de alma"). Every crate's items are now known by item number, so no names need matching in any language. Briarthorn, Tin Ore and Large Glimmering Shard (the last line of their crates) were never found in English either. The Crates item group now holds every item a crate takes.
+- Crates in other languages: a Spanish client found none of a crate's items (the names came through as "de polvo de alma"). Every crate's items are now known by item number, so no names need matching in any language. Briarthorn, Tin Ore and Large Glimmering Shard (the last line of their crates) were never found in English either. The Crates item group now holds every item a crate takes. Filling a Journeyman or higher crate is noticed in every language (only the Apprentice sealed crates were known by item number).
 
 ### Changed
 - Dashboard: the profit tile is now **Trading profit** (auction house and vendors), and its hover adds up the rest of your money (loot, quests, training, flights, mail and trades), so it matches how your gold changed. A week of farming showed a loss there while gold went up.
 - Writs: **Per rep** is the order's cost divided by its reputation. The coin pouch is no longer taken off, since its money varies; the guides' fixed amounts made cheap orders look like they paid you.
-- Crates: **Total** and **Per Favor** no longer take the turn-in's money off (a coin pouch at best, and it varies), so Per Favor is what the crate takes, divided by its Favor: 5 for a white crate (Herbs, Ore, Textiles, Curiosities), 10 for a green one (Fabrics, Ingots, Parts), checked at each turn-in. Every crate counted 10 before.
+- Crates: **Total** and **Per Favor** no longer take the turn-in's money off (a coin pouch at best, and it varies), so Per Favor is what the crate takes, divided by its Favor: 5 a level for gathered goods (Herbs, Ore, Textiles, Curiosities: Apprentice 5 to Artisan 20), twice that for crafted goods (Fabrics, Ingots, Parts), checked at each turn-in, in a new **Favor** column. Every crate counted 10 before. The column read Net cost; it's **Total** now.
 
 ## [0.29.0] - 2026-11-22
 

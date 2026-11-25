@@ -469,6 +469,15 @@ drawTracker = function()
   else
     tracker.loot:SetText(("|cff999999Loot|r %s"):format(ns.Money(st.loot)))
   end
+  -- Gold and Loot side by side ran into each other with gold, silver and copper in both
+  -- (Frank's screenshot, November 24): the tracker grows to fit them, never narrower.
+  if not ns.db.settings.sessionSmall then
+    local function textW(fs) return (fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth()) or fs:GetStringWidth() or 0 end
+    local lootW = math.min(textW(tracker.loot), 160)
+    tracker.loot:SetWidth(math.max(lootW, 1))
+    local need = 8 + textW(tracker.gold) + 14 + lootW + 8
+    tracker:SetWidth(math.max(W_MINI, math.ceil(need)))
+  end
   if ns.SessionPaceSample then ns.SessionPaceSample(s, st) end   -- (the window's graph)
   if ns.DrawSessionWindow then ns:DrawSessionWindow(st, s, flashID) end
 end

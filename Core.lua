@@ -34,7 +34,7 @@ local DEFAULTS = {
   favor = {},       -- [charKey] = Merchant's Favor held
   writSeen = {},    -- [writ questID] = { qty, who, map, zone, rep, money, t } learned from the quest (Writs.lua)
   pouches = {},     -- [Coin Pouch itemID] = { n, sum, lo, hi, from = writ tier key or "crate" } (Writs.lua)
-  crateFavorSeen = {},   -- [crate quality] = Merchant's Favor a turn-in gave (Crates.lua)
+  crateFavorSeen = {},   -- [sealed crate itemID] = Merchant's Favor its turn-in gave (Crates.lua)
   inventory = {},   -- [charKey] = { bags = { [itemID] = count }, bank = { ... }, t, bankT, via = sync partner's name if theirs } (Inventory.lua)
   itemNames = {},   -- [itemID] = name, remembered so lists don't flicker (Prices.lua ns.ItemName)
   disenchants = {}, -- { t, id, ilvl, q, cls, mats = { [itemID] = count } } (Disenchant.lua, last 1000)

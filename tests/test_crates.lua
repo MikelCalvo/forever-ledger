@@ -88,16 +88,24 @@ T.test("Crates: a tooltip line's color code isn't part of the item name", functi
   T.eq(#b, 2); T.eq(b[2][1].name, "Tin Ore")
 end)
 
-T.test("Crates: Favor by quality, learned from a turn-in", function()
+T.test("Crates: Favor by level and kind, learned from a turn-in", function()
   T.eq(ns.CrateQuality(248682), 1); T.eq(ns.CrateQuality(248713), 2)
+  T.eq(ns.CrateSealedFor(248682), 248765, "Apprentice Herbs: white Sealed Apprentice Crate")
+  T.eq(ns.CrateSealedFor(248702), 248770, "Apprentice Fabrics: green Sealed Apprentice Crate")
+  T.eq(ns.CrateSealedFor(248713), 248773, "Artisan Parts: green Sealed Artisan Crate")
+  T.ok(ns.SEALED_CRATE_IDS[248768] and ns.SEALED_CRATE_IDS[248779])
   local seen = ns.db.crateFavorSeen
   ns.db.crateFavorSeen = {}
   local ok, err = pcall(function()
     T.eq((ns.CrateFavor(248682)), 5); T.eq((ns.CrateFavor(248702)), 10)
-    ns.CrateLearnFavor(2, nil, 100); ns.CrateLearnFavor(nil, 12, 102)
+    T.eq((ns.CrateFavor(248689)), 10, "Journeyman gathered"); T.eq((ns.CrateFavor(248709)), 30, "Expert crafted")
+    T.eq((ns.CrateFavor(248699)), 20); T.eq((ns.CrateFavor(248713)), 40)
+    ns.CrateLearnFavor(248770, nil, 100); ns.CrateLearnFavor(nil, 12, 102)
     T.eq((ns.CrateFavor(248702)), 12, "what the turn-in gave")
     T.eq(select(2, ns.CrateFavor(248702)), true)
-    ns.CrateLearnFavor(1, nil, 200); ns.CrateLearnFavor(nil, 7, 210)
+    T.eq((ns.CrateFavor(248703)), 12, "same sealed crate, same Favor")
+    T.eq((ns.CrateFavor(248705)), 20, "another sealed crate keeps its own")
+    ns.CrateLearnFavor(248765, nil, 200); ns.CrateLearnFavor(nil, 7, 210)
     T.eq((ns.CrateFavor(248682)), 5, "too far apart to be the same turn-in")
   end)
   ns.db.crateFavorSeen = seen
