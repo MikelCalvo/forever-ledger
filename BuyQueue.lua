@@ -2482,11 +2482,21 @@ local BUY_MODES = { { value = "click", label = "Click to buy" }, { value = "scro
   { value = "screen", label = "Scroll anywhere" } }
 local LIST_BUY_MODES = { BUY_MODES[1], BUY_MODES[2] }
 local screenWheel
+-- Only at the auction house (Codex review of baf7505, P3: the panel open on its own
+-- caught the wheel for flips it couldn't buy).
 local function screenWheelWanted(visible)
-  return (S().screen and S().wheel and view() == "flips" and visible
+  return (S().screen and S().wheel and view() == "flips" and visible and ns:IsAHOpen()
     and ((Q.toBuy or 0) > 0 or (Q.state ~= nil and Q.state ~= "idle"))) and true or false
 end
 ns.ScreenWheelWanted = screenWheelWanted   -- (tests)
+-- A tick: checked again first, not only at the last redraw (Codex review of baf7505, P2:
+-- turned off, it still bought until the next redraw).
+local function onScreenWheel(self)
+  if not screenWheelWanted(queueView and queueView:IsVisible()) then self:Hide(); return end
+  local L = queueView and queueView.lanes and queueView.lanes[view()]
+  if L and L.wheel then L.wheel() end
+end
+ns.ScreenWheelTick = onScreenWheel   -- (tests)
 local function updateScreenWheel()
   local v = queueView
   if not screenWheelWanted(v and v:IsVisible()) then
@@ -2499,13 +2509,11 @@ local function updateScreenWheel()
     screenWheel:SetFrameStrata("FULLSCREEN")
     screenWheel:EnableMouse(false)
     screenWheel:EnableMouseWheel(true)
-    screenWheel:SetScript("OnMouseWheel", function()
-      local L = queueView and queueView.lanes and queueView.lanes[view()]
-      if L and L.wheel then L.wheel() end
-    end)
+    screenWheel:SetScript("OnMouseWheel", onScreenWheel)
   end
   screenWheel:Show()
 end
+ns:On("AUCTION_HOUSE_CLOSED", function() C_Timer.After(0, updateScreenWheel) end)
 
 refreshQueue = function()
   local v = queueView
