@@ -1209,3 +1209,22 @@ T.test("Buy queue: a new flip's count is looked up while the queue waits for you
   rawset(C_AuctionHouse, "IsThrottledMessageSystemReady", nil)
   Q.forceActive, Q.cur, Q.state, Q.lanes = nil, nil, "idle", lanes
 end)
+
+-- Frank, November 25: Scroll to buy anywhere on screen, only while there's something to buy.
+T.test("Buy queue: the wheel anywhere on screen only while there's something to buy", function()
+  local s, bq = ns.db.settings, ns.db.settings.buyQueue
+  local was = { s.wheelScreen, bq.wheel, Q.toBuy, Q.state }
+  s.wheelScreen, bq.wheel, Q.toBuy, Q.state = true, true, 2, "idle"
+  T.eq(ns.ScreenWheelWanted(true), true)
+  T.eq(ns.ScreenWheelWanted(false), false, "not with the Buy queue off screen")
+  Q.toBuy = 0
+  T.eq(ns.ScreenWheelWanted(true), false, "nothing to buy: the wheel works as usual")
+  Q.state = "confirm"
+  T.eq(ns.ScreenWheelWanted(true), true, "but not in the middle of a purchase")
+  Q.toBuy, Q.state = 2, "idle"
+  bq.wheel = false
+  T.eq(ns.ScreenWheelWanted(true), false, "Scroll to buy unticked")
+  bq.wheel, s.wheelScreen = true, false
+  T.eq(ns.ScreenWheelWanted(true), false, "the setting off")
+  s.wheelScreen, bq.wheel, Q.toBuy, Q.state = was[1], was[2], was[3], was[4]
+end)

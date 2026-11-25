@@ -1725,7 +1725,8 @@ local function statusText()
   local name = e and ("|cffffffff" .. ns.ItemName(e.id) .. (e.suffix and (" " .. ns:VersionLabel(e.suffix)) or "") .. "|r") or ""
   local st = Q.state
   -- How to buy, said where you'd look (Magic, October 3: "which area do I scroll in?").
-  local how = S().wheel and (Q.armed == "flips" and "Scroll anywhere over Vendor flips, or click Buy." or "Scroll over this strip, or click Buy.")
+  local how = S().wheel and (ns.db.settings.wheelScreen and "Scroll anywhere on screen, or click Buy."
+    or Q.armed == "flips" and "Scroll anywhere over Vendor flips, or click Buy." or "Scroll over this strip, or click Buy.")
     or "Click Buy (or tick Scroll to buy and scroll here)."
   local GREY = "|cff888888%s|r"
   if st == "wait" then
@@ -2173,7 +2174,7 @@ local function buildQueueView(parent)
   wheel:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     ns:TooltipAddLine("Scroll to buy", 1, 1, 1)
-    ns:TooltipAddLine("Each tick of the mouse wheel, up or down, buys the next item: anywhere over Vendor flips (drag the bar on the right to scroll its list), or over the top strip of Shopping lists. A stack of materials is confirmed in the same tick (unless Confirm stacks with a second click is ticked in Settings, Auction house). It keeps working while the list is empty, so new flips can be bought the moment they show up. Off: only clicking Buy buys.", nil, nil, nil, true)
+    ns:TooltipAddLine("Each tick of the mouse wheel, up or down, buys the next item: anywhere over Vendor flips (drag the bar on the right to scroll its list), or over the top strip of Shopping lists. A stack of materials is confirmed in the same tick (unless Confirm stacks with a second click is ticked in Settings, Auction house). It keeps working while the list is empty, so new flips can be bought the moment they show up. Off: only clicking Buy buys. Settings, Auction house: Scroll to buy anywhere on screen.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   wheel:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -2393,7 +2394,8 @@ local function fillLane(L)
     L:SetScript("OnUpdate", nil)
   end
   L.title:SetText(ns.LocalizeText("%s  |cff888888%d to buy|r%s"):format(ns.LocalizeText(d.title), ready,
-    wheel and ("   |cff" .. (lit and hex(c) or "888888") .. (d.key == "flips" and "scroll anywhere here to buy|r" or "scroll here to buy|r"))
+    wheel and ("   |cff" .. (lit and hex(c) or "888888") .. (ns.db.settings.wheelScreen and "scroll anywhere on screen to buy|r"
+      or d.key == "flips" and "scroll anywhere here to buy|r" or "scroll here to buy|r"))
       or "   |cff888888click Buy, or tick Scroll to buy|r"))
   local a, b, label
   if armed then
@@ -2459,6 +2461,41 @@ local function fillLane(L)
   L.sf.UpdateScrollBar()
 end
 
+-- Scroll to buy anywhere on screen (Frank, November 25; settings.wheelScreen): while the
+-- Buy queue is on screen with something to buy (or a purchase under way) and Scroll to buy
+-- is ticked, a frame over the whole screen takes the mouse wheel, not clicks or hovers, so
+-- each tick buys wherever the pointer is, as it does over Vendor flips. With nothing to
+-- buy it goes, and the wheel scrolls chat, lists and the camera as usual. (Frank's test,
+-- November 25: WoW already takes the wheel from whatever window the pointer is over,
+-- active or not, so this adds no new way to buy by accident.) The earlier "scroll
+-- anywhere" key binding (October 2, above) only reached the world; this frame is above
+-- the auction house window and the panel.
+local screenWheel
+local function screenWheelWanted(visible)
+  return (ns.db.settings.wheelScreen and S().wheel and visible
+    and ((Q.toBuy or 0) > 0 or (Q.state ~= nil and Q.state ~= "idle"))) and true or false
+end
+ns.ScreenWheelWanted = screenWheelWanted   -- (tests)
+local function updateScreenWheel()
+  local v = queueView
+  if not screenWheelWanted(v and v:IsVisible()) then
+    if screenWheel then screenWheel:Hide() end
+    return
+  end
+  if not screenWheel then
+    screenWheel = CreateFrame("Frame", nil, UIParent)
+    screenWheel:SetAllPoints(UIParent)
+    screenWheel:SetFrameStrata("FULLSCREEN")
+    screenWheel:EnableMouse(false)
+    screenWheel:EnableMouseWheel(true)
+    screenWheel:SetScript("OnMouseWheel", function()
+      local L = queueView and queueView.lanes and queueView.lanes[view()]
+      if L and L.wheel then L.wheel() end
+    end)
+  end
+  screenWheel:Show()
+end
+
 refreshQueue = function()
   local v = queueView
   if not v or not v:IsVisible() then return end
@@ -2478,6 +2515,7 @@ refreshQueue = function()
       profit and ns.LocalizeText(", profit %s"):format(profit >= 0 and ("|cff7fd39c" .. money(profit) .. "|r") or ("|cffee8597-" .. money(-profit) .. "|r")) or "")
     or ("%d to buy"):format(total))
   Q.toBuy = total
+  updateScreenWheel()
   if view() == "flips" then
     badgeIds = {}
     for _, x in ipairs(Q.lanes and Q.lanes.flips or {}) do
@@ -3927,6 +3965,7 @@ local function ensureSide()
   table.insert(ns.scaledWindows, side)
   side:SetScale(((ns.db and ns.db.settings.uiScale) or 100) / 100)
   queueView = buildQueueView(side)
+  queueView:HookScript("OnHide", updateScreenWheel)   -- (off with the view)
   listsView = buildListsView(side)
   ns:DisenchantFinderFrame(side)
   side:SetScript("OnShow", function()

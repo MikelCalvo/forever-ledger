@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- Auction house: **Scroll to buy anywhere on screen** (Settings → Auction house, off at first). With Scroll to buy ticked and something to buy in the Buy queue, each tick of the mouse wheel buys wherever the pointer is, not only over Vendor flips. With nothing to buy, the wheel works as usual.
 - Auction house: **drag the auction house window by its top edge** to move it. Each character keeps its own spot; right-click the top edge to put it back. Settings → Auction house → **Let me move the auction house window** (turned off once when BlizzMove or MoveAny is installed).
 - Sessions: **each login and each day are recorded on their own**, without starting a session: gold in and out by where it came from, and what you loot. In the Ledger's Sessions sub-tab, a dropdown switches between **Started by you**, **Each login** and **Each day**; the one counting now is on top, and characters you played earlier today are listed too. A /reload carries on the same login. Logins are kept 30 days, days a year.
 - Settings, Sessions: **Start a session when I log in**.
