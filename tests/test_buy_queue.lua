@@ -1211,10 +1211,10 @@ T.test("Buy queue: a new flip's count is looked up while the queue waits for you
 end)
 
 -- Frank, November 25: Scroll to buy anywhere on screen, only while there's something to buy.
-T.test("Buy queue: the wheel anywhere on screen only while there's something to buy", function()
-  local s, bq = ns.db.settings, ns.db.settings.buyQueue
-  local was = { s.wheelScreen, bq.wheel, Q.toBuy, Q.state }
-  s.wheelScreen, bq.wheel, Q.toBuy, Q.state = true, true, 2, "idle"
+T.test("Buy queue: Scroll anywhere only on Vendor flips, while there's something to buy", function()
+  local bq = ns.db.settings.buyQueue
+  local was = { bq.screen, bq.wheel, bq.view, Q.toBuy, Q.state }
+  bq.screen, bq.wheel, bq.view, Q.toBuy, Q.state = true, true, "flips", 2, "idle"
   T.eq(ns.ScreenWheelWanted(true), true)
   T.eq(ns.ScreenWheelWanted(false), false, "not with the Buy queue off screen")
   Q.toBuy = 0
@@ -1224,7 +1224,9 @@ T.test("Buy queue: the wheel anywhere on screen only while there's something to 
   Q.toBuy, Q.state = 2, "idle"
   bq.wheel = false
   T.eq(ns.ScreenWheelWanted(true), false, "Scroll to buy unticked")
-  bq.wheel, s.wheelScreen = true, false
-  T.eq(ns.ScreenWheelWanted(true), false, "the setting off")
-  s.wheelScreen, bq.wheel, Q.toBuy, Q.state = was[1], was[2], was[3], was[4]
+  bq.wheel, bq.screen = true, false
+  T.eq(ns.ScreenWheelWanted(true), false, "Scroll to buy, not anywhere")
+  bq.screen, bq.view = true, "lists"
+  T.eq(ns.ScreenWheelWanted(true), false, "Shopping lists don't scroll anywhere")
+  bq.screen, bq.wheel, bq.view, Q.toBuy, Q.state = was[1], was[2], was[3], was[4], was[5]
 end)
