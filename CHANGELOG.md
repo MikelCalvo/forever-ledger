@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Writs: what each order asks for is checked in game. Taking an order reads how many it wants; handing it in notes the customer, the zone and the reputation it gave; opening a coin pouch notes what it paid (the hover shows the average for that tier). Each order's hover says what has been checked. All 150 orders and all 30 crates match the game's own items (build of November 24).
 
 ### Fixed
+- Professions in other languages: trainers you've visited are matched to the Classic list by NPC number (they showed twice), Classic sources' map pins work (the zone names are English), and enchants are known by their profession, not their English name.
 - Session tracker: **Gold** and **Loot** no longer run into each other when both show gold, silver and copper; the tracker widens to fit them.
 - An error at trainers (and when trading or looting a recipe) now that the game hides some characters' IDs and names from addons: the recipe book skips what it can't read.
 - Crates in other languages: a Spanish client found none of a crate's items (the names came through as "de polvo de alma"). Every crate's items are now known by item number, so no names need matching in any language. Briarthorn, Tin Ore and Large Glimmering Shard (the last line of their crates) were never found in English either. The Crates item group now holds every item a crate takes. Filling a Journeyman or higher crate is noticed in every language (only the Apprentice sealed crates were known by item number).
