@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-25
+
+### Highlights
+- Δ **Prices hour by hour**: the price window shows today and this week hour by hour, with every range from Today to a Year in one dropdown.
+- Δ **Sessions on their own**: each login and each day are recorded without starting a session, listed in the Ledger's Sessions; or have a session start when you log in.
+- + **Move the auction house window**: drag it by its top edge; each character keeps its own spot, and right-click puts it back.
+- + **Scroll anywhere**: a How to buy dropdown on the Buy tab: click to buy, scroll to buy, or for Vendor flips scroll anywhere on screen while there's something to buy.
+- + **Crates and writs**: how many of each crate you have, with filters, Favor by crate level and kind, and each writ order checked against the game.
+- ✓ **Every language**: crates, trainers, map pins and enchants now work on clients in any language.
+
 ### Added
 - Buy queue: a dropdown at the top right of the view, in place of the Scroll to buy box, picks how you buy: **Click to buy**, **Scroll to buy**, or for Vendor flips **Scroll anywhere**: each tick of the mouse wheel buys wherever the pointer is, not only over Vendor flips. With nothing to buy, the wheel works as usual.
 - Auction house: **drag the auction house window by its top edge** to move it. Each character keeps its own spot; right-click the top edge to put it back. Settings → Auction house → **Let me move the auction house window** (turned off once when BlizzMove or MoveAny is installed).
