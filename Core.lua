@@ -29,11 +29,12 @@ local DEFAULTS = {
   recipeSources = {}, -- [recipe name lowercased][kind..npc] = { kind, conf = "seen", npc, npcID, mapID, x, y, zone, cost, currency, skill, limited, t }
   vendors = {},     -- [npcID] = { name, mapID, x, y, zone, t, trainer }
   recipeTypes = {}, -- [recipeID] = "shuffle" | "sells" | "notsale" | "loss", the player's own choice (RecipesTab.lua)
-  crates = {},      -- [crate itemID] = { name, level, bundles = { { { qty, name }, ... } } } read from tooltips
+  crates = {},      -- [crate itemID] = { name, level, bundles = { { { qty =, id =, name = }, ... } } } (Crates.lua CRATE_BUNDLES, else its tooltip)
   vendorSellChanged = {}, -- [itemID] = local day its vendor sell price was seen to change (older price history is ignored)
   favor = {},       -- [charKey] = Merchant's Favor held
   writSeen = {},    -- [writ questID] = { qty, who, map, zone, rep, money, t } learned from the quest (Writs.lua)
   pouches = {},     -- [Coin Pouch itemID] = { n, sum, lo, hi, from = writ tier key or "crate" } (Writs.lua)
+  crateFavorSeen = {},   -- [crate quality] = Merchant's Favor a turn-in gave (Crates.lua)
   inventory = {},   -- [charKey] = { bags = { [itemID] = count }, bank = { ... }, t, bankT, via = sync partner's name if theirs } (Inventory.lua)
   itemNames = {},   -- [itemID] = name, remembered so lists don't flicker (Prices.lua ns.ItemName)
   disenchants = {}, -- { t, id, ilvl, q, cls, mats = { [itemID] = count } } (Disenchant.lua, last 1000)
