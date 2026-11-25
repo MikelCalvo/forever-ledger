@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- Auction house: **drag the auction house window by its top edge** to move it. Each character keeps its own spot; right-click the top edge to put it back. Settings → Auction house → **Let me move the auction house window** (turned off once when BlizzMove or MoveAny is installed).
 - Sessions: **each login and each day are recorded on their own**, without starting a session: gold in and out by where it came from, and what you loot. In the Ledger's Sessions sub-tab, a dropdown switches between **Started by you**, **Each login** and **Each day**; the one counting now is on top, and characters you played earlier today are listed too. A /reload carries on the same login. Logins are kept 30 days, days a year.
 - Settings, Sessions: **Start a session when I log in**.
 - Price window: a dropdown of times for the graph. **Today**, **Past 24 hours**, **This week** (Monday to Sunday) and **Past 7 days** show the price hour by hour, with a mark every hour, or every midnight and noon, and a line at the time now; **Month**, **3 months**, **6 months** and **Year** show it day by day. Prices are now kept hour by hour for a week (then by day, as before); days from before that show one point each.
