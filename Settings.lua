@@ -267,6 +267,9 @@ local PAGES = {
       { key = "sessionValue", label = "Count loot at", kind = "choice", options = {
           { "best", "Best of auction and vendor" }, { "vendor", "Vendor only" } },
         help = "What a session counts each looted item as worth. Auction house prices are after the cut; items that bind when picked up always count at vendor price. Start a session with /fl session start, or Ctrl-click the minimap button." },
+      { sub = "Starting" },
+      { key = "sessionAtLogin", label = "Start a session when I log in", kind = "check",
+        help = "Starts a session, with its tracker, each time this character logs in (one already running carries on). Each login and each day are also recorded on their own without one: Ledger, Sessions." },
     } },
 
   { group = "Other" },

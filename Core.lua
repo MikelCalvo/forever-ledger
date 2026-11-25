@@ -39,7 +39,7 @@ local DEFAULTS = {
   itemNames = {},   -- [itemID] = name, remembered so lists don't flicker (Prices.lua ns.ItemName)
   disenchants = {}, -- { t, id, ilvl, q, cls, mats = { [itemID] = count } } (Disenchant.lua, last 1000)
   sync = {},        -- [partner name lowercased] = { sentUpTo = time } (Sync.lua; partner in settings.syncPartner)
-  sessions = {},    -- finished sessions (Sessions.lua, archived November 13: kept and synced, no longer shown)
+  sessions = {},    -- finished sessions you started (Sessions.lua; the Ledger's Sessions), kept and synced
   history = {},       -- [marketKey][itemID] = "day:cheapest:typical|..." (90 days, History.lua)
   historyWeekly = {}, -- [marketKey][itemID] = "week:cheapest:typical:days|..." (52 weeks)
   historyVersions = {},       -- [marketKey][itemID][suffix] = "day:cheapest:listed|..." gear versions from full scans (90 days)
@@ -49,6 +49,8 @@ local DEFAULTS = {
   -- soldSnap = { t, market, items = { [itemID] = "price:count" } }: the last full scan's counts (Prices.lua), no default
   historyQty = {},    -- [marketKey][itemID] = "day:listed|..." most listed seen each day (last 30 days)
   historyHourly = {}, -- [marketKey][itemID] = "hour:cheapest:typical:listed|..." the last 7 days hour by hour (History.lua)
+  autoLive = { days = {} }, -- the automatic session records counting now: { login = record, days = { [charKey] = record } } (Sessions.lua)
+  autoSessions = {},  -- finished automatic records, each login (30 days) and each day (a year), like sessions (Sessions.lua)
   dungeons = {},      -- [dungeon name] = { runs, secs, coin, drops = { [itemID] = runs it dropped in } } (Dungeons.lua, archived November 14: kept, nothing adds to it)
   ledgerMonths = {},  -- ledger entries older than 30 days, as monthly totals per item: { { t = month start, c, k = "sale" | "buy" | "vsell" | "vbuy", id or n, q, a, cnt, mx } } (History.lua, kept a year)
   historySold2 = {},  -- [marketKey][itemID] = "day:bought:minutes:closeMinutes:expired|..." units that vanished though they couldn't have expired, and those gone from the last time band (expired) (sell speed, since October 2)
@@ -58,7 +60,7 @@ local DEFAULTS = {
   shopping = { lists = {} }, -- shopping lists: { lists = { { name, on, items = { { id, max, qty } } } }, current } (ShoppingLists.lua)
   watchItems = {},   -- [itemID] = { max = copper or nil for the vendor price, t = added }: watched items (Watched.lua)
   groups = { user = {}, added = {}, removed = {}, rules = {}, saved = {}, nextId = 1 }, -- groups and rules, account-wide (Groups.lua: shapes there)
-  settings = { source = "auto", maxAgeHours = 12, tooltip = true, debug = false, watch = {}, ahCut = 5, margin = 10, actionSeconds = 3, skipChars = {}, minimap = true, minimapAngle = 200, dealSound = true, dealScreen = true, dealChat = true, sellGuard = true, watchResume = true, stackTwoClicks = false, sessionValue = "best", saleSound = true, deRolls = true, keepGold = 0, postUndercut = 0, vendorItemsAH = false, undercutAlerts = true, undercutSound = true, updateNotice = true, priceHelper = true, soldSummary = true,
+  settings = { source = "auto", maxAgeHours = 12, tooltip = true, debug = false, watch = {}, ahCut = 5, margin = 10, actionSeconds = 3, skipChars = {}, minimap = true, minimapAngle = 200, dealSound = true, dealScreen = true, dealChat = true, sellGuard = true, watchResume = true, stackTwoClicks = false, sessionValue = "best", sessionAtLogin = false, saleSound = true, deRolls = true, keepGold = 0, postUndercut = 0, vendorItemsAH = false, undercutAlerts = true, undercutSound = true, updateNotice = true, priceHelper = true, soldSummary = true,
     dealUsualPct = 20, dealWindow = "all", dealVendorPct = 10, dealVendorMin = 0, dealHistory = "auto", dealUsualMin = 1000, dealShowThin = false, dealsSort = {}, window = {}, ahHighlight = true, ahTabs = true, dashboard = {}, ledger = {}, goldMaking = {}, writs = {}, crateTab = {}, quickDE = true, quickDEKey = "ctrlalt", deFinder = {}, crates = true, recipes = {}, openFlips = true, customers = true, customerSound = true, customerWindow = true, customerChat = false,
     svcCrafting = true, svcFood = true, svcPortal = true, svcSummon = true, svcLockpick = true,
     -- Buy queue (BuyQueue.lua): what goes in it, scroll anywhere to buy, the side panel's tab.
@@ -1407,7 +1409,8 @@ ns:On("ADDON_LOADED", function(name)
     ForeverLedgerDB.charRealm = ForeverLedgerDB.charRealm or {}
     ForeverLedgerDB.schema = 11
   end
-  -- Schema 12 (November 24): historyHourly, prices hour by hour for the last week (History.lua).
+  -- Schema 12 (November 24): historyHourly, prices hour by hour for the last week (History.lua);
+  -- autoLive and autoSessions, a record of each login and day (Sessions.lua). Both start empty.
   if ForeverLedgerDB.schema < 12 then
     ForeverLedgerDB.historyHourly = ForeverLedgerDB.historyHourly or {}
     ForeverLedgerDB.schema = 12
