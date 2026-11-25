@@ -441,6 +441,8 @@ end
 -- of the same day can't just keep the cheaper row (Codex review, November 7):
 --   day  "day:cheapest:listed"            the cheaper price and the most listed
 --   week "week:cheapest:listedSum:days"   the row covering more days, with the cheaper price
+--   hour "hour:cheapest:typical:listed"   (historyHourly) the cheaper price, the most listed
+--                                         and the typical price of the row that saw more
 -- (Two weekly summaries of one week can't be added up without knowing which days each
 -- covers, so the fuller one stands.) All-time figures: combineAllTime above.
 local OWN_MERGE = { historyVersions = "day", historyVersionsWeekly = "week", historyAll = "all" }
@@ -459,6 +461,12 @@ local function combinePeriods(a, b, kind)
           keys[#keys + 1] = key
         elseif kind == "day" then
           have[2], have[3] = math.min(have[2] or f[2], f[2] or have[2]), math.max(have[3] or 0, f[3] or 0)
+        elseif kind == "hour" then
+          -- Which came later in the hour isn't known: the typical price of the one that saw
+          -- more listed (the same count: the lower), so either order gives the same row.
+          local hq, fq = have[4] or 0, f[4] or 0
+          if fq > hq or (fq == hq and (f[3] or math.huge) < (have[3] or math.huge)) then have[3] = f[3] or have[3] end
+          have[2], have[4] = math.min(have[2] or f[2], f[2] or have[2]), math.max(hq, fq)
         else
           local cheapest = math.min(have[2] or f[2], f[2] or have[2])
           if (f[4] or 0) > (have[4] or 0) then byKey[key] = f; have = f end
@@ -501,7 +509,7 @@ local function addUp(into, from)
   return into
 end
 OWN_MERGE.money = "sum"
-OWN_MERGE.historyHourly = "day"   -- (the same hour twice: the cheaper price, like a day)
+OWN_MERGE.historyHourly = "hour"   -- (Codex review, November 24: not the version-day layout)
 
 -- Renames keys (newKey) and string values (newValue) everywhere in t; two records that end
 -- up under one key are combined. kind: inside a table with its own way of combining (OWN_MERGE).

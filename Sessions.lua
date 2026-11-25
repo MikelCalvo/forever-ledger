@@ -730,20 +730,30 @@ function ns.AutoSessionEntry(rec, kind, running)
   return { kind = kind, c = rec.char, t = rec.t, stop = rec.out or time(), secs = st.secs, earned = st.earned,
     spent = st.spent, loot = loot, top = top, money = rec.money, day = rec.day, running = running or nil }
 end
--- Into autoSessions, unless nothing happened in it; older ones than AUTO_KEEP go.
-local function finishAuto(rec, kind)
-  if not rec then return end
-  local e = ns.AutoSessionEntry(rec, kind)
-  if e.earned == 0 and e.spent == 0 and e.loot == 0 then return end
-  ns.db.autoSessions = ns.db.autoSessions or {}
-  local list = ns.db.autoSessions
-  list[#list + 1] = e
+-- Older ones than AUTO_KEEP go, and the oldest past AUTO_MAX. Run at each finish and each
+-- login, whether or not anything was kept (Codex review, November 24: an empty finish
+-- skipped it).
+local function trimAuto()
+  local list = ns.db and ns.db.autoSessions
+  if not list then return end
   local now, i = time(), 1
   while list[i] do
     local x = list[i]
     if (x.stop or x.t or 0) < now - (AUTO_KEEP[x.kind] or AUTO_KEEP.day) then table.remove(list, i) else i = i + 1 end
   end
   while #list > AUTO_MAX do table.remove(list, 1) end
+end
+
+-- Into autoSessions, unless nothing happened in it.
+local function finishAuto(rec, kind)
+  if not rec then return end
+  local e = ns.AutoSessionEntry(rec, kind)
+  if e.earned ~= 0 or e.spent ~= 0 or e.loot ~= 0 then
+    ns.db.autoSessions = ns.db.autoSessions or {}
+    local list = ns.db.autoSessions
+    list[#list + 1] = e
+  end
+  trimAuto()
 end
 ns.FinishAutoSession = finishAuto   -- (tests)
 
@@ -787,6 +797,7 @@ ns:On("PLAYER_ENTERING_WORLD", function(isLogin, isReload)
     end
   end
   rollDays()
+  if fresh then trimAuto() end
   -- This login: a /reload carries on the one before it, anything else starts a new one.
   local L = a.login
   if fresh or not (L and L.char == me) then
@@ -823,13 +834,22 @@ ns:On("PLAYER_LOGOUT", function()
   end
 end)
 
--- The records counting now on this character, as Ledger rows: { login entry, day entry }.
+-- The records not yet finished, as Ledger rows: this character's login and day (running =
+-- true), and today's days of characters that logged out earlier today, as they were at their
+-- logout (Codex review, November 24: those were missing from Each day until midnight).
 function ns:AutoSessionsRunning()
   local a = ns.db and ns.db.autoLive
   local me, out = ns.CharKey(), {}
   if not a then return out end
   if a.login and a.login.char == me and a.login.resume then out[#out + 1] = ns.AutoSessionEntry(a.login, "login", true) end
-  local d = a.days and a.days[me]
-  if d and d.resume then out[#out + 1] = ns.AutoSessionEntry(d, "day", true) end
+  local today = ns.LocalDay()
+  for c, d in pairs(a.days or {}) do
+    if c == me and d.resume then
+      out[#out + 1] = ns.AutoSessionEntry(d, "day", true)
+    elseif d.day == today and not d.resume then
+      local e = ns.AutoSessionEntry(d, "day")
+      if e.earned ~= 0 or e.spent ~= 0 or e.loot ~= 0 then out[#out + 1] = e end
+    end
+  end
   return out
 end

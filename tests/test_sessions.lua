@@ -346,3 +346,37 @@ T.test("Sessions: automatic records are kept 30 days (logins) and a year (days)"
   T.eq(ns.db.autoSessions[2].kind, "day")
   ns.db.autoSessions = {}
 end)
+
+-- Codex review, November 24: an empty finish skipped the age limits.
+T.test("Sessions: old automatic records go even when the finished one is empty", function()
+  ns.db.autoSessions = {
+    { kind = "login", t = S.now - 40 * 86400, stop = S.now - 40 * 86400, earned = 1 },
+    { kind = "day", t = S.now - 400 * 86400, stop = S.now - 400 * 86400, earned = 1 },
+    { kind = "day", t = S.now - 20 * 86400, stop = S.now - 20 * 86400, earned = 1 },
+  }
+  ns.FinishAutoSession({ t = S.now, active = 100, char = ns.CharKey(), money = {}, loot = {} }, "login")
+  T.eq(#ns.db.autoSessions, 1)
+  T.eq(ns.db.autoSessions[1].stop, S.now - 20 * 86400)
+  ns.db.autoSessions = {}
+end)
+
+-- Codex review, November 24: a character played earlier today was missing from Each day
+-- until midnight.
+T.test("Sessions: today's days of characters played earlier show in the Ledger", function()
+  withValues(function()
+    local today = ns.LocalDay()
+    ns.db.autoSessions = {}
+    ns.db.autoLive = { days = {
+      ["Other Alt-PvE"] = { day = today, t = S.now - 7200, active = 1800, out = S.now - 3600, char = "Other Alt-PvE",
+        money = { vendorSell = 100 }, loot = {}, final = { loot = 0, top = {} } },
+      ["Quiet Alt-PvE"] = { day = today, t = S.now - 7200, active = 60, out = S.now - 7000, char = "Quiet Alt-PvE", money = {}, loot = {} },
+      ["Old Alt-PvE"] = { day = today - 1, t = S.now - 90000, active = 60, out = S.now - 89000, char = "Old Alt-PvE",
+        money = { vendorSell = 5 }, loot = {} },
+    } }
+    local rows = ns:AutoSessionsRunning()
+    T.eq(#rows, 1, "the one with money in it, from today")
+    T.eq(rows[1].c, "Other Alt-PvE"); T.eq(rows[1].earned, 100); T.eq(rows[1].running, nil, "not counting now")
+    T.eq(rows[1].secs, 1800); T.eq(rows[1].stop, S.now - 3600)
+  end)
+  ns.db.autoLive, ns.db.autoSessions = { days = {} }, {}
+end)

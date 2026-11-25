@@ -271,6 +271,33 @@ function ns.PriceHourAxis(range, now)
   return from, to, marks
 end
 
+-- An hour-by-hour range's points: the hours saved, and for each day in the range with no
+-- hours (before hour-by-hour saving began, November 24) that day's own point, at its noon
+-- (today's at most at the time now), marked allDay (Frank, November 25: the day and week
+-- graphs were empty until a month). hours from ns:PriceSeriesHourly, days from ns:PriceSeries.
+function ns.PriceHourPoints(hours, days, from, to, now)
+  now = now or time()
+  local out, hasHours = {}, {}
+  for _, p in ipairs(hours) do
+    out[#out + 1] = p
+    hasHours[ns.LocalDay(p.hour * 3600)] = true
+  end
+  local d0 = ns.LocalDay(now)
+  for _, p in ipairs(days) do
+    if not p.week and not hasHours[p.day] then
+      local at = addDays(midnight(now), p.day - d0) + 12 * 3600
+      if p.day == d0 then at = math.min(at, now) end
+      if at >= from and at <= to then
+        out[#out + 1] = { day = p.day, at = at, allDay = true, cheapest = p.cheapest, typical = p.typical, listed = p.listed }
+      end
+    end
+  end
+  table.sort(out, function(x, y)
+    return (x.at or x.hour * 3600 + 1800) < (y.at or y.hour * 3600 + 1800)
+  end)
+  return out
+end
+
 -- The graph: pts from ns:PriceSeries (days) or ns:PriceSeriesHourly (hours, hourly true),
 -- flats = { { value, color, label } }. Returns the flat lines it drew (one far off the
 -- prices would squash them, so it's left out).
@@ -298,7 +325,7 @@ local function drawGraph(g, pts, flats, hourly)
   local from, to, marks, pos, joinGap, slots
   if hourly then
     from, to, marks = ns.PriceHourAxis(state.range)
-    pos = function(p) return p.hour * 3600 + 1800 end
+    pos = function(p) return p.at or p.hour * 3600 + 1800 end
     joinGap, slots = 3 * 3600, (to - from) / 3600
   else
     pos = function(p) return p.week and p.day + 3 or p.day end
@@ -405,7 +432,8 @@ local function drawGraph(g, pts, flats, hourly)
       for _, p in ipairs(pts) do
         if p.listed and p.listed > 0 then
           local cx = x(pos(p))
-          local width = p.week and math.max(bw, plotW / math.max(slots, 1) * 6) or bw
+          local width = p.week and math.max(bw, plotW / math.max(slots, 1) * 6)
+            or p.allDay and math.max(bw, plotW / math.max(slots, 1) * 20) or bw
           local left = math.max(PAD_L, cx - width / 2)
           local right = math.min(PAD_L + plotW, cx + width / 2)
           if right - left >= 1 then
@@ -441,7 +469,8 @@ local function drawGraph(g, pts, flats, hourly)
         if v then
           local at = pos(p)
           local px, py = x(at), y(v)
-          local joined = prev and at - prev.at <= joinGap
+          -- (a day's own point, in an hour-by-hour range, joins the next day's: 36 hours)
+          local joined = prev and at - prev.at <= ((p.allDay or prev.allDay) and 36 * 3600 or joinGap)
           if joined and g.CreateLine then
             local l = nextLine()
             l:SetColorTexture(c[1], c[2], c[3], key == "cheapest" and 1 or 0.8)
@@ -455,7 +484,7 @@ local function drawGraph(g, pts, flats, hourly)
             t:SetPoint("CENTER", g, "BOTTOMLEFT", px, py)
             t:SetSize(3, 3)
           end
-          prev = { at = at, x = px, y = py }
+          prev = { at = at, x = px, y = py, allDay = p.allDay }
           if key == "cheapest" then g.pts[#g.pts + 1] = { x = px, p = p } end
         end
       end
@@ -507,7 +536,9 @@ local function hoverGraph(g)
   g.marker:Show()
   GameTooltip:SetOwner(g, "ANCHOR_CURSOR")
   local when
-  if p.hour then
+  if p.allDay then
+    when = (p.day == today() and ns.LocalizeText("Today") or date("%a %b %d", p.at)) .. ", the whole day"
+  elseif p.hour then
     local t = p.hour * 3600
     when = (ns.LocalDay(t) == today() and ns.LocalizeText("Today") or date("%a %b %d", t)) .. ", " .. clock(t) .. " - " .. clock(t + 3600)
   else
@@ -905,7 +936,9 @@ function ns:RefreshPriceWindow()
   local hourly = HOURLY[state.range] or false
   local pts
   if hourly then
-    pts = state.suffix and {} or ns:PriceSeriesHourly(id, math.floor(ns.PriceHourAxis(state.range) / 3600) - 1)
+    local from, to = ns.PriceHourAxis(state.range)
+    pts = state.suffix and {} or ns.PriceHourPoints(ns:PriceSeriesHourly(id, math.floor(from / 3600) - 1),
+      ns:PriceSeries(id, nil, 9), from, to)
   else
     pts = ns:PriceSeries(id, state.suffix, state.range)
   end

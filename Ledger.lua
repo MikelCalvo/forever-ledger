@@ -456,7 +456,7 @@ local function records(tab, from, charOK, match, opts)
       end
     else
       -- Recorded on their own (Frank, November 24): each login or each day, the one
-      -- counting now first.
+      -- counting now first; today's days of characters played earlier today too.
       local list = {}
       for _, e in ipairs(ns.db.autoSessions or {}) do if e.kind == kind then list[#list + 1] = e end end
       for _, e in ipairs(ns.AutoSessionsRunning and ns:AutoSessionsRunning() or {}) do
@@ -466,7 +466,8 @@ local function records(tab, from, charOK, match, opts)
         if keep(e) then
           local gained = (e.earned or 0) - (e.spent or 0)
           local name
-          if kind == "day" then name = e.running and "Today, so far" or date("%A", e.t)
+          if kind == "day" then
+            name = e.running and "Today, so far" or (e.day == ns.LocalDay() and "Today" or date("%A", e.t))
           else name = e.running and "This login, so far" or ("Login, to " .. date("%H:%M", e.stop or e.t)) end
           out[#out + 1] = { t = e.t, session = e, item = name, kind = "Session", length = e.secs, total = gained,
             amount = gained, loot = e.loot or 0, rate = ns.SessionRate and ns.SessionRate(e) or nil, char = e.c,
