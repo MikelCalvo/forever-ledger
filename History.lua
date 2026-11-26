@@ -521,7 +521,7 @@ local UNEXPLAINED_SECONDS = 5
 local function buybackEntry(i)
   local okInfo, _, _, price, qty = pcall(GetBuybackItemInfo, i)
   local okLink, link = pcall(GetBuybackItemLink, i)
-  local id = okLink and type(link) == "string" and tonumber(link:match("item:(%d+)"))
+  local id = okLink and ns.Readable(link) and tonumber(link:match("item:(%d+)"))
   if okInfo and id and type(price) == "number" and price > 0 then
     qty = tonumber(qty) or 1
     return { id = id, price = price, qty = qty, slot = i, sig = ("%s:%d:%d"):format(link, price, qty) }

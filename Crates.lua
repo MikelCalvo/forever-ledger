@@ -235,7 +235,7 @@ local function crateInfo(id)
   local ok, data = pcall(C_TooltipInfo.GetItemByID, id)
   if not ok or not data or not data.lines then return end
   local texts = {}
-  for _, l in ipairs(data.lines) do texts[#texts + 1] = l.leftText or "" end
+  for _, l in ipairs(data.lines) do texts[#texts + 1] = ns.Readable(l.leftText) or "" end
   local bundles = parseBundles(texts)
   if #bundles == 0 then return end
   local name, _, _, _, minLevel = ns.GetItemInfo(id)

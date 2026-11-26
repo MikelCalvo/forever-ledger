@@ -3117,7 +3117,7 @@ end
 -- that's Blizzard's and can't be stopped (owner, October 2).
 local function onModifiedClick(link)
   local v = listsView
-  if not (v and v:IsVisible() and type(link) == "string") then return end
+  if not (v and v:IsVisible() and ns.Readable(link)) then return end
   if IsModifiedClick and not IsModifiedClick("CHATLINK") then return end
   local id = ns.ItemIDFromLink(link)
   if not id then return end

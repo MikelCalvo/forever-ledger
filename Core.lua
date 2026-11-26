@@ -238,7 +238,7 @@ function ns:SearchAuctionHouse(id)
 end
 
 function ns.ItemIDFromLink(link)
-  if type(link) ~= "string" then return nil end
+  if not ns.Readable(link) then return nil end
   return tonumber(link:match("item:(%d+)"))
 end
 

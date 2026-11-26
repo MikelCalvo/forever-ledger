@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- No more "string conversion on a secret string value" errors when the game hides a tooltip line, a trainer's title or an item link from addons: Forever Ledger now skips what it can't read.
+
 ## [0.30.0] - 2026-11-25
 
 ### Highlights

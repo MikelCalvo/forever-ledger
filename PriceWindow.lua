@@ -1229,7 +1229,7 @@ function ns.HoveredItemGone() hover.gone = GetTime() end
 local function onTooltipItem(tt)
   if tt ~= GameTooltip or not tt.GetItem then return end
   local ok, _, link = pcall(tt.GetItem, tt)
-  if ok and type(link) == "string" then ns.RememberHoveredItem(link) end
+  if ok and ns.Readable(link) then ns.RememberHoveredItem(link) end
 end
 if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
   TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, onTooltipItem)
@@ -1246,7 +1246,7 @@ local function hoveredLink(id)
   local tip = GameTooltip
   if tip and tip.IsShown and tip:IsShown() and tip.GetItem then
     local ok, _, link = pcall(tip.GetItem, tip)
-    if ok and type(link) == "string" then
+    if ok and ns.Readable(link) then
       if ns.ItemIDFromLink(link) == id then return link end
       return
     end
