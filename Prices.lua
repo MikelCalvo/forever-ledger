@@ -469,7 +469,7 @@ function ns:ForgetVersionNames() versionNames = nil end
 function ns:LearnVersionName(id, suffix, link)
   if not suffix or not ns.Readable(link) or ns:VersionName(suffix) then return end
   local shown = link:match("%[(.-)%]")
-  local base = (ns.db.itemNames or {})[id] or getItemInfo(id)
+  local base = ns.Readable((ns.db.itemNames or {})[id] or getItemInfo(id))
   if not (shown and base and shown:sub(1, #base + 1) == base .. " ") then return end
   local vname = shown:sub(#base + 2)
   -- English names say "of the Bear"; other languages word it their own way, so there
@@ -1434,9 +1434,11 @@ ns:On("REPLICATE_ITEM_LIST_UPDATE", function()
     end
     if not isGear[itemID] then return end
     local ok, link = pcall(getLink, idx)
+    -- (A link the game hides counts as none: Codex review, November 26.)
+    link = ok and ns.Readable(link) or nil
     -- Checking the link format (/fl debug): a few gear links, with and without a version
     -- in the name, and the version worked out from each.
-    if ok and link and ns.db.settings.debug then
+    if link and ns.db.settings.debug then
       local named = link:find("%[.+ of .+%]") and "named" or "plain"
       samples = type(samples) == "table" and samples or { named = 0, plain = 0 }
       if samples[named] < (named == "named" and 3 or 2) then
@@ -1445,7 +1447,7 @@ ns:On("REPLICATE_ITEM_LIST_UPDATE", function()
           "version:", ns.SuffixFromLink(link) or "none")
       end
     end
-    local suffix = ok and ns.SuffixFromLink(link) or nil
+    local suffix = link and ns.SuffixFromLink(link) or nil
     -- Learn which version name goes with which number ("of the Whale" = 12719, the same
     -- on every item), so tooltips can find the version from the name they show: the
     -- tooltip's own link doesn't match the scan's (beta, September 30).
