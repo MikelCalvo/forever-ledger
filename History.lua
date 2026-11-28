@@ -515,16 +515,16 @@ end
 -- recent, for its gold or for the bag click's log that explains it.
 local buybackSeen = {}   -- [link:price:qty] = how many of these were on the list already
 local recent = {}        -- new on the list: { b = entry, at = GetTime() }
-local explained = {}     -- sold with a bag click and logged: { id, qty, at }
+local explained = {}     -- sold with a bag click and logged: { id, qty, a = gold, at }
 local unexplained = {}   -- vendor gold with nothing logged: { at = GetTime(), amount, t, who }
 local UNEXPLAINED_SECONDS = 5
 local function buybackEntry(i)
   local okInfo, _, _, price, qty = pcall(GetBuybackItemInfo, i)
   local okLink, link = pcall(GetBuybackItemLink, i)
-  local id = okLink and type(link) == "string" and tonumber(link:match("item:(%d+)"))
+  local id = okLink and ns.Readable(link) and tonumber(link:match("item:(%d+)"))
   if okInfo and id and type(price) == "number" and price > 0 then
     qty = tonumber(qty) or 1
-    return { id = id, price = price, qty = qty, sig = ("%s:%d:%d"):format(link, price, qty) }
+    return { id = id, price = price, qty = qty, slot = i, sig = ("%s:%d:%d"):format(link, price, qty) }
   end
 end
 local function buybackNow()
@@ -598,7 +598,16 @@ local function optionPays(o, want)
   for _, b in ipairs(o) do sum = sum + b.price end
   return sum == want
 end
-local function isSale(b, e) return b.id == e.id and (not e.qty or b.qty == e.qty) end
+-- A bag click's sale is its item and count for the gold it paid: another copy of the item
+-- sold for other gold isn't it (Codex review, November 22: damaged copies pay less). When
+-- the gold that came isn't what the item sells for (a buyback in the same gold change took
+-- some off), either could be its entry's, so both match it: its own entry mustn't be left
+-- for another sale's gold (Codex review, November 22).
+local function isSale(b, e)
+  if b.id ~= e.id or (e.qty and b.qty ~= e.qty) then return false end
+  if not e.a then return true end
+  return paid(b, e.a) ~= nil or (e.expect ~= nil and paid(b, e.expect) ~= nil)
+end
 -- New entries move into recent (each once); old ones, and ones a bag click's log explains,
 -- leave it. The list as it is now is noted, so an entry that left and comes back is new.
 local function scanBuyback()
@@ -713,11 +722,19 @@ ns:On("MERCHANT_SHOW", function() unexplained, recent, explained, shifts = {}, {
 ns:On("MERCHANT_UPDATE", function() tryBuyback() end)
 -- Buying a sale back: a bag click's sale of that item whose entry was never read mustn't
 -- take the entry of a later sale of the same item; other sales keep theirs (Codex reviews,
--- November 22).
+-- November 22). Which item it was comes from the list as last read, before the click: once
+-- the call is made, the game may already have taken the entry off and moved the rest up
+-- (Codex review, November 22). The list is read at every MERCHANT_UPDATE, which is also
+-- when the vendor window shows it, so what was clicked is on it; only if it isn't, the
+-- slot as it is now.
 ns:OnReady(function()
   if not BuybackItem then return end
   hooksecurefunc("BuybackItem", function(index)   -- (buybackEntry's calls are pcalls)
-    local b = buybackEntry(index)
+    local b
+    for _, e in ipairs(lastList) do
+      if e.slot == index then b = e; break end
+    end
+    b = b or buybackEntry(index)
     if not b then return end
     for i = #explained, 1, -1 do
       if isSale(b, explained[i]) then table.remove(explained, i); return end
@@ -768,7 +785,9 @@ local function onMoney()
       logged = true
       if h.source == "vendorSell" then
         vendorLogged = true
-        explained[#explained + 1] = { id = h.item, qty = h.qty, at = GetTime() }   -- (its buyback entry isn't new gold)
+        -- (its buyback entry isn't new gold; expect: what the item sells for, if that isn't the gold)
+        local expect = h.amount ~= amount and h.amount or nil
+        explained[#explained + 1] = { id = h.item, qty = h.qty, a = amount, expect = expect, at = GetTime() }
       end
       if h.source == "vendorSell" and ns.SessionSold then ns:SessionSold(h.item, h.qty) end
       ns:Debug("Vendor", h.source == "vendorSell" and "sold" or "bought", h.qty or "?", "x", h.item or "?", "for", ns.Money(amount))
@@ -1053,10 +1072,33 @@ local function recordListed(id, d, listed, key)
   qty[id] = s
 end
 
+-- Hour by hour for the last week (Frank, November 24: a day's graph hour by hour, and a
+-- week's): historyHourly[market][id] = "hour:cheapest:typical:listed|...", hour = hours
+-- since 1970 (UTC; shown in local time). An hour keeps the lowest cheapest, the latest
+-- typical and the most listed. Older hours are dropped: the days keep them.
+local HOURLY_PRICE_HOURS = 7 * 24
+ns.HOURLY_PRICE_HOURS = HOURLY_PRICE_HOURS
+local function recordHour(id, cheapest, typical, listed, key)
+  local hourly = marketTable("historyHourly", key)
+  local h = thisHour()
+  local s = hourly[id] or ""
+  local lastH, lastMin, _, lastQ = s:match("(%d+):(%d+):(%d+):(%d+)$")
+  if tonumber(lastH) == h then
+    cheapest = math.min(cheapest, tonumber(lastMin))
+    listed = math.max(listed or 0, tonumber(lastQ))
+    s = s:gsub("[^|]*$", "")
+  elseif s ~= "" then
+    s = s .. "|"
+  end
+  s = s .. ("%.0f:%.0f:%.0f:%.0f"):format(h, cheapest, typical, listed or 0)
+  hourly[id] = dropOld(s, h - HOURLY_PRICE_HOURS)
+end
+
 -- key: the market (nil = the one you're at): prices from a sync partner name theirs.
 function ns:RecordPriceHistory(id, cheapest, typical, listed, key)
   if not ns.db or not cheapest then return end
   typical = typical or cheapest
+  recordHour(id, cheapest, typical, listed, key)
   local hist = marketTable("history", key)
   local d = today()
   if listed then recordListed(id, d, listed, key) end
@@ -1435,11 +1477,13 @@ function ns:TrimMarketHistory()
   trimVersions(d, key)
   local hist, weekly = marketTable("history", key), marketTable("historyWeekly", key)
   local qty, sold = marketTable("historyQty", key), marketTable("historySold2", key)
+  local hourly = marketTable("historyHourly", key)
   local ids = {}
   for id in pairs(hist) do ids[#ids + 1] = id end
   for id in pairs(weekly) do if not hist[id] then ids[#ids + 1] = id end end
   for id in pairs(qty) do if not hist[id] and not weekly[id] then ids[#ids + 1] = id end end
   for id in pairs(sold) do if not hist[id] and not weekly[id] and not qty[id] then ids[#ids + 1] = id end end
+  for id in pairs(hourly) do if not hist[id] and not weekly[id] and not qty[id] and not sold[id] then ids[#ids + 1] = id end end
   local i = 0
   local function step()
     for _ = 1, 200 do
@@ -1465,6 +1509,7 @@ function ns:TrimMarketHistory()
         hist[id] = #kept > 0 and table.concat(kept, "|") or nil
       end
       if weekly[id] then weekly[id] = trimCounts(weekly[id], math.floor(d / 7) - WEEKLY_WEEKS) end
+      if hourly[id] then hourly[id] = trimCounts(hourly[id], thisHour() - HOURLY_PRICE_HOURS) end
       if qty[id] then qty[id] = trimCounts(qty[id], d - COUNT_DAYS) end
       if sold[id] then sold[id] = trimCounts(sold[id], d - COUNT_DAYS) end
     end
@@ -1516,6 +1561,21 @@ function ns:PriceSeries(id, suffix, days)
   end
   for _, p in ipairs(days_) do out[#out + 1] = p end
   table.sort(out, function(x, y) return x.day < y.day end)
+  return out
+end
+
+-- Hour by hour, for the price window's day and week graphs: { { hour, cheapest, typical,
+-- listed }, ... } oldest first, from the hour fromHour on (hours since 1970, UTC). Hours
+-- without a scan are missing. Gear versions have no hours (full scans keep days).
+function ns:PriceSeriesHourly(id, fromHour)
+  local out = {}
+  for h, m, a, q in (marketTable("historyHourly")[id] or ""):gmatch("(%d+):(%d+):(%d+):(%d+)") do
+    h = tonumber(h)
+    if h >= (fromHour or 0) then
+      q = tonumber(q)
+      out[#out + 1] = { hour = h, cheapest = tonumber(m), typical = tonumber(a), listed = q > 0 and q or nil }
+    end
+  end
   return out
 end
 

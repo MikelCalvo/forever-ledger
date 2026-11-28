@@ -598,6 +598,76 @@ T.test("A bag click's sale that reorders a full list doesn't name a later sale",
   T.eq(soldBy(2770), 1, "the other sale named")
 end)
 
+-- Codex review, November 22: a bag click's sale of one copy (20c) mustn't explain another
+-- copy's sale for other gold (10c) that reorders a full list before its own entry comes.
+T.test("A bag click's sale doesn't explain another copy sold for other gold", function()
+  fullList(function(n) return n == 1 and { id = 2592, qty = 1, price = 10 } or { id = 2589, qty = 1, price = 30 } end)
+  ns.db.vendorSell[2592] = 20
+  clicked(2592, 1, 20)                 -- (logged from the click; its entry comes late)
+  sellOnList(2592, 10)                 -- (another copy, no click: pushes its twin off)
+  table.remove(BUYBACK, 1)
+  BUYBACK[12] = { id = 2592, qty = 1, price = 20 }   -- (the clicked sale's entry)
+  T.fire("MERCHANT_UPDATE")
+  S.now = S.now + 6
+  T.runTimers()
+  S.now = NOW
+  T.eq(soldBy(2592), 2, "both copies")
+  local gold = 0
+  for _, e in ipairs(ns.db.vendorLog) do if e.s == "sell" then gold = gold + e.a end end
+  T.eq(gold, 30)
+end)
+
+-- Codex review, November 22: a buyback in the same gold change as a bag click's sale (net
+-- +5c for a 10c sale): the sale's own 10c entry is still its, not another sale's.
+T.test("A bag click's sale paid with a buyback's gold taken off still finds its entry", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  BUYBACK[1] = { id = 4306, qty = 1, price = 5 }   -- (sold on an earlier visit)
+  atVendor(159)
+  ns.db.vendorSell[2770] = 10
+  local realC = C_Container
+  C_Container = { GetContainerItemInfo = function() return { itemID = 2770, stackCount = 1 } end }
+  local ok, err = pcall(ns._historyTest.sellHint, 0, 1)
+  C_Container = realC
+  assert(ok, err)
+  BuybackItemNow = function(i) table.remove(BUYBACK, i) end
+  BuybackItem(1)                       -- (the old one bought back, before the sale's gold)
+  BuybackItemNow = nil
+  S.money = S.money + 5                -- (10c in, 5c out, in one change)
+  T.fire("PLAYER_MONEY")
+  BUYBACK[#BUYBACK + 1] = { id = 2770, qty = 1, price = 10 }   -- (the clicked sale's entry)
+  T.fire("MERCHANT_UPDATE")
+  S.money = S.money + 10               -- (another sale, no click, its entry after the gold)
+  T.fire("PLAYER_MONEY")
+  BUYBACK[#BUYBACK + 1] = { id = 2589, qty = 1, price = 10 }
+  T.fire("MERCHANT_UPDATE")
+  T.runTimers()
+  T.eq(soldBy(2770), 1, "the clicked sale once")
+  T.eq(soldBy(2589), 1, "the other sale named")
+end)
+
+-- Codex review, November 22: the game may take a bought-back entry off (and move the rest
+-- up) before the hook runs; the item is the one that was clicked, as last read.
+T.test("Buying back reads the clicked item even if the list moved up during the call", function()
+  for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
+  BUYBACK[1] = { id = 4306, qty = 1, price = 50 }   -- (sold on an earlier visit)
+  atVendor(159)
+  clicked(2592, 3, 90)                 -- (logged from the click)
+  BUYBACK[2] = { id = 2592, qty = 3, price = 90 }   -- (its entry, not read yet)
+  BuybackItemNow = function(i) table.remove(BUYBACK, i) end
+  BuybackItem(1)                       -- (the old one bought back; the clicked one moves up)
+  BuybackItemNow = nil
+  S.money = S.money - 50
+  T.fire("PLAYER_MONEY")
+  T.fire("MERCHANT_UPDATE")
+  S.money = S.money + 90               -- (another sale, no click, its entry after the gold)
+  T.fire("PLAYER_MONEY")
+  BUYBACK[#BUYBACK + 1] = { id = 2589, qty = 2, price = 90 }
+  T.fire("MERCHANT_UPDATE")
+  T.runTimers()
+  T.eq(soldBy(2592), 3, "the clicked sale once")
+  T.eq(soldBy(2589), 2, "the other sale named")
+end)
+
 T.test("An item that left the buyback list is new when sold again", function()
   for i = #BUYBACK, 1, -1 do BUYBACK[i] = nil end
   atVendor(159)

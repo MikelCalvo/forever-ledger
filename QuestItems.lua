@@ -231,6 +231,7 @@ local function doneTable()
 end
 
 local function noteTitle(title)
+  title = ns.Readable(title)
   if title and wantedNames()[title:lower()] then doneTable()[title:lower()] = true end
 end
 
@@ -238,7 +239,8 @@ local loading = {}   -- [questID] = true while its name loads
 local function titleOf(questID)
   local get = C_QuestLog and C_QuestLog.GetTitleForQuestID
   local ok, title = pcall(get or error, questID)
-  if ok and title and title ~= "" then return title end
+  title = ok and ns.Readable(title)
+  if title and title ~= "" then return title end
   if C_QuestLog and C_QuestLog.RequestLoadQuestByID then
     loading[questID] = true
     pcall(C_QuestLog.RequestLoadQuestByID, questID)

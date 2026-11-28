@@ -272,3 +272,60 @@ T.test("Empty realm name: one ruleset, its side's prices go back", function()
   T.eq(db.prices["PvE|Alliance"][2589].m, 123)
   T.eq(db.prices["|Alliance"], nil)
 end)
+
+T.test("Hidden unit text: Readable gives nil for a hidden value, the string otherwise", function()
+  issecretvalue = function(v) return v == "Creature-0-1-2-3-4-5" end
+  T.eq(ns.Readable("Creature-0-1-2-3-4-5"), nil)
+  T.eq(ns.Readable("Creature-0-1-2-3-4-6"), "Creature-0-1-2-3-4-6")
+  T.eq(ns.Readable(nil), nil)
+  T.eq(ns.Readable(12), nil)
+  issecretvalue = nil
+  T.eq(ns.Readable("Creature-0-1-2-3-4-5"), "Creature-0-1-2-3-4-5")
+end)
+
+-- Frank's BugSack, November 26: "attempt to perform string conversion on a secret string
+-- value", 27 times, no stack. Hidden item links and tooltip text are read as nothing.
+T.test("Hidden links: no item, no version, nothing learned", function()
+  local link = "|cff1eff00|Hitem:2589::::::::20:::::::::|h[Linen Cloth]|h|r"
+  issecretvalue = function(v) return v == link end
+  local ok, id = pcall(ns.ItemIDFromLink, link)
+  T.ok(ok, "no error")
+  T.eq(id, nil)
+  T.eq(#ns.LinkBonusIDs(link), 0)
+  T.eq(ns:VersionOfLink(2589, link), nil)
+  T.ok(pcall(ns.LearnVersionName, ns, 2589, 1234, link), "no error learning a version")
+  issecretvalue = nil
+  T.eq(ns.ItemIDFromLink(link), 2589)
+end)
+
+-- Codex review, November 26: a hidden trainer service name stopped the read with an error,
+-- and the error left reading on, so no trainer was read again until a reload.
+T.test("Hidden trainer rows: skipped, and a failed read doesn't stop the next", function()
+  local saved = { GetNumTrainerServices, GetTrainerServiceInfo, GetTrainerServiceSkillReq, UnitGUID, GetZoneText, UnitName }
+  local HIDDEN = "Hidden Service Name"
+  GetNumTrainerServices = function() return 2 end
+  GetTrainerServiceInfo = function(i)
+    if i == 1 then return HIDDEN, "available", 1 end
+    return "Bolt of Hidden Test Cloth", "available", 2
+  end
+  GetTrainerServiceSkillReq = function() return "Tailoring", 1 end
+  UnitGUID = function() return "Creature-0-1-2-3-99901-0" end
+  UnitName = function() return "Test Trainer" end
+  GetZoneText = function() return "Somewhere" end
+  issecretvalue = function(v) return v == HIDDEN end
+  ns.db.recipeSources = {}
+  local ok = pcall(ns.CaptureTrainer)
+  T.ok(ok, "no error")
+  T.ok(ns.db.recipeSources["bolt of hidden test cloth"], "the readable row is kept")
+  T.eq(ns.db.recipeSources[HIDDEN:lower()], nil)
+  -- A read that fails: the error still reaches BugSack, and the next trainer is read.
+  GetTrainerServiceInfo = function() error("broken") end
+  T.ok(not pcall(ns.CaptureTrainer), "the error is passed on")
+  GetTrainerServiceInfo = function() return "Bolt of Second Test Cloth", "available", 2 end
+  ns.CaptureTrainer()
+  T.ok(ns.db.recipeSources["bolt of second test cloth"], "read again after a failure")
+  issecretvalue = nil
+  GetNumTrainerServices, GetTrainerServiceInfo, GetTrainerServiceSkillReq, UnitGUID, GetZoneText, UnitName = unpack(saved, 1, 6)
+  ns.db.recipeSources = {}
+  if ns.db.vendors then ns.db.vendors[99901] = nil end
+end)

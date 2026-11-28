@@ -17,6 +17,7 @@ local PREFIXES = { "Formula", "Pattern", "Recipe", "Plans", "Schematic", "Manual
 
 -- "Formula: Enchant Bracer - Minor Health" -> "enchant bracer - minor health"
 local function recipeNameFromItem(itemName)
+  itemName = ns.Readable(itemName)
   if not itemName then return end
   for _, p in ipairs(PREFIXES) do
     local rest = itemName:match("^" .. p .. ":%s*(.+)$")
@@ -25,9 +26,10 @@ local function recipeNameFromItem(itemName)
 end
 
 local function npcInfo(unit)
-  local guid = UnitGUID(unit)
+  local guid = ns.Readable(UnitGUID(unit))
   local npcID = guid and tonumber(guid:match("^%a+%-%d+%-%d+%-%d+%-%d+%-(%d+)"))
   local first, last = UnitName(unit)
+  first, last = ns.Readable(first), ns.Readable(last)
   local name = (first and last and last ~= "") and (first .. " " .. last) or first
   return npcID, name
 end
@@ -401,8 +403,13 @@ ns:On("MERCHANT_SHOW", function() C_Timer.After(0.6, captureVendor) end)
 -- while reading, then put the player's filter back as it was.
 local FILTERS = { "available", "unavailable", "used" }
 local reading, lastRead = false, 0
-local function captureTrainer()
-  if reading or not (GetNumTrainerServices and GetTrainerServiceInfo) then return end
+-- A value the addon may use as it is: nil if the game hides it (any type).
+local function plain(v)
+  if issecretvalue and issecretvalue(v) then return nil end
+  return v
+end
+
+local function readTrainer()
   local npcID, name = npcInfo("npc")
   local mapID, x, y, zone = here()
   -- Keep what an earlier visit learned (title, profession, tier) if this read misses it.
@@ -410,14 +417,6 @@ local function captureTrainer()
   if npcID then
     ns.db.vendors[npcID] = { name = name or old.name, mapID = mapID, x = x, y = y, zone = zone, t = time(), trainer = true,
       title = old.title, profession = old.profession, tier = old.tier }
-  end
-  reading = true
-  local saved = {}
-  if GetTrainerServiceTypeFilter and SetTrainerServiceTypeFilter then
-    for _, f in ipairs(FILTERS) do
-      saved[f] = GetTrainerServiceTypeFilter(f)
-      if not saved[f] then pcall(SetTrainerServiceTypeFilter, f, 1) end
-    end
   end
   local found = 0
   -- Which profession this trainer teaches (most common skill needed) and their tier
@@ -427,6 +426,8 @@ local function captureTrainer()
   local all = {}   -- everything read, for Training.lua (class and riding trainers)
   for i = 1, (GetNumTrainerServices() or 0) do
     local service, second, third = GetTrainerServiceInfo(i)
+    -- (A name the game hides skips the row: Codex review, November 26.)
+    service, second, third = ns.Readable(service), plain(second), plain(third)
     -- Which value is the state ("available", "unavailable", "used", "header"): Forever
     -- gives it second and the icon third (owner's /fl trainer, October 5: "Fire Ward
     -- (available): 135806"); Classic gave the rank second and the state third.
@@ -435,6 +436,7 @@ local function captureTrainer()
     local sub = (STATES[second] and nil) or second
     if service and category ~= "header" then
       local reqName, skill = GetTrainerServiceSkillReq and GetTrainerServiceSkillReq(i)
+      reqName, skill = ns.Readable(reqName), plain(skill)
       if reqName and reqName ~= "" then local key = ns.ProfessionKey and ns.ProfessionKey(reqName) or reqName; profCount[key] = (profCount[key] or 0) + 1 end
       local t = service:match("^(%a+)")
       if TIERS[t] and (not tier or TIERS[t] > TIERS[tier]) then tier = t end
@@ -447,9 +449,6 @@ local function captureTrainer()
       found = found + 1
     end
   end
-  for f, on in pairs(saved) do
-    if not on then pcall(SetTrainerServiceTypeFilter, f, 0) end
-  end
   local prof, most = nil, 0
   for p, n in pairs(profCount) do if n > most then prof, most = p, n end end
   local v = npcID and ns.db.vendors[npcID]
@@ -459,7 +458,8 @@ local function captureTrainer()
     if C_TooltipInfo and C_TooltipInfo.GetUnit then
       local ok, data = pcall(C_TooltipInfo.GetUnit, "npc")
       local line = ok and data and data.lines and data.lines[2]
-      if line and line.leftText and line.leftText ~= "" then v.title = line.leftText end
+      local title = line and ns.Readable(line.leftText)
+      if title and title ~= "" then v.title = title end
     end
     -- Forever's trainer list may not name the skill, so the title fills in the profession.
     if not v.profession and ns.ProfessionFromTitle then v.profession = ns.ProfessionFromTitle(v.title) end
@@ -474,10 +474,30 @@ local function captureTrainer()
     local ok, err = pcall(ns.TrainerRead, ns, all, name, npcID, (v and v.profession) or prof)
     if not ok then ns:Debug("Training: couldn't read the trainer:", tostring(err)) end
   end
-  reading = false
-  lastRead = GetTime()
   if found > 0 then ns:Debug("Recipe book:", found, "trainer recipes from", name or "?") end
 end
+
+-- The filters put back and reading over even if a read fails (Codex review, November 26:
+-- an error left reading on, so no later trainer was read), then the error reported.
+local function captureTrainer()
+  if reading or not (GetNumTrainerServices and GetTrainerServiceInfo) then return end
+  reading = true
+  local saved = {}
+  if GetTrainerServiceTypeFilter and SetTrainerServiceTypeFilter then
+    for _, f in ipairs(FILTERS) do
+      saved[f] = GetTrainerServiceTypeFilter(f)
+      if not saved[f] then pcall(SetTrainerServiceTypeFilter, f, 1) end
+    end
+  end
+  local ok, err = pcall(readTrainer)
+  for f, on in pairs(saved) do
+    if not on then pcall(SetTrainerServiceTypeFilter, f, 0) end
+  end
+  reading = false
+  lastRead = GetTime()
+  if not ok then error(err, 0) end
+end
+ns.CaptureTrainer = captureTrainer   -- (tests)
 
 -- The trainer sends many updates in a row (each purchase, each filter change): read
 -- once, a moment after the last one.
@@ -501,9 +521,9 @@ ns:On("LOOT_OPENED", function()
     local itemName = id and ns.GetItemInfo(id)
     local recipe = recipeNameFromItem(itemName)
     if recipe then
-      local guid = GetLootSourceInfo and GetLootSourceInfo(i)
+      local guid = ns.Readable(GetLootSourceInfo and GetLootSourceInfo(i))
       local npcID = guid and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)"))
-      local mob = (UnitExists("target") and UnitIsDead("target")) and (UnitName("target")) or nil
+      local mob = (UnitExists("target") and UnitIsDead("target")) and ns.Readable((UnitName("target"))) or nil
       local mapID, x, y, zone = here()
       addSource(recipe, { kind = "drop", npc = mob, npcID = npcID or mob, mapID = mapID, x = x, y = y, zone = zone, item = id })
       ns:Debug("Recipe book: recipe drop", itemName, "from", mob or npcID or "?", "in", zone or "?")
